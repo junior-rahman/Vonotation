@@ -1,9 +1,9 @@
 {
-  "versionCode": 80,
-  "versionName": "0.1.8-preview",
-  "apk": "https://github.com/JuelHossain/Vonotation/releases/download/v0.1.8-preview/VonoTation-0.1.8-preview.apk",
-  "sha256": "c583c559fd3c163d7dd4cdd965aeaaa5bb030fc20d1a48953db3b665a30cebd2",
-  "size": 6124802,
+  "versionCode": 81,
+  "versionName": "0.1.9-preview",
+  "apk": "https://github.com/JuelHossain/Vonotation/releases/download/v0.1.9-preview/VonoTation-0.1.9-preview.apk",
+  "sha256": "6912cdfdf827014c446128d7946c5fef4cf4cec11983da5854cd462232c9ba0c",
+  "size": 6140610,
   "package": "app.voiceflow",
-  "notes": "Quick thoughts and compact clipboard preview. Android build and 16 logic suites passed; phone testing pending."
+  "notes": "Verified in-app updates, current-cursor deletion and quiet Call Notes reconnection. Includes Quick thoughts and compact clipboard. Build and19logic suites passed; phone testing pending."
 }
