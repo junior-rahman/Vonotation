@@ -1,0 +1,5 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="app.voiceflow.backup.feedback.fixture">
+    <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35" />
+    <instrumentation android:name="app.voiceflow.BackupFeedbackTest" android:targetPackage="app.voiceflow" android:functionalTest="true" />
+    <application android:label="VoiceFlow synthetic backup feedback checks" />
+</manifest>

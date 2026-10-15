@@ -1,0 +1,26 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="app.voiceflow.fixture">
+ <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35" />
+ <uses-permission android:name="android.permission.RECORD_AUDIO" />
+ <instrumentation android:name=".NoDockTest" android:targetPackage="app.voiceflow.fixture" android:functionalTest="true" />
+ <instrumentation android:name="app.voiceflow.ControlSetup" android:targetPackage="app.voiceflow" android:functionalTest="true" />
+ <instrumentation android:name=".SidePreview" android:targetPackage="app.voiceflow.fixture" android:functionalTest="true" />
+ <instrumentation android:name=".LauncherTest" android:targetPackage="app.voiceflow.fixture" android:functionalTest="true" />
+ <instrumentation android:name=".DeleteHoldTest" android:targetPackage="app.voiceflow.fixture" android:functionalTest="true" />
+ <instrumentation android:name="app.voiceflow.RecoveryTest" android:targetPackage="app.voiceflow" android:functionalTest="true" />
+ <instrumentation android:name=".InputRecoveryTest" android:targetPackage="app.voiceflow.fixture" android:functionalTest="true" />
+ <instrumentation android:name=".ComposeDeleteTest" android:targetPackage="app.voiceflow.fixture" android:functionalTest="true" />
+ <instrumentation android:name=".KeyboardStateTest" android:targetPackage="app.voiceflow.fixture" android:functionalTest="true" />
+ <instrumentation android:name=".AuthFieldTest" android:targetPackage="app.voiceflow.fixture" android:functionalTest="true" />
+ <instrumentation android:name="app.voiceflow.ApiRequestTest" android:targetPackage="app.voiceflow" android:functionalTest="true" />
+ <instrumentation android:name="app.voiceflow.AppScreensTest" android:targetPackage="app.voiceflow" android:functionalTest="true" />
+ <instrumentation android:name="app.voiceflow.BackupIntegrationTest" android:targetPackage="app.voiceflow" android:functionalTest="true" />
+ <instrumentation android:name="app.voiceflow.BackupArchiveTest" android:targetPackage="app.voiceflow" android:functionalTest="true" />
+ <instrumentation android:name="app.voiceflow.BackupUiTest" android:targetPackage="app.voiceflow" android:functionalTest="true" />
+ <application android:label="Dictation test fixture" android:theme="@android:style/Theme.Material.Light.NoActionBar">
+  <provider android:name=".BackupProvider" android:authorities="app.voiceflow.fixture.backups" android:exported="true" android:grantUriPermissions="true" android:permission="android.permission.MANAGE_DOCUMENTS"><intent-filter><action android:name="android.content.action.DOCUMENTS_PROVIDER" /></intent-filter></provider>
+  <activity android:name=".BackupGrantActivity" android:exported="true" />
+  <service android:name=".FakeSpeech" android:exported="true" android:permission="android.permission.BIND_SPEECH_RECOGNITION_SERVICE"><intent-filter><action android:name="android.speech.RecognitionService" /></intent-filter></service>
+  <activity android:name=".EditorActivity" android:exported="true" android:windowSoftInputMode="stateAlwaysVisible|adjustResize"><intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter></activity>
+  <activity android:name=".HomeFinder" android:exported="true" android:windowSoftInputMode="stateAlwaysHidden|adjustResize"><intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.HOME" /><category android:name="android.intent.category.DEFAULT" /></intent-filter></activity>
+ </application>
+</manifest>

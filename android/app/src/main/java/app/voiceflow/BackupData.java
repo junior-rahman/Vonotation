@@ -1,0 +1,174 @@
+package app.voiceflow;
+
+import android.content.Context;
+import android.content.SharedPreferences;
+import android.view.inputmethod.InputMethodInfo;
+import android.view.inputmethod.InputMethodManager;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.text.DateFormat;
+import java.util.Date;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.Map;
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+/** Only portable user data is exported; credentials, grants, jobs and caches stay local. */
+final class BackupData {
+    private static final String FORMAT="voiceflow-backup";
+    private static final int SCHEMA=1;
+    private static final String[] STRING_KEYS={"engine","language","transcribe_model","polish_model","dictionary","api_base","bubble_size","backup_frequency"};
+    private static final String[] STRING_DEFAULTS={"cloud","en-US",CloudApi.DEFAULT_TRANSCRIBE,CloudApi.DEFAULT_POLISH,"",CloudApi.DEFAULT_BASE,"small","off"};
+    private static final String[] BOOL_KEYS={"clean","ai_polish","bubble","save_history","daily_summaries","typing_visible","backup_wifi","haptic_feedback","romanize","daily_recaps_opt_in","verbatim","spoken_punctuation","quick_thoughts"};
+    private static final boolean[] BOOL_DEFAULTS={true,false,true,true,true,false,true,true,false,false,false,true,false};
+    private static final String[] OPTIONAL_INTS={"rail_anchor_x","rail_anchor_y"};
+
+    static JSONObject snapshot(Context context) throws Exception {
+        synchronized(Store.class) {
+            SharedPreferences prefs=Store.prefs(context);JSONObject settings=new JSONObject();
+            for(int i=0;i<STRING_KEYS.length;i++)settings.put(STRING_KEYS[i],prefs.getString(STRING_KEYS[i],STRING_DEFAULTS[i]));
+            for(int i=0;i<BOOL_KEYS.length;i++)settings.put(BOOL_KEYS[i],prefs.getBoolean(BOOL_KEYS[i],BOOL_DEFAULTS[i]));
+            for(String key:OPTIONAL_INTS)if(prefs.contains(key))settings.put(key,prefs.getInt(key,0));
+            if(prefs.contains("typing_keyboard"))settings.put("typing_keyboard",prefs.getString("typing_keyboard",""));
+            JSONArray history;
+            try {history=new JSONArray(prefs.getString("history","[]"));}
+            catch(org.json.JSONException error) {throw invalid("Saved history could not be read. Your existing backup has been kept.");}
+            JSONObject data=new JSONObject().put("format",FORMAT).put("schema",SCHEMA).put("created_at",System.currentTimeMillis()).put("settings",settings).put("history",history);
+            JSONArray thoughts=new JSONArray();
+            JSONArray notes=new JSONArray(prefs.getString("notes","[]"));
+            for(int i=0;i<notes.length();i++){JSONObject note=notes.optJSONObject(i);if(note!=null && note.optBoolean("thought"))thoughts.put(new JSONObject().put("id",note.optLong("id")).put("created",note.optLong("created",note.optLong("id"))).put("text",note.optString("text")).put("raw",note.optString("raw")).put("title",note.optString("title")).put("duration",note.optLong("duration")).put("lang",note.optString("lang","en")));}
+            data.put("thoughts",thoughts); // Text only. Microphone recordings never enter an archive.
+            String draft=MainActivity.currentDraft;if(draft!=null && !draft.isEmpty())data.put("draft",draft);
+            return validate(data);
+        }
+    }
+
+    /** Validate before confirmation and again before mutation. The returned tree shares no objects. */
+    static JSONObject validate(JSONObject data) throws Exception {
+        if(data==null || data.toString().getBytes(StandardCharsets.UTF_8).length>BackupArchive.MAX_BYTES-64)throw invalid("The backup data is missing or too large.");
+        if(!FORMAT.equals(string(data,"format",64,false)))throw invalid("This file does not contain VonoTation data.");
+        if(integer(data,"schema",1,Integer.MAX_VALUE)!=SCHEMA)throw invalid("This backup version is not supported by this app.");
+        long created=integer(data,"created_at",1,Long.MAX_VALUE);
+        Object settingsValue=data.opt("settings"),historyValue=data.opt("history");
+        if(!(settingsValue instanceof JSONObject) || !(historyValue instanceof JSONArray))throw invalid("The backup settings or history are not valid.");
+        JSONObject source=(JSONObject)settingsValue,settings=new JSONObject();HashSet<String> allowed=new HashSet<>();
+        for(String key:STRING_KEYS)allowed.add(key);for(String key:BOOL_KEYS)allowed.add(key);for(String key:OPTIONAL_INTS)allowed.add(key);allowed.add("typing_keyboard");
+        Iterator<String> keys=source.keys();while(keys.hasNext())if(!allowed.contains(keys.next()))throw invalid("The backup contains an unsupported setting.");
+        for(int i=0;i<STRING_KEYS.length;i++) {
+            String key=STRING_KEYS[i],value=source.has(key)?string(source,key,key.equals("dictionary")?100000:key.equals("api_base")?2048:256,true):STRING_DEFAULTS[i];
+            if(key.equals("engine") && !oneOf(value,"system","offline","cloud"))throw invalid("The speech mode is not valid.");
+            if(key.equals("engine"))value="cloud"; // Older Android/on-device choices restore as Cloud.
+            if(key.equals("language"))value="en-US"; // English only.
+            if(key.equals("bubble_size") && !oneOf(value,"small","medium","large"))throw invalid("The bubble size is not valid.");
+            if(key.equals("backup_frequency") && !oneOf(value,"off","daily","weekly"))throw invalid("The backup schedule is not valid.");
+            if(key.equals("language") && !value.matches("[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*"))throw invalid("The speech language is not valid.");
+            if((key.equals("transcribe_model") || key.equals("polish_model")) && (value.trim().isEmpty() || value.contains("\r") || value.contains("\n")))throw invalid("A saved model name is not valid.");
+            if(key.equals("api_base"))value=CloudApi.validateBase(value);
+            settings.put(key,value);
+        }
+        for(int i=0;i<BOOL_KEYS.length;i++) {
+            String key=BOOL_KEYS[i];Object value=source.has(key)?source.opt(key):Boolean.valueOf(BOOL_DEFAULTS[i]);
+            if(!(value instanceof Boolean))throw invalid("A saved switch value is not valid.");if(key.equals("bubble"))value=Boolean.TRUE;else if(key.equals("romanize"))value=Boolean.FALSE;settings.put(key,value);
+        }
+        for(String key:OPTIONAL_INTS)if(source.has(key))settings.put(key,(int)integer(source,key,0,1000000));
+        if(source.has("typing_keyboard")) {
+            String id=string(source,"typing_keyboard",1024,true);
+            if(!id.isEmpty() && !id.matches("[A-Za-z0-9_.$]+/[A-Za-z0-9_.$]+"))throw invalid("The saved keyboard is not valid.");settings.put("typing_keyboard",id);
+        }
+        JSONArray old=(JSONArray)historyValue,history=new JSONArray();if(old.length()>100)throw invalid("The backup contains too many dictations.");HashSet<Long> ids=new HashSet<>();
+        for(int i=0;i<old.length();i++) {
+            Object value=old.opt(i);if(!(value instanceof JSONObject))throw invalid("A saved dictation is not valid.");JSONObject entry=(JSONObject)value;
+            long id=integer(entry,"id",1,Long.MAX_VALUE);if(!ids.add(id))throw invalid("The backup contains duplicate dictations.");
+            String text=string(entry,"text",1000000,false),raw=string(entry,"raw",1000000,true);if(text.trim().isEmpty())throw invalid("A saved dictation has no text.");
+            long duration=integer(entry,"duration",0,Long.MAX_VALUE);integer(entry,"words",0,1000000);
+            history.put(new JSONObject().put("id",id).put("text",text).put("raw",raw).put("duration",duration).put("words",Cleaner.words(text)));
+        }
+        // Schema 1 archives from earlier previews may contain an API key. Accept a valid
+        // legacy field for compatibility, but never carry credentials into the restore tree.
+        if(data.has("api_key")) {
+            String legacy=string(data,"api_key",8192,true);
+            if(legacy.contains("\r") || legacy.contains("\n"))throw invalid("The saved API connection is not valid.");
+        }
+        JSONObject checked=new JSONObject().put("format",FORMAT).put("schema",SCHEMA).put("created_at",created).put("settings",settings).put("history",history);
+        JSONArray thoughts=new JSONArray();
+        if(data.has("thoughts")){
+            if(!(data.opt("thoughts") instanceof JSONArray))throw invalid("Saved thoughts are not valid.");
+            JSONArray sourceThoughts=data.getJSONArray("thoughts");if(sourceThoughts.length()>10000)throw invalid("The backup contains too many thoughts.");HashSet<Long> thoughtIds=new HashSet<>();
+            for(int i=0;i<sourceThoughts.length();i++){
+                JSONObject item=sourceThoughts.optJSONObject(i);if(item==null)throw invalid("A saved thought is not valid.");
+                long id=integer(item,"id",1,Long.MAX_VALUE);if(!thoughtIds.add(id))throw invalid("The backup contains duplicate thoughts.");
+                String text=string(item,"text",1000000,false),raw=string(item,"raw",1000000,false);if(text.trim().isEmpty() || raw.trim().isEmpty())throw invalid("A saved thought has no words.");
+                thoughts.put(new JSONObject().put("id",id).put("created",integer(item,"created",1,Long.MAX_VALUE)).put("text",text).put("raw",raw).put("title",string(item,"title",256,true)).put("duration",integer(item,"duration",0,Long.MAX_VALUE)).put("lang",string(item,"lang",32,true)));
+            }
+        }
+        boolean thoughtsIncluded=data.has("thoughts");
+        if(data.has("thoughts_included")){if(!(data.opt("thoughts_included") instanceof Boolean))throw invalid("The thought backup marker is not valid.");thoughtsIncluded=data.getBoolean("thoughts_included");}
+        if(!thoughtsIncluded && thoughts.length()>0)throw invalid("The thought backup marker conflicts with its contents.");
+        checked.put("thoughts",thoughts).put("thoughts_included",thoughtsIncluded);
+        if(data.has("draft"))checked.put("draft",string(data,"draft",1000000,true));return checked;
+    }
+
+    static void restore(Context context,JSONObject payload) throws Exception {
+        JSONObject checked=validate(payload);
+        synchronized(Store.class) {
+            SharedPreferences prefs=Store.prefs(context);Map<String,?> before=prefs.getAll();SharedPreferences.Editor editor=prefs.edit();
+            JSONObject settings=checked.getJSONObject("settings");
+            // A local key belongs to the complete API base, including its path. Retain it
+            // only for the same validated provider connection; clear it in the same commit
+            // as a changed endpoint so cloud requests cannot send it to another provider.
+            boolean sameConnection=false;
+            try {sameConnection=CloudApi.validateBase(prefs.getString("api_base",CloudApi.DEFAULT_BASE)).equals(settings.getString("api_base"));}
+            catch(Exception invalidLocalBase) {/* The restored valid endpoint requires a new key. */}
+            if(!sameConnection)editor.remove("api_secret").remove("api_iv");
+            for(String key:STRING_KEYS)editor.remove(key);for(String key:BOOL_KEYS)editor.remove(key);for(String key:OPTIONAL_INTS)editor.remove(key);editor.remove("typing_keyboard");
+            Iterator<String> keys=settings.keys();while(keys.hasNext()) {
+                String key=keys.next();Object value=settings.get(key);
+                if(key.equals("typing_keyboard") && !enabledKeyboard(context,(String)value))continue;
+                if(value instanceof String)editor.putString(key,(String)value);else if(value instanceof Boolean)editor.putBoolean(key,(Boolean)value);else editor.putInt(key,((Number)value).intValue());
+            }
+            editor.putString("history",checked.getJSONArray("history").toString()).remove("history_summaries");
+            // Restore portable thought text; retain this phone's unrelated recordings.
+            JSONArray restoredThoughts=checked.getJSONArray("thoughts"),mergedNotes=new JSONArray(),existingNotes=new JSONArray(prefs.getString("notes","[]"));
+            HashSet<Long> mergedIds=new HashSet<>();
+            for(int i=0;i<restoredThoughts.length();i++){
+                JSONObject thought=new JSONObject(restoredThoughts.getJSONObject(i).toString());long id=thought.getLong("id");mergedIds.add(id);
+                thought.put("thought",true).put("audio","").put("summary","").put("pending",false).put("revision",System.nanoTime());mergedNotes.put(thought);
+            }
+            for(int i=0;i<existingNotes.length();i++){JSONObject note=existingNotes.optJSONObject(i);if(note!=null && (!note.optBoolean("thought") || !checked.optBoolean("thoughts_included"))){if(mergedIds.contains(note.optLong("id")))note.put("id",Store.nextId(mergedNotes,System.currentTimeMillis()));mergedNotes.put(note);}}
+            editor.putString("notes",mergedNotes.toString());
+            DraftState.invalidate(editor);
+            if(!editor.commit()) {
+                // SharedPreferences changes memory even when disk writes fail; restore its old map too.
+                SharedPreferences.Editor rollback=prefs.edit().clear();for(Map.Entry<String,?> item:before.entrySet())writePreference(rollback,item.getKey(),item.getValue());
+                boolean rolledBack=rollback.commit();throw invalid(rolledBack?"Could not save the restored data. Your previous data has been kept.":"The phone could not save restore changes. Check available storage before trying again.");
+            }
+            DraftState.set(checked.optString("draft",""));
+        }
+    }
+
+    static String describe(JSONObject payload) {
+        if(payload==null)return "VonoTation backup";
+        JSONArray history=payload.optJSONArray("history");int count=history==null?0:history.length();
+        String date=DateFormat.getDateTimeInstance(DateFormat.MEDIUM,DateFormat.SHORT).format(new Date(payload.optLong("created_at")));
+        JSONArray thoughts=payload.optJSONArray("thoughts");int thoughtCount=thoughts==null?0:thoughts.length();
+        return date+" · "+count+" "+(count==1?"dictation":"dictations")+(thoughtCount>0?" · "+thoughtCount+" thoughts":"")+" · settings and dictionary";
+    }
+    private static boolean enabledKeyboard(Context context,String id) {
+        if(id.isEmpty())return false;
+        try {InputMethodManager manager=(InputMethodManager)context.getSystemService(Context.INPUT_METHOD_SERVICE);if(manager!=null)for(InputMethodInfo info:manager.getEnabledInputMethodList())if(id.equals(info.getId()))return true;}
+        catch(RuntimeException ignored){}return false;
+    }
+    private static void writePreference(SharedPreferences.Editor edit,String key,Object value) {
+        if(value instanceof String)edit.putString(key,(String)value);else if(value instanceof Boolean)edit.putBoolean(key,(Boolean)value);else if(value instanceof Integer)edit.putInt(key,(Integer)value);else if(value instanceof Long)edit.putLong(key,(Long)value);else if(value instanceof Float)edit.putFloat(key,(Float)value);else if(value instanceof java.util.Set){@SuppressWarnings("unchecked")java.util.Set<String> set=(java.util.Set<String>)value;edit.putStringSet(key,set);}
+    }
+    private static String string(JSONObject object,String key,int limit,boolean empty) throws IOException {
+        Object value=object.opt(key);if(!(value instanceof String))throw invalid("A backup field is not valid.");String text=(String)value;if(text.length()>limit || (!empty && text.isEmpty()))throw invalid("A backup field is missing or too long.");return text;
+    }
+    private static long integer(JSONObject object,String key,long min,long max) throws IOException {
+        Object value=object.opt(key);if(!(value instanceof Integer) && !(value instanceof Long))throw invalid("A backup number is not valid.");long number=((Number)value).longValue();if(number<min || number>max)throw invalid("A backup number is out of range.");return number;
+    }
+    private static boolean oneOf(String value,String... allowed){for(String item:allowed)if(item.equals(value))return true;return false;}
+    private static IOException invalid(String message){return new IOException(message);}
+    private BackupData(){}
+}

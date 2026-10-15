@@ -1,0 +1,107 @@
+{
+  "scope": "Offline parser checks only; synthetic XML explicitly labelled. Actual recorded global window used in final case; no actual UI helper, ADB, installation, physical input, native fixture or Google operation executed.",
+  "executedOfflineCases": 16,
+  "status": "PASS",
+  "cases": [
+    {
+      "case": "normal native focused app",
+      "status": "PASS",
+      "probeStatus": "PASS",
+      "classification": null
+    },
+    {
+      "case": "framework System UI isn't responding",
+      "status": "PASS",
+      "probeStatus": "BLOCKED",
+      "classification": "ENVIRONMENT_SYSTEM_UI_ANR"
+    },
+    {
+      "case": "framework System UI isn’t responding",
+      "status": "PASS",
+      "probeStatus": "BLOCKED",
+      "classification": "ENVIRONMENT_SYSTEM_UI_ANR"
+    },
+    {
+      "case": "framework System UI is not responding",
+      "status": "PASS",
+      "probeStatus": "BLOCKED",
+      "classification": "ENVIRONMENT_SYSTEM_UI_ANR"
+    },
+    {
+      "case": "framework SystemUI not responding",
+      "status": "PASS",
+      "probeStatus": "BLOCKED",
+      "classification": "ENVIRONMENT_SYSTEM_UI_ANR"
+    },
+    {
+      "case": "framework crash",
+      "status": "PASS",
+      "probeStatus": "BLOCKED",
+      "classification": "ENVIRONMENT_SYSTEM_UI_ERROR_MODAL"
+    },
+    {
+      "case": "ordinary app text is not a native system modal",
+      "status": "PASS",
+      "probeStatus": "PASS",
+      "classification": null
+    },
+    {
+      "case": "hidden framework error nodes are not visible modal",
+      "status": "PASS",
+      "probeStatus": "PASS",
+      "classification": null
+    },
+    {
+      "case": "unfocused background error window",
+      "status": "PASS",
+      "probeStatus": "PASS",
+      "classification": null
+    },
+    {
+      "case": "malformed hierarchy",
+      "status": "PASS",
+      "probeStatus": "UNVERIFIED",
+      "classification": null
+    },
+    {
+      "case": "empty hierarchy",
+      "status": "PASS",
+      "probeStatus": "UNVERIFIED",
+      "classification": null
+    },
+    {
+      "case": "missing global focus",
+      "status": "PASS",
+      "probeStatus": "UNVERIFIED",
+      "classification": null
+    },
+    {
+      "case": "null focus",
+      "status": "PASS",
+      "probeStatus": "UNVERIFIED",
+      "classification": null
+    },
+    {
+      "case": "non-window focus",
+      "status": "PASS",
+      "probeStatus": "UNVERIFIED",
+      "classification": null
+    },
+    {
+      "case": "document type",
+      "status": "PASS",
+      "probeStatus": "UNVERIFIED",
+      "classification": null
+    },
+    {
+      "case": "actual saved global SystemUI ANR blocks without hierarchy",
+      "status": "PASS",
+      "probeStatus": "BLOCKED",
+      "classification": "ENVIRONMENT_SYSTEM_UI_ANR"
+    }
+  ],
+  "runnerSha256": "c1cf64c5a61596e037663eeae8f281c210d2f22ec7946ac57822ce73783512a5",
+  "helperJarSha256": "4e55c3fd00f5ee3445bd479a9ea52cad9a1d083f4c337c94c74b9affe346ffa4",
+  "actualSavedWindowSha256": "dc0bb6cdae401c2660a5638ee3639d7eb282cd0baa6727f6ada58fac1f87ef9c",
+  "nativeHelperRuntime": "NOT RUN; hidden framework reflection requires authorized native validation"
+}

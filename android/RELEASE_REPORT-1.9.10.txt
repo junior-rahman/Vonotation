@@ -1,0 +1,88 @@
+VoiceFlow 1.9.10 preview and QA report
+5 October 2026
+
+Private signed Android preview. Final QA disposition: all 25 selected native invocations passed.
+
+Changes
+- Floating microphone uses the warm Daybook colors, coral artwork, distinct
+  keyboard-state marks, optional tap haptics and reduced-motion-aware feedback.
+- Settings has a direct Permissions panel for microphone, floating dictation and
+  the optional VoiceFlow keyboard. Status refreshes when the screen resumes.
+- Show bubble is next to bubble size and haptics. Advanced connection/privacy
+  controls remain available.
+- Backup has pinned progress/results, busy-state feedback and complete Details.
+  Backup action buttons now grow for enlarged labels while retaining the 44dp
+  minimum height.
+
+Verified artifact
+Package: app.voiceflow
+Version: 1.9.10 (version code 20)
+Android: minimum API 26; target API 35
+APK SHA-256:
+a4c45e8279cfebb9b1bb9dc3f59c7c2ed6799c4efdc0516c9b104d42fc9ca092
+Preview signer certificate SHA-256:
+56d07d6216174d9ecaf6314131e3f4853592ab6c4f031ef368eac8b0deaef0ae
+
+The APK's v2 signature and alignment passed. The installed Android 15/API 35
+emulator APK was pulled back and independently hashed; it matches this file.
+
+Build and source checks
+- Fresh official Android CLI build passed: aapt2, javac, D8, zipalign, apksigner.
+- Standalone Android lint passed with 0 errors and 27 warnings. Gradle-only lint
+  checks are outside this manual model; Gradle assemblePreview/lintPreview were
+  not run.
+- All five pure-Java suites passed, including 29 core cases plus word counts,
+  live/editor insertion, bubble placement and local-calendar-day history.
+- Manifest/resource/library R compatibility checks passed.
+- A clean build from the sanitized source, supplied with the separately retained
+  signing key, produced a byte-for-byte identical APK.
+
+Native QA against this exact APK
+All 25 selected native invocations passed on the exact final APK.
+- Settings and History: 344 checks and 52 physical taps, including first-tap
+  navigation, return focus, persistence, history expansion and recreation.
+- Permissions: three OS-state configurations; first-tap routing, disclosure
+  Cancel, return focus and refreshed status. External Android intents were
+  intercepted and canceled; completing real grants was not tested.
+- Floating controls: actual tap/hold/drag, insertion, typing-keyboard toggles,
+  bounds and persistence. Motion enabled/disabled and haptic API dispatch passed.
+- Backup: offline Drive transport/discovery, encryption/schema rejection,
+  credential isolation, deletion exclusions, draft recreation and disconnected
+  guards; visible progress/results used controlled synthetic work.
+- Backup layout: normal and constrained displays at 100% and 200% text, including
+  portrait/landscape return, in-flight rotation and reduced motion. Details stays
+  reachable in compact layouts.
+- Input and recovery: original-field ownership, teardown recovery, composing
+  text, private API-context exclusions and actual recorder/clipboard recovery
+  through mock HTTPS. Recovery observed 3 transcriptions, including 1 private,
+  with 0 cleanup, recap or chat requests.
+- Password/PIN regression: passed with the original privacy and keyboard assertions retained.
+- The final scan found 0 app/fixture crash or ANR matches across 12 captured
+  log intervals. This is limited to the captured test windows.
+
+Limits
+Live Google consent, Drive upload/restore and second-device restoration remain
+unverified. Physical haptic strength, real split-screen window-manager behavior,
+real-world speech accuracy and phone/OEM-specific behavior remain unverified.
+A separate dark-mode BackupActivity layout was not exercised.
+Speech, editor contents and network responses in the native fixtures were
+synthetic. Four obsolete floating-Delete cases were retired because those
+controls were removed; they are not counted as passes.
+
+Files and installation
+The source ZIP contains the matching APK under prebuilt/VoiceFlow.apk, current
+source/tests, selected QA evidence and a per-file checksum manifest. Signing
+keystores, real API credentials, build caches, old APKs and raw historical/system
+logs are excluded. Supply the original key through VOICEFLOW_KEYSTORE to reproduce
+the preview signing identity. This is not a Play/production release.
+
+The retained signer supports updating a matching earlier preview in place.
+A build signed with another key cannot replace it in place; uninstalling removes
+local app data.
+
+Screenshots show the installed native app. History and editor content are
+synthetic QA data; the backup-progress image uses a simulated operation and does
+not establish a Google upload.
+
+Detailed results: VALIDATION-1.9.10.md and
+evidence/1.9.10-native/final-candidate/acceptance-summary.json inside the source ZIP.

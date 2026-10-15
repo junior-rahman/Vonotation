@@ -1,0 +1,3 @@
+<input-method xmlns:android="http://schemas.android.com/apk/res/android" android:settingsActivity="app.voiceflow.MainActivity" android:supportsSwitchingToNextInputMethod="true">
+    <subtype android:label="Voice typing" android:imeSubtypeLocale="en_US" android:imeSubtypeMode="keyboard" />
+</input-method>

@@ -1,0 +1,66 @@
+VonoTation 0.1.8-preview — October 15, 2026
+
+This is a signed feature preview based on the verified 0.1.7 source.
+Package: app.voiceflow | versionCode: 80 | minSdk: 26 | targetSdk: 35
+
+Added behavior
+- Quick thoughts is off by default. Enable it in Settings to show the optional
+  Thoughts card and a faint 12dp idle dot with a 48dp touch target on eligible
+  unlocked screens. Turning it off hides its dot, card and thought views while
+  retaining saved thoughts.
+- Tap the no-input dot to record a thought in the existing capture card. Drag it
+  to reposition. Expanded controls return to the dot after 60 seconds idle;
+  recording and processing keep their active state. Focused editable inputs
+  retain their existing dictation route. The Thoughts card also offers Record
+  thought using the current button style.
+- Thoughts save original text before optional guarded formatting, get a short
+  extractive title, and support original/edit/delete. Failed recordings retain
+  their thought destination on retry. New backups include thought text and
+  settings; older backups without thoughts preserve locally saved thoughts.
+- The clipboard fan shows one ellipsized latest-copy pill beside its existing
+  clipboard icon. Tapping it inserts the full original at the captured cursor
+  or selection. The icon opens up to three rows in a scrollable popup. Changed
+  or invalid input targets are rejected. Display truncation never truncates
+  a paste; exact text and whitespace are retained.
+- The four original cards and shared Daybook/Ui/FloatingIcon design files are
+  unchanged. This preview adds controls and behavior using existing styles.
+
+Clipboard behavior limits
+Android controls clipboard access. The latest preview may become available only
+when Clipboard is explicitly tapped; the existing focused helper briefly opens
+for that read. Saved copies are the app's own captured history, not another
+keyboard's complete history. History stores up to 20 entries of 4,000 characters;
+longer current text is fully pasteable in memory but is not persisted in history.
+Empty, sensitive, non-text or unavailable clipboard data hides stale latest text.
+Outside tap, icon toggle, Cancel, input changes and teardown dismiss the popup.
+Hardware/gesture Back without an accompanying focus/window/IME event still
+requires native verification.
+
+Validation
+- Android Gradle :app:assemblePreview: BUILD SUCCESSFUL (47 tasks).
+- Java/Kotlin compilation, Android resources, DEX packaging and vital lint passed.
+- All 16 pure Java test suites passed, including exact long clipboard insertion,
+  changed input/cursor rejection and 24 QuickThoughtPolicy checks.
+- 69 production Java files passed Java 8 syntax parsing.
+- Independent source review found no remaining previously reported blocker.
+- APK v2 signature verifies. Certificate matches verified 0.1.7 APK:
+  5dca2219fbe89fb885b24c904fd4c57d3b58930922d21d455fc10d7a35f7568a
+- APK SHA-256: c583c559fd3c163d7dd4cdd965aeaaa5bb030fc20d1a48953db3b665a30cebd2
+
+This preview has not been installed or tested on a phone/emulator. Recording,
+provider requests, visual/touch/haptic behavior, real backup/restore and Niagara
+interaction still need native verification. Reminders remain a future feature.
+This preview is published on GitHub; the next build adds the revised in-app updater.
+
+Source package
+The VoiceFlow folder contains source, resources, tests, build scripts and Gradle
+wrapper. Historical documents are included as baseline records; this file is
+the current preview report. The patch applies to the original 0.1.7 source and
+changes 19 files. Private signing keys, build outputs, machine configuration,
+baseline archives and build caches are deliberately excluded.
+
+Build with JDK 17 and Android SDK 35 / Build Tools 35.0.0:
+  ./gradlew :app:assembleDebug
+A compatible preview build requires the existing signing key supplied through
+VOICEFLOW_KEYSTORE and the signing configuration in app/build.gradle. The key
+is not included. A differently signed APK cannot update an existing install.

@@ -1,0 +1,33 @@
+name: Publish signed Android previews
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'release-manifests/**'
+      - '.github/workflows/publish-preview.yml'
+      - '.github/scripts/publish_previews.py'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: vonotation-preview-releases
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.repository == 'JuelHossain/Vonotation' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # Official actions/checkout v4.2.2, pinned to its verified commit.
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Validate and publish prepared previews
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/publish_previews.py --publish

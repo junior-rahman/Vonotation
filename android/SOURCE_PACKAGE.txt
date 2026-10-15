@@ -1,0 +1,23 @@
+VoiceFlow 1.9.15 preview source package
+
+Version 1.9.15, version code 26. Built from the 1.9.13 source package (the 1.9.14 save was not available). Gradle assemblePreview/lintPreview run with AGP 8.7.3, Gradle 8.9, JDK 17, SDK 35 / build-tools 35.0.0.
+
+What 1.9.15 contains:
+- Word-for-word guard, spoken-punctuation commands, verbatim mode, Cloud retry buffer, processing stages and Cancel, Niagara search detection, private-copy handling, opt-in recaps and backup Cancel.
+- Cloud transcription only, English only (language=en). Auto-detect and Banglish/multi-language are removed, and saved preferences migrate. Language detection is paused.
+- Always-on bubble (no Show bubble switch) and compact Settings with an Advanced section.
+- API key & models dialog: masked saved-key preview (last 4 characters), Update and Remove, provider check before saving (a rejected key is never stored).
+- Visible mic errors beside the bubble with a Fix action, plus mic and API key checks before recording.
+- Notification fallback: recording never depends on POST_NOTIFICATIONS or on startForeground succeeding.
+- Reboot handling: BootReceiver plus a "Tap to turn VoiceFlow back on" notification and Home prompt, the bubble re-shown on service reconnect, and a battery optimization exemption request. Samsung steps are in README.md.
+- Google Drive: real error codes, shown inline with Retry. The OAuth signing-key note is in GOOGLE_SETUP.md.
+- Launcher icon C (adaptive, with a monochrome layer).
+- Settings card and dictation button redesigns: mockups only, on hold, not in this build.
+
+The 1.9.15 APK is signed with a NEW preview key (SHA-1 A7:80:92:53:A2:9D:DD:19:16:F9:B4:B2:98:92:31:95:DA:58:EB:3F) because the original preview key was not available. It cannot update an existing install in place, so uninstall first. Google Drive sign-in needs an Android OAuth client for this SHA-1 (see GOOGLE_SETUP.md). Supply a key through VOICEFLOW_KEYSTORE (alias voiceflow, password android) to build. Signing keys, provider credentials, tokens and build caches are excluded.
+
+prebuilt/VoiceFlow.apk is the 1.9.13 APK from the previous package, kept unchanged for reference. The 1.9.15 APK is delivered separately. baseline/ preserves the original 1.9.10 archive. Run tests with tests/run-pure-tests.sh. The verification report is delivered as VERIFICATION.md alongside the APK.
+
+- Round4: direct-vibrator haptics (Haptics.java, VIBRATE permission) on press, release and hold-menu pop; Samsung re-enable path Settings > Accessibility > Installed apps > VoiceFlow.
+- Deferred: Drive backup fix and language detection.
+- Round5: approved designs built in: glass square button + waveform V glyph (FloatingIcon/FlowAccessibility), arc fan (ArcFan.java), four-card Settings (MainActivity).

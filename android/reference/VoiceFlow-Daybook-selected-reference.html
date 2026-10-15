@@ -1,0 +1,247 @@
+<style>
+  #voiceflow-daybook-final .df-stage { padding: 52px 10px 24px; }
+  #voiceflow-daybook-final .df-caption { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:7px; margin:0 auto 16px; font:400 12px/1.4 system-ui,sans-serif; color:light-dark(#61584f,#d4c8bc); }
+  #voiceflow-daybook-final .df-chip { width:12px; height:12px; border-radius:50%; background:var(--df-chip-color); }
+  #voiceflow-daybook-final .df-phone {
+    --df-paper:light-dark(#f1e9de,#211e1b); --df-surface:light-dark(#fffaf3,#302923);
+    --df-ink:light-dark(#342820,#f6ede3); --df-muted:light-dark(#726255,#c6b3a3);
+    --df-accent:light-dark(#8f5736,#e4b18a); --df-soft:light-dark(#e9d8c5,#463628);
+    --df-line:light-dark(#d8c8b6,#544538); --df-coral:light-dark(#b3422f,#ffab97);
+    --df-action:light-dark(#bc4c36,#e78870); --df-action-ink:light-dark(#fffaf5,#22150f);
+    --df-shadow:light-dark(#57381b15,#00000035); --df-fiber:light-dark(#7851270b,#ead1ad0a);
+    --df-shine:light-dark(#ffffff,#625040); --df-hover:light-dark(#eadbca,#43372d);
+    width:min(100%,376px); min-height:748px; margin:auto; position:relative; padding:22px 20px;
+    box-sizing:border-box; border-radius:28px; color-scheme:light dark;
+    font:400 14px/1.45 system-ui,-apple-system,sans-serif; color:var(--df-ink);
+    background-color:var(--df-paper);
+    background-image:repeating-linear-gradient(0deg,transparent 0 2px,var(--df-fiber) 2px 3px),repeating-linear-gradient(90deg,transparent 0 3px,var(--df-fiber) 3px 4px);
+    box-shadow:0 18px 46px var(--df-shadow),inset 0 1px 0 var(--df-surface);
+  }
+  #voiceflow-daybook-final .df-phone * { box-sizing:border-box; }
+  #voiceflow-daybook-final .df-phone [hidden] { display:none !important; }
+  #voiceflow-daybook-final .df-phone button { font:inherit; color:inherit; background:transparent; border:0; padding:0; }
+  #voiceflow-daybook-final .df-phone button { transition:transform 160ms cubic-bezier(.2,.7,.2,1),background-color 150ms ease; }
+  #voiceflow-daybook-final .df-phone button:active { transform:scale(.98); }
+  #voiceflow-daybook-final .df-phone p { margin:0; }
+  #voiceflow-daybook-final .df-phone h2 { font-size:24px; font-weight:500; letter-spacing:-.6px; line-height:1.2; margin:0; }
+  #voiceflow-daybook-final .df-phone h3 { font-size:14px; font-weight:500; margin:0; }
+  #voiceflow-daybook-final .df-top { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:20px; }
+  #voiceflow-daybook-final .df-brand { display:flex; align-items:center; gap:9px; font-size:21px; font-weight:500; letter-spacing:-.7px; }
+  #voiceflow-daybook-final .df-mark { display:flex; align-items:center; justify-content:center; gap:3px; position:relative; width:30px; height:31px; color:var(--df-coral); }
+  #voiceflow-daybook-final .df-mark span { width:4px; background:currentColor; border-radius:4px; transform:rotate(13deg); }
+  #voiceflow-daybook-final .df-mark span:nth-child(1) { height:11px; }
+  #voiceflow-daybook-final .df-mark span:nth-child(2) { height:23px; }
+  #voiceflow-daybook-final .df-mark span:nth-child(3) { height:18px; }
+  #voiceflow-daybook-final .df-mark span:nth-child(4) { height:8px; }
+  #voiceflow-daybook-final .df-mark::after { content:''; width:9px; height:4px; border-radius:0 0 7px 0; position:absolute; bottom:1px; right:7px; background:currentColor; transform:rotate(-32deg); }
+  #voiceflow-daybook-final .df-phone .df-icon { display:grid; place-items:center; width:44px; height:44px; border-radius:14px; background:var(--df-surface); color:var(--df-accent); flex:0 0 auto; box-shadow:inset 0 1px 0 var(--df-shine); }
+  #voiceflow-daybook-final .df-icon svg { width:19px; height:19px; }
+  #voiceflow-daybook-final .df-heading { display:flex; align-items:baseline; justify-content:space-between; gap:8px; margin-bottom:18px; }
+  #voiceflow-daybook-final .df-muted { font-size:12px; color:var(--df-muted); }
+  #voiceflow-daybook-final .df-daybook { padding-left:15px; margin-left:3px; border-left:1px solid var(--df-line); }
+  #voiceflow-daybook-final .df-day { position:relative; padding-bottom:19px; }
+  #voiceflow-daybook-final .df-day::before { content:''; position:absolute; width:7px; height:7px; border-radius:50%; background:var(--df-accent); top:18px; left:-19px; box-shadow:0 0 0 3px var(--df-paper); }
+  #voiceflow-daybook-final .df-day:first-child::before { background:var(--df-action); }
+  #voiceflow-daybook-final .df-phone .df-day-head { display:flex; align-items:center; justify-content:space-between; text-align:left; width:100%; min-height:44px; gap:8px; margin-bottom:7px; border-radius:8px; }
+  #voiceflow-daybook-final .df-day-name { font-size:15px; font-weight:500; }
+  #voiceflow-daybook-final .df-day-name small { display:block; font-size:11px; font-weight:400; color:var(--df-muted); margin-top:2px; }
+  #voiceflow-daybook-final .df-day-head svg { width:16px; height:16px; color:var(--df-accent); transition:transform 180ms ease; }
+  #voiceflow-daybook-final .df-day-head[aria-expanded='true'] svg { transform:rotate(180deg); }
+  #voiceflow-daybook-final .df-recap { background:var(--df-surface); color:var(--df-ink); padding:10px 12px; border-radius:12px; font-size:13px; box-shadow:inset 0 1px 0 var(--df-shine); }
+  #voiceflow-daybook-final .df-recap-label { display:flex; align-items:center; gap:5px; color:var(--df-accent); font-size:11px; font-weight:500; margin-bottom:4px; }
+  #voiceflow-daybook-final .df-recap-label svg { width:12px; height:12px; }
+  #voiceflow-daybook-final .df-list { margin-top:10px; }
+  #voiceflow-daybook-final .df-entry { border-top:1px solid var(--df-line); }
+  #voiceflow-daybook-final .df-entry summary { display:grid; grid-template-columns:58px minmax(0,1fr); align-items:center; gap:9px; min-height:51px; padding:7px 0; list-style:none; font-size:13px; border-radius:7px; }
+  #voiceflow-daybook-final .df-entry summary::-webkit-details-marker { display:none; }
+  #voiceflow-daybook-final .df-entry time { font-size:11px; color:var(--df-muted); white-space:nowrap; }
+  #voiceflow-daybook-final .df-entry p { margin:0; padding:0 0 11px 67px; font-size:12px; color:var(--df-muted); }
+  #voiceflow-daybook-final .df-settings-top { display:flex; align-items:center; gap:10px; margin-bottom:23px; }
+  #voiceflow-daybook-final .df-settings-top .df-icon { background:transparent; box-shadow:none; margin-left:-8px; }
+  #voiceflow-daybook-final .df-group-label { color:var(--df-accent); font-size:11px; letter-spacing:.6px; text-transform:uppercase; font-weight:500; margin:17px 0 8px 2px; }
+  #voiceflow-daybook-final .df-group { background:var(--df-surface); border-radius:17px; padding:0 13px; box-shadow:inset 0 1px 0 var(--df-shine); }
+  #voiceflow-daybook-final .df-phone .df-row { display:flex; align-items:center; justify-content:space-between; width:100%; text-align:left; gap:9px; min-height:54px; border-bottom:1px solid var(--df-line); }
+  #voiceflow-daybook-final .df-row:last-child { border-bottom:0; }
+  #voiceflow-daybook-final .df-row-label { min-width:0; }
+  #voiceflow-daybook-final .df-row-label small { display:block; color:var(--df-muted); font-size:11px; margin-top:4px; }
+  #voiceflow-daybook-final .df-row-value { display:flex; align-items:center; gap:5px; font-size:12px; color:var(--df-accent); flex:0 0 auto; }
+  #voiceflow-daybook-final .df-row-value svg { width:14px; height:14px; }
+  #voiceflow-daybook-final .df-phone .df-switch { position:relative; width:44px; height:44px; flex:0 0 auto; border-radius:10px; }
+  #voiceflow-daybook-final .df-switch::before { content:''; position:absolute; inset:9px 0; border-radius:18px; background:var(--df-line); transition:background-color 180ms ease; }
+  #voiceflow-daybook-final .df-switch::after { content:''; position:absolute; top:12px; left:3px; width:20px; height:20px; border-radius:50%; background:var(--df-surface); box-shadow:0 1px 3px var(--df-shadow); transition:transform 180ms cubic-bezier(.2,.7,.2,1); }
+  #voiceflow-daybook-final .df-switch[aria-checked='true']::before { background:var(--df-action); }
+  #voiceflow-daybook-final .df-switch[aria-checked='true']::after { transform:translateX(18px); }
+  #voiceflow-daybook-final .df-backup { padding:15px; background:var(--df-soft); border-radius:17px; margin-top:18px; box-shadow:inset 0 1px 0 var(--df-shine); }
+  #voiceflow-daybook-final .df-backup-title { display:flex; align-items:center; gap:7px; font-weight:500; margin-bottom:5px; }
+  #voiceflow-daybook-final .df-backup-title svg { width:18px; height:18px; color:var(--df-accent); }
+  #voiceflow-daybook-final .df-phone .df-primary { min-height:44px; padding:10px 12px; border-radius:12px; background:var(--df-action); color:var(--df-action-ink); width:100%; font-weight:500; margin-top:13px; }
+  #voiceflow-daybook-final .df-help { color:var(--df-muted); font-size:11px; margin-top:10px !important; }
+  #voiceflow-daybook-final .df-phone .df-advanced { display:flex; align-items:center; justify-content:space-between; width:100%; min-height:52px; margin-top:10px; color:var(--df-muted); font-size:12px; }
+  #voiceflow-daybook-final .df-advanced svg { width:14px; height:14px; }
+  #voiceflow-daybook-final .df-panel-desc { font-size:13px; color:var(--df-muted); margin-bottom:16px !important; }
+  #voiceflow-daybook-final .df-phone .df-option { width:100%; display:flex; align-items:center; justify-content:space-between; text-align:left; gap:10px; min-height:68px; border-bottom:1px solid var(--df-line); }
+  #voiceflow-daybook-final .df-option:last-child { border-bottom:0; }
+  #voiceflow-daybook-final .df-option small { display:block; color:var(--df-muted); font-size:12px; margin-top:4px; }
+  #voiceflow-daybook-final .df-option svg { color:var(--df-accent); width:18px; height:18px; flex:0 0 auto; }
+  #voiceflow-daybook-final .df-word { display:flex; align-items:center; justify-content:space-between; gap:10px; min-height:62px; border-bottom:1px solid var(--df-line); }
+  #voiceflow-daybook-final .df-word:last-child { border-bottom:0; }
+  #voiceflow-daybook-final .df-word small { display:block; color:var(--df-muted); font-size:12px; }
+  #voiceflow-daybook-final .df-phone .df-remove { display:grid; place-items:center; width:44px; height:44px; flex:0 0 auto; color:var(--df-muted); border-radius:12px; }
+  #voiceflow-daybook-final .df-remove svg { width:17px; height:17px; }
+  #voiceflow-daybook-final .df-form { margin-top:24px; }
+  #voiceflow-daybook-final .df-form label { display:block; font-size:12px; color:var(--df-muted); margin-top:13px; }
+  #voiceflow-daybook-final .df-phone .df-input { display:block; width:100%; min-height:46px; margin-top:6px; padding:11px 12px; border:1px solid var(--df-line); border-radius:12px; font:400 16px/1.4 system-ui,sans-serif; background:var(--df-surface); color:var(--df-ink); }
+  #voiceflow-daybook-final .df-phone .df-input:focus { border-color:var(--df-accent); }
+  #voiceflow-daybook-final .df-form-error { color:var(--df-coral); font-size:12px; margin-top:10px !important; }
+  #voiceflow-daybook-final .df-status { color:var(--df-accent); font-size:12px; margin-top:14px !important; }
+  #voiceflow-daybook-final .df-announcement { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; border:0; }
+  @media (hover:hover) { #voiceflow-daybook-final .df-phone .df-row:hover, #voiceflow-daybook-final .df-phone .df-option:hover, #voiceflow-daybook-final .df-entry summary:hover, #voiceflow-daybook-final .df-day-head:hover { background:var(--df-hover); } }
+  @media (max-width:380px) { #voiceflow-daybook-final .df-stage { padding-left:0; padding-right:0; } #voiceflow-daybook-final .df-phone { padding-left:16px; padding-right:16px; } }
+  @media (prefers-reduced-motion:reduce) { #voiceflow-daybook-final .df-phone button, #voiceflow-daybook-final .df-day-head svg, #voiceflow-daybook-final .df-switch::before, #voiceflow-daybook-final .df-switch::after { transition:none; } #voiceflow-daybook-final .df-phone button:active { transform:none; } }
+</style>
+<div id="voiceflow-daybook-final" class="viz-dotted-background" aria-label="Final VoiceFlow Daybook design">
+  <div class="df-stage">
+    <div class="df-caption"><span class="df-chip" style="--df-chip-color:#b97d51" aria-hidden="true"></span><span class="df-chip" style="--df-chip-color:#e9d8c5" aria-hidden="true"></span><span>Copper + Sand · Woven Linen · Sample history</span></div>
+    <article class="df-phone" aria-label="VoiceFlow Daybook interactive preview">
+      <div class="df-home" data-view="home">
+        <header class="df-top"><span class="df-brand"><span class="df-mark" aria-hidden="true"><span></span><span></span><span></span><span></span></span>voiceflow</span><button type="button" class="df-icon cursor-interaction" data-action="settings" aria-label="Open Settings"><i data-lucide="settings-2" aria-hidden="true"></i></button></header>
+        <div class="df-heading"><h2>Your days</h2><span class="df-muted">October</span></div>
+        <div class="df-daybook">
+          <section class="df-day"><button type="button" class="df-day-head cursor-interaction" data-day="today" aria-expanded="true" aria-controls="df-day-today"><span class="df-day-name">Today<small>Sun, Oct 4 · 2 dictations</small></span><i data-lucide="chevron-down" aria-hidden="true"></i></button><div class="df-recap"><div class="df-recap-label"><i data-lucide="sparkles" aria-hidden="true"></i>Daily recap</div>A quick reminder and a few design ideas.</div><div id="df-day-today" class="df-list" data-day-list="today"><details class="df-entry"><summary class="cursor-interaction"><time>12:42 AM</time><span>Keep the home screen simple and compact.</span></summary><p>Keep the home screen simple and compact, with the newest dictations first.</p></details><details class="df-entry"><summary class="cursor-interaction"><time>12:18 AM</time><span>Pick up coffee and eggs on the way home.</span></summary><p>Pick up coffee and eggs on the way home, and check the shopping list.</p></details></div></section>
+          <section class="df-day"><button type="button" class="df-day-head cursor-interaction" data-day="yesterday" aria-expanded="false" aria-controls="df-day-yesterday"><span class="df-day-name">Yesterday<small>Sat, Oct 3 · 3 dictations</small></span><i data-lucide="chevron-down" aria-hidden="true"></i></button><div class="df-recap"><div class="df-recap-label"><i data-lucide="sparkles" aria-hidden="true"></i>Daily recap</div>A file to send and plans for the weekend.</div><div id="df-day-yesterday" class="df-list" data-day-list="yesterday" hidden><details class="df-entry"><summary class="cursor-interaction"><time>11:46 PM</time><span>Send the updated file in the morning.</span></summary><p>Send the updated file in the morning after checking the changes.</p></details><details class="df-entry"><summary class="cursor-interaction"><time>9:20 PM</time><span>Keep Saturday afternoon free.</span></summary><p>Keep next Saturday afternoon free to finish the weekend projects.</p></details><details class="df-entry"><summary class="cursor-interaction"><time>6:12 PM</time><span>Make a short list before leaving.</span></summary><p>Make a short shopping list before leaving so nothing is forgotten.</p></details></div></section>
+          <section class="df-day"><button type="button" class="df-day-head cursor-interaction" data-day="friday" aria-expanded="false" aria-controls="df-day-friday"><span class="df-day-name">Friday<small>Oct 2 · 1 dictation</small></span><i data-lucide="chevron-down" aria-hidden="true"></i></button><div class="df-recap">A reminder for next week.</div><div id="df-day-friday" class="df-list" data-day-list="friday" hidden><details class="df-entry"><summary class="cursor-interaction"><time>5:10 PM</time><span>Check the calendar before planning next week.</span></summary><p>Check the calendar on Monday morning before planning next week.</p></details></div></section>
+          <section class="df-day"><button type="button" class="df-day-head cursor-interaction" data-day="thursday" aria-expanded="false" aria-controls="df-day-thursday"><span class="df-day-name">Thursday<small>Oct 1 · 2 dictations</small></span><i data-lucide="chevron-down" aria-hidden="true"></i></button><div class="df-recap">A short shopping list.</div><div id="df-day-thursday" class="df-list" data-day-list="thursday" hidden><details class="df-entry"><summary class="cursor-interaction"><time>8:32 PM</time><span>Pick up bread, fruit and milk.</span></summary><p>Pick up bread, fruit and milk on the way home.</p></details><details class="df-entry"><summary class="cursor-interaction"><time>4:15 PM</time><span>Save the list for later.</span></summary><p>Save the shopping list for later so it is easy to find.</p></details></div></section>
+        </div>
+      </div>
+      <div class="df-settings" data-view="settings" hidden></div>
+      <div class="df-panel" data-view="panel" hidden></div>
+      <p class="df-announcement" role="status" aria-live="polite" aria-atomic="true"></p>
+    </article>
+  </div>
+</div>
+<script>
+(() => {
+  const root = document.getElementById('voiceflow-daybook-final');
+  const phone = root.querySelector('.df-phone');
+  const views = {home:phone.querySelector('[data-view="home"]'),settings:phone.querySelector('[data-view="settings"]'),panel:phone.querySelector('[data-view="panel"]')};
+  const state = {view:'home',panel:'',origin:'',transcription:'Default',cleanup:'Fast',language:'Automatic',size:'Small',haptics:true,history:true,recaps:true,heard:'',preferred:'',words:[{heard:'voice flow',preferred:'VoiceFlow'}]};
+  const choices = {
+    transcription:{title:'Transcription',description:'Choose how VoiceFlow transcribes your speech.',options:[['Default','Everyday transcription'],['Fast','Prioritize speed']]},
+    cleanup:{title:'AI cleanup',description:'Choose how much editing to apply to your words.',options:[['Fast','Light edits and formatting'],['Thorough','More detailed editing'],['Off','Keep the original transcript']]},
+    language:{title:'Language',description:'Choose the language you speak.',options:[['Automatic','Detect the spoken language'],['English','English'],['Bengali','বাংলা'],['Spanish','Español'],['Hindi','हिन्दी']]},
+    size:{title:'Bubble size',description:'Choose the touch size that feels right.',options:[['Small','Compact and discreet'],['Medium','A little more room'],['Large','Easier to tap']]}
+  };
+  const escape = value => String(value).replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+  const icon = name => '<i data-lucide="'+name+'" aria-hidden="true"></i>';
+  const icons = () => { if (globalThis.lucide) lucide.createIcons({attrs:{width:16,height:16}}); };
+  const top = (title,back) => '<header class="df-settings-top"><button type="button" class="df-icon cursor-interaction" data-action="'+back+'" aria-label="'+(back==='home'?'Back to Home':'Back to Settings')+'">'+icon('arrow-left')+'</button><h2>'+title+'</h2></header>';
+  const row = (label,value,key) => '<button type="button" class="df-row cursor-interaction" data-action="panel" data-key="'+key+'"><span class="df-row-label">'+label+'</span><span class="df-row-value">'+escape(value)+icon('chevron-right')+'</span></button>';
+  const toggle = (label,key,description='') => '<div class="df-row"><span class="df-row-label">'+label+(description?'<small>'+description+'</small>':'')+'</span><button type="button" class="df-switch cursor-interaction" role="switch" aria-label="'+label+'" aria-checked="'+state[key]+'" data-toggle="'+key+'"></button></div>';
+  function announce(message) { phone.querySelector('.df-announcement').textContent = message; }
+  function motion(element) {
+    const reduce = globalThis.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!reduce && element.animate) element.animate([{transform:'translateY(5px)',opacity:.75},{transform:'translateY(0)',opacity:1}],{duration:180,easing:'cubic-bezier(.2,.7,.2,1)'});
+  }
+  function renderSettings() {
+    views.settings.innerHTML = top('Settings','home')+
+      '<div class="df-group-label">Voice & text</div><div class="df-group">'+row('Transcription',state.transcription,'transcription')+row('AI cleanup',state.cleanup,'cleanup')+row('Language',state.language,'language')+'</div>'+
+      '<div class="df-group-label">Floating bubble</div><div class="df-group">'+row('Bubble size',state.size,'size')+toggle('Haptic feedback','haptics')+'</div><p class="df-help">Tap to dictate · Hold to toggle your keyboard</p>'+
+      '<div class="df-group-label">Your words</div><div class="df-group">'+row('Personal dictionary',state.words.length+' '+(state.words.length===1?'word':'words'),'dictionary')+'</div>'+
+      '<section class="df-backup"><div class="df-backup-title">'+icon('cloud')+'Google Drive backup</div><p class="df-muted">Encrypted history and settings</p><button type="button" class="df-primary cursor-interaction" data-action="panel" data-key="backup">Backup & restore</button><p class="df-help">Not connected · Automatic backup off</p></section>'+
+      '<button type="button" class="df-advanced cursor-interaction" data-action="panel" data-key="advanced"><span>Advanced · Privacy & connection</span>'+icon('chevron-right')+'</button>';
+    icons();
+  }
+  function show(view,focusSelector) {
+    state.view = view;
+    Object.entries(views).forEach(([key,element])=>{element.hidden = key !== view;});
+    if (focusSelector) { const target = views[view].querySelector(focusSelector); if (target) target.focus({preventScroll:true}); }
+    motion(views[view]);
+  }
+  function renderWords() {
+    const list = views.panel.querySelector('[data-word-list]');
+    list.innerHTML = state.words.length ? state.words.map((word,index)=>'<div class="df-word"><span>'+escape(word.preferred)+'<small>'+escape(word.heard)+' → '+escape(word.preferred)+'</small></span><button type="button" class="df-remove cursor-interaction" data-remove="'+index+'" aria-label="Remove '+escape(word.preferred)+'">'+icon('trash-2')+'</button></div>').join('') : '<div class="df-row"><span class="df-muted">No saved words yet</span></div>';
+    icons();
+  }
+  function openPanel(key) {
+    state.panel = key; state.origin = key;
+    let title,body;
+    if (choices[key]) {
+      const choice = choices[key]; title = choice.title;
+      body = '<p class="df-panel-desc">'+choice.description+'</p><div class="df-group">'+choice.options.map(([value,description])=>'<button type="button" class="df-option cursor-interaction" data-choice="'+key+'" data-value="'+escape(value)+'" aria-pressed="'+(state[key]===value)+'"><span>'+escape(value)+'<small>'+escape(description)+'</small></span>'+(state[key]===value?icon('check'):'')+'</button>').join('')+'</div>';
+    } else if (key==='dictionary') {
+      title = 'Personal dictionary';
+      body = '<p class="df-panel-desc">Keep the names and spellings you use often.</p><div class="df-group" data-word-list></div><form class="df-form" data-dictionary-form><h3>Add a word</h3><label for="df-heard">Heard spelling</label><input class="df-input" id="df-heard" name="heard" value="'+escape(state.heard)+'" placeholder="voice flow" maxlength="80" autocomplete="off"><label for="df-preferred">Preferred spelling</label><input class="df-input" id="df-preferred" name="preferred" value="'+escape(state.preferred)+'" placeholder="VoiceFlow" maxlength="80" autocomplete="off"><button type="submit" class="df-primary cursor-interaction">Add word</button><p class="df-form-error" role="alert" data-form-error></p></form>';
+    } else if (key==='advanced') {
+      title = 'Privacy & connection';
+      body = '<div class="df-group-label">History</div><div class="df-group">'+toggle('Save dictations','history','Keep new dictations in History')+toggle('Show daily recaps','recaps','Short summaries of your saved words')+'</div><p class="df-help">Password and PIN dictations stay out of History and backups.</p><div class="df-group-label">AI connection</div><div class="df-group"><div class="df-row"><span class="df-row-label">Provider<small>Your selected API connection</small></span><span class="df-row-value">Groq</span></div></div><p class="df-help">Recaps use your selected cleanup model.</p>';
+    } else {
+      title = 'Backup & restore';
+      body = '<p class="df-panel-desc">Keep an encrypted backup in your own Google Drive.</p><div class="df-group"><div class="df-row"><span class="df-row-label">Google account</span><span class="df-row-value">Not connected</span></div><div class="df-row"><span>Automatic backup</span><span class="df-row-value">Off</span></div></div><button type="button" class="df-primary cursor-interaction" data-action="connect">Connect Google</button><p class="df-help">Restore from the same account with your backup password. Confirm before replacing current data.</p><p class="df-help">Includes history, dictionary and settings. Recordings and password/PIN dictations are excluded.</p><p class="df-status" role="status" aria-live="polite" data-backup-status></p>';
+    }
+    views.panel.innerHTML = top(title,'back')+body;
+    if (key==='dictionary') renderWords();
+    icons(); show('panel','[data-action="back"]');
+  }
+  function backSettings() { renderSettings(); show('settings','[data-key="'+state.origin+'"]'); }
+  function refreshToggle(key) {
+    phone.querySelectorAll('[data-toggle="'+key+'"]').forEach(button=>button.setAttribute('aria-checked',String(state[key])));
+    if (key==='recaps') phone.querySelectorAll('.df-recap').forEach(recap=>{recap.hidden = !state.recaps;});
+  }
+  phone.addEventListener('click',event=>{
+    const button = event.target.closest('button'); if (!button || !phone.contains(button)) return;
+    if (button.hasAttribute('data-day')) {
+      const expanded = button.getAttribute('aria-expanded') !== 'true';
+      button.setAttribute('aria-expanded',String(expanded));
+      const list = phone.querySelector('[data-day-list="'+button.dataset.day+'"]'); list.hidden = !expanded;
+      if (expanded) motion(list);
+      return;
+    }
+    if (button.hasAttribute('data-toggle')) {
+      const key = button.dataset.toggle; state[key] = !state[key]; refreshToggle(key);
+      announce(button.getAttribute('aria-label')+(state[key]?' on':' off')); return;
+    }
+    if (button.hasAttribute('data-choice')) {
+      const key = button.dataset.choice; state[key] = button.dataset.value;
+      announce(choices[key].title+' updated to '+state[key]); backSettings(); return;
+    }
+    if (button.hasAttribute('data-remove')) {
+      const index = Number(button.dataset.remove); const word = state.words[index];
+      if (!word) return;
+      state.words.splice(index,1); renderWords(); announce(word.preferred+' removed');
+      const next = views.panel.querySelector('[data-remove]') || views.panel.querySelector('#df-heard');
+      next.focus({preventScroll:true}); return;
+    }
+    const action = button.dataset.action;
+    if (action==='settings') { renderSettings(); show('settings','[data-action="home"]'); }
+    else if (action==='home') { show('home','[data-action="settings"]'); }
+    else if (action==='panel') openPanel(button.dataset.key);
+    else if (action==='back') backSettings();
+    else if (action==='connect') views.panel.querySelector('[data-backup-status]').textContent = 'Google sign-in setup is still in progress.';
+  });
+  phone.addEventListener('input',event=>{
+    if (event.target.id==='df-heard') state.heard = event.target.value;
+    if (event.target.id==='df-preferred') state.preferred = event.target.value;
+  });
+  phone.addEventListener('submit',event=>{
+    if (!event.target.matches('[data-dictionary-form]')) return;
+    event.preventDefault();
+    const form = event.target, heard = form.elements.heard.value.trim(), preferred = form.elements.preferred.value.trim();
+    const error = form.querySelector('[data-form-error]');
+    if (!heard || !preferred) { error.textContent = 'Enter both spellings to add a word.'; return; }
+    if (state.words.some(word=>word.heard.toLowerCase()===heard.toLowerCase())) { error.textContent = 'That heard spelling is already saved.'; return; }
+    if (state.words.length>=20) { error.textContent = 'This preview supports up to 20 sample words.'; return; }
+    state.words.push({heard,preferred}); state.heard=''; state.preferred=''; form.reset();
+    form.elements.heard.value=''; form.elements.preferred.value=''; error.textContent='';
+    renderWords(); announce(preferred+' added to your dictionary'); form.elements.heard.focus({preventScroll:true});
+  });
+  phone.addEventListener('keydown',event=>{
+    if (event.key!=='Escape') return;
+    if (state.view==='panel') { event.preventDefault(); backSettings(); }
+    else if (state.view==='settings') { event.preventDefault(); show('home','[data-action="settings"]'); }
+  });
+  phone.querySelectorAll('.df-entry').forEach(entry=>entry.addEventListener('toggle',()=>{
+    if (entry.open) motion(entry.querySelector('p'));
+  }));
+  renderSettings(); icons();
+})();
+</script>

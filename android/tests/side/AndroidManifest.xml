@@ -1,0 +1,17 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="app.voiceflow.fixture">
+    <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <instrumentation android:name="app.voiceflow.ControlSetup" android:targetPackage="app.voiceflow" android:functionalTest="true" />
+    <instrumentation android:name=".SidePreview" android:targetPackage="app.voiceflow.fixture" android:functionalTest="true" />
+    <application android:label="VoiceFlow native control checks" android:debuggable="true" android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        <service android:name=".FakeSpeech" android:exported="true" android:permission="android.permission.BIND_SPEECH_RECOGNITION_SERVICE">
+            <intent-filter><action android:name="android.speech.RecognitionService" /></intent-filter>
+        </service>
+        <activity android:name=".EditorActivity" android:exported="true" android:windowSoftInputMode="stateAlwaysVisible|adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

@@ -1,0 +1,592 @@
+{
+  "root": "com.google.android.gms:play-services-auth:22.0.0",
+  "repositories": [
+    "https://dl.google.com/dl/android/maven2/",
+    "https://repo.maven.apache.org/maven2/"
+  ],
+  "resolver": "fixed-version POM graph with Android/JVM coroutines variant; numeric highest-version mediation",
+  "artifacts": [
+    {
+      "group": "androidx.activity",
+      "artifact": "activity",
+      "version": "1.5.1",
+      "type": "aar",
+      "url": "https://dl.google.com/dl/android/maven2/androidx/activity/activity/1.5.1/activity-1.5.1.aar",
+      "sha256": "4b04b42d2c1f81c02faf0f7b6e9cc9fede10fdee8f66136cd4b99f88e8f48c0f"
+    },
+    {
+      "group": "androidx.annotation",
+      "artifact": "annotation",
+      "version": "1.2.0",
+      "type": "jar",
+      "url": "https://dl.google.com/dl/android/maven2/androidx/annotation/annotation/1.2.0/annotation-1.2.0.jar",
+      "sha256": "9029262bddce116e6d02be499e4afdba21f24c239087b76b3b57d7e98b490a36"
+    },
+    {
+      "group": "androidx.annotation",
+      "artifact": "annotation-experimental",
+      "version": "1.1.0",
+      "type": "aar",
+      "url": "https://dl.google.com/dl/android/maven2/androidx/annotation/annotation-experimental/1.1.0/annotation-experimental-1.1.0.aar",
+      "sha256": "0157de61a2064047896a058080f3fd67ba57ad9a94857b3f7a363660243e3f90"
+    },
+    {
+      "group": "androidx.arch.core",
+      "artifact": "core-common",
+      "version": "2.1.0",
+      "type": "jar",
+      "url": "https://dl.google.com/dl/android/maven2/androidx/arch/core/core-common/2.1.0/core-common-2.1.0.jar",
+      "sha256": "fe1237bf029d063e7f29fe39aeaf73ef74c8b0a3658486fc29d3c54326653889"
+    },
+    {
+      "group": "androidx.arch.core",
+      "artifact": "core-runtime",
+      "version": "2.1.0",
+      "type": "aar",
+      "url": "https://dl.google.com/dl/android/maven2/androidx/arch/core/core-runtime/2.1.0/core-runtime-2.1.0.aar",
+      "sha256": "dd77615bd3dd275afb11b62df25bae46b10b4a117cd37943af45bdcbf8755852"
+    },
+    {
+      "group": "androidx.collection",
+      "artifact": "collection",
+      "version": "1.1.0",
+      "type": "jar",
+      "url": "https://dl.google.com/dl/android/maven2/androidx/collection/collection/1.1.0/collection-1.1.0.jar",
+      "sha256": "632a0e5407461de774409352940e292a291037724207a787820c77daf7d33b72"
+    },
+    {
+      "group": "androidx.concurrent",
+      "artifact": "concurrent-futures",
+      "version": "1.0.0",
+      "type": "jar",
+      "url": "https://dl.google.com/dl/android/maven2/androidx/concurrent/concurrent-futures/1.0.0/concurrent-futures-1.0.0.jar",
+      "sha256": "5595a40e278a7b39fa78a09490e3d7f3faa95c7b01447148bd38b5ade0605c35"
+    },
+    {
+      "group": "androidx.core",
+      "artifact": "core",
+      "version": "1.8.0",
+      "type": "aar",
+      "url": "https://dl.google.com/dl/android/maven2/androidx/core/core/1.8.0/core-1.8.0.aar",
+      "sha256": "48c64a15ec3eb11bfb33339e5ceb70ec7f821bd2dfa2eb8675ebd5353317e792"
+    },
+    {
+      "group": "androidx.core",
+      "artifact": "core-ktx",
+      "version": "1.2.0",
+      "type": "aar",
+      "url": "https://dl.google.com/dl/android/maven2/androidx/core/core-ktx/1.2.0/core-ktx-1.2.0.aar",
+      "sha256": "dcb74d510d552b35eff73b0dd27b829649535f3902e5b5a1f26040383c10a940"
+    },
+    {
+      "group": "androidx.customview",
+      "artifact": "customview",
+      "version": "1.0.0",
+      "type": "aar",
+      "url": "https://dl.google.com/dl/android/maven2/androidx/customview/customview/1.0.0/customview-1.0.0.aar",
+      "sha256": "20e5b8f6526a34595a604f56718da81167c0b40a7a94a57daa355663f2594df2"
+    },
+    {
+      "group": "androidx.fragment",
+      "artifact": "fragment",
+      "version": "1.5.7",
+      "type": "aar",
+      "url": "https://dl.google.com/dl/android/maven2/androidx/fragment/fragment/1.5.7/fragment-1.5.7.aar",
+      "sha256": "59c74110b99378885ed06242f8a26da305ea4dca53ed60163540dd0e2e3c6675"
+    },
+    {
+      "group": "androidx.lifecycle",
+      "artifact": "lifecycle-common",
+      "version": "2.5.1",
+      "type": "jar",
+      "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-common/2.5.1/lifecycle-common-2.5.1.jar",
+      "sha256": "20ad1520f625cf455e6afd7290988306d3a9886efa993e0860fbabf4bb3f7bda"
+    },
+    {
+      "group": "androidx.lifecycle",
+      "artifact": "lifecycle-livedata-core",
+      "version": "2.5.1",
+      "type": "aar",
+      "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-livedata-core/2.5.1/lifecycle-livedata-core-2.5.1.aar",
+      "sha256": "ee792103ca248bfaf150c45a93871e4cf7e8cebab990e0f62f7de5d4ff2f209f"
+    },
+    {
+      "group": "androidx.lifecycle",
+      "artifact": "lifecycle-runtime",
+      "version": "2.5.1",
+      "type": "aar",
+      "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-runtime/2.5.1/lifecycle-runtime-2.5.1.aar",
+      "sha256": "33b0d73dc2f028fceb3599bacabe563c3db6d26f3513d889595863536a4ac8c0"
+    },
+    {
+      "group": "androidx.lifecycle",
+      "artifact": "lifecycle-viewmodel",
+      "version": "2.5.1",
+      "type": "aar",
+      "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-viewmodel/2.5.1/lifecycle-viewmodel-2.5.1.aar",
+      "sha256": "14a27d5fb8a1436b1b7dec18bebaa66c830cdbbc8e28a81ce5f85b7c33b3ae9d"
+    },
+    {
+      "group": "androidx.lifecycle",
+      "artifact": "lifecycle-viewmodel-savedstate",
+      "version": "2.5.1",
+      "type": "aar",
+      "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-viewmodel-savedstate/2.5.1/lifecycle-viewmodel-savedstate-2.5.1.aar",
+      "sha256": "8481141f97f0e6213dd33fcc89a784c4bd11a6ff7d4779a1cf6a0e9fbdbf24e0"
+    },
+    {
+      "group": "androidx.loader",
+      "artifact": "loader",
+      "version": "1.1.0",
+      "type": "aar",
+      "url": "https://dl.google.com/dl/android/maven2/androidx/loader/loader/1.1.0/loader-1.1.0.aar",
+      "sha256": "a83b597cd2409dc177f7f932f7c4082ef7b5508b69b6c4ba71607e75dbd99971"
+    },
+    {
+      "group": "androidx.savedstate",
+      "artifact": "savedstate",
+      "version": "1.2.0",
+      "type": "aar",
+      "url": "https://dl.google.com/dl/android/maven2/androidx/savedstate/savedstate/1.2.0/savedstate-1.2.0.aar",
+      "sha256": "2de528d6898e95ef020d22d9ffdf9d1f77cbdd93f92d39dfaa5d5c43b0c311c8"
+    },
+    {
+      "group": "androidx.tracing",
+      "artifact": "tracing",
+      "version": "1.0.0",
+      "type": "aar",
+      "url": "https://dl.google.com/dl/android/maven2/androidx/tracing/tracing/1.0.0/tracing-1.0.0.aar",
+      "sha256": "07b8b6139665b884a162eccf97891ca50f7f56831233bf25168ae04f7b568612"
+    },
+    {
+      "group": "androidx.versionedparcelable",
+      "artifact": "versionedparcelable",
+      "version": "1.1.1",
+      "type": "aar",
+      "url": "https://dl.google.com/dl/android/maven2/androidx/versionedparcelable/versionedparcelable/1.1.1/versionedparcelable-1.1.1.aar",
+      "sha256": "57e8d93260d18d5b9007c9eed3c64ad159de90c8609ebfc74a347cbd514535a4"
+    },
+    {
+      "group": "androidx.viewpager",
+      "artifact": "viewpager",
+      "version": "1.0.0",
+      "type": "aar",
+      "url": "https://dl.google.com/dl/android/maven2/androidx/viewpager/viewpager/1.0.0/viewpager-1.0.0.aar",
+      "sha256": "147af4e14a1984010d8f155e5e19d781f03c1d70dfed02a8e0d18428b8fc8682"
+    },
+    {
+      "group": "com.google.android.gms",
+      "artifact": "play-services-auth",
+      "version": "22.0.0",
+      "type": "aar",
+      "url": "https://dl.google.com/dl/android/maven2/com/google/android/gms/play-services-auth/22.0.0/play-services-auth-22.0.0.aar",
+      "sha256": "0897c1ad398cae3f7a743a24d66373cc7440e63d11e7429ed9a17a77a61c96dc"
+    },
+    {
+      "group": "com.google.android.gms",
+      "artifact": "play-services-auth-api-phone",
+      "version": "18.0.2",
+      "type": "aar",
+      "url": "https://dl.google.com/dl/android/maven2/com/google/android/gms/play-services-auth-api-phone/18.0.2/play-services-auth-api-phone-18.0.2.aar",
+      "sha256": "bfdf380e7400a9d950cba4dedc152b1bce614a87353009e851087428927cc240"
+    },
+    {
+      "group": "com.google.android.gms",
+      "artifact": "play-services-auth-base",
+      "version": "18.0.10",
+      "type": "aar",
+      "url": "https://dl.google.com/dl/android/maven2/com/google/android/gms/play-services-auth-base/18.0.10/play-services-auth-base-18.0.10.aar",
+      "sha256": "d8bff2c98d239633fb550229e527779425bfb51ff04b96ac0f12d3acba0b1f42"
+    },
+    {
+      "group": "com.google.android.gms",
+      "artifact": "play-services-base",
+      "version": "18.5.0",
+      "type": "aar",
+      "url": "https://dl.google.com/dl/android/maven2/com/google/android/gms/play-services-base/18.5.0/play-services-base-18.5.0.aar",
+      "sha256": "59a5c0c2da12311d75d965ce1f419498536b1a167fb28ff7dfc2dfd9cefa4157"
+    },
+    {
+      "group": "com.google.android.gms",
+      "artifact": "play-services-basement",
+      "version": "18.9.0",
+      "type": "aar",
+      "url": "https://dl.google.com/dl/android/maven2/com/google/android/gms/play-services-basement/18.9.0/play-services-basement-18.9.0.aar",
+      "sha256": "c6ed7236b1b3ce0296b508a5c0a09108fd52d83559d35cad2639505cd04ab255"
+    },
+    {
+      "group": "com.google.android.gms",
+      "artifact": "play-services-fido",
+      "version": "20.0.1",
+      "type": "aar",
+      "url": "https://dl.google.com/dl/android/maven2/com/google/android/gms/play-services-fido/20.0.1/play-services-fido-20.0.1.aar",
+      "sha256": "b3526f0caedaa96c526cc4c9ba94b229dad5afe31f32f46f6cd668a03624fd42"
+    },
+    {
+      "group": "com.google.android.gms",
+      "artifact": "play-services-tasks",
+      "version": "18.2.0",
+      "type": "aar",
+      "url": "https://dl.google.com/dl/android/maven2/com/google/android/gms/play-services-tasks/18.2.0/play-services-tasks-18.2.0.aar",
+      "sha256": "7f2aaa8f502068eaf54356ca92aec04271d6e7c416c52c45c0d23440fcbd1654"
+    },
+    {
+      "group": "com.google.guava",
+      "artifact": "listenablefuture",
+      "version": "1.0",
+      "type": "jar",
+      "url": "https://repo.maven.apache.org/maven2/com/google/guava/listenablefuture/1.0/listenablefuture-1.0.jar",
+      "sha256": "e4ad7607e5c0477c6f890ef26a49cb8d1bb4dffb650bab4502afee64644e3069"
+    },
+    {
+      "group": "org.jetbrains",
+      "artifact": "annotations",
+      "version": "23.0.0",
+      "type": "jar",
+      "url": "https://repo.maven.apache.org/maven2/org/jetbrains/annotations/23.0.0/annotations-23.0.0.jar",
+      "sha256": "7b0f19724082cbfcbc66e5abea2b9bc92cf08a1ea11e191933ed43801eb3cd05"
+    },
+    {
+      "group": "org.jetbrains.kotlin",
+      "artifact": "kotlin-stdlib",
+      "version": "1.9.21",
+      "type": "jar",
+      "url": "https://repo.maven.apache.org/maven2/org/jetbrains/kotlin/kotlin-stdlib/1.9.21/kotlin-stdlib-1.9.21.jar",
+      "sha256": "3b479313ab6caea4e5e25d3dee8ca80c302c89ba73e1af4dafaa100f6ef9296a"
+    },
+    {
+      "group": "org.jetbrains.kotlinx",
+      "artifact": "kotlinx-coroutines-android",
+      "version": "1.8.0",
+      "type": "jar",
+      "url": "https://repo.maven.apache.org/maven2/org/jetbrains/kotlinx/kotlinx-coroutines-android/1.8.0/kotlinx-coroutines-android-1.8.0.jar",
+      "sha256": "aad1c54d3e4c2a0558a246e9e11610aa12bd7075756b7c39dea15ef84f9fff48"
+    },
+    {
+      "group": "org.jetbrains.kotlinx",
+      "artifact": "kotlinx-coroutines-core-jvm",
+      "version": "1.8.0",
+      "type": "jar",
+      "url": "https://repo.maven.apache.org/maven2/org/jetbrains/kotlinx/kotlinx-coroutines-core-jvm/1.8.0/kotlinx-coroutines-core-jvm-1.8.0.jar",
+      "sha256": "9860906a1937490bf5f3b06d2f0e10ef451e65b95b269f22daf68a3d1f5065c5"
+    },
+    {
+      "group": "org.jetbrains.kotlinx",
+      "artifact": "kotlinx-coroutines-play-services",
+      "version": "1.8.0",
+      "type": "jar",
+      "url": "https://repo.maven.apache.org/maven2/org/jetbrains/kotlinx/kotlinx-coroutines-play-services/1.8.0/kotlinx-coroutines-play-services-1.8.0.jar",
+      "sha256": "2d6e60b3db6300e20319f30c7c7736267f57b93324b32e94916e6f6028b5b9c5"
+    }
+  ],
+  "metadata": [
+    {
+      "url": "https://dl.google.com/dl/android/maven2/com/google/android/gms/play-services-auth/22.0.0/play-services-auth-22.0.0.pom",
+      "sha256": "c845afe37988b22a89bee1808279503c3eec52a1f044f275d2aa9021e0f2c4ae"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/com/google/android/gms/play-services-auth-api-phone/18.0.2/play-services-auth-api-phone-18.0.2.pom",
+      "sha256": "9e0b47a568a8deb9cb0b82f3c176d69c14d603bca78bb367bb37010b4a64b184"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/androidx/fragment/fragment/1.5.7/fragment-1.5.7.pom",
+      "sha256": "61ba11bc9618d2cfc08d56dd3999a5c699bf8a8cd3ff4a2fa8b02e820fff74a3"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/androidx/loader/loader/1.1.0/loader-1.1.0.pom",
+      "sha256": "2c74ecc13bd93b8c2a48340057f3fd083b88ff51e9169ae70d63f998d686a2dc"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/com/google/android/gms/play-services-auth-base/18.0.10/play-services-auth-base-18.0.10.pom",
+      "sha256": "853ea5c46999d5435c923f7021b033bd5ec0a2f37f995b9b7a13a565518d700a"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/com/google/android/gms/play-services-base/18.5.0/play-services-base-18.5.0.pom",
+      "sha256": "2570b515c2717af386c890e97f644782e3f86da7b677a4ff1036147e7ea622a4"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/com/google/android/gms/play-services-tasks/18.2.0/play-services-tasks-18.2.0.pom",
+      "sha256": "6b99c48a895d155e58abcee66cc22146db83abd5d84caf6c8f7a2aea9b1bcd21"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/com/google/android/gms/play-services-basement/18.9.0/play-services-basement-18.9.0.pom",
+      "sha256": "601ef047167c6c280b8b190942d9e94a0463e891acd9c6ccf532eb298a5efe5b"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/com/google/android/gms/play-services-fido/20.0.1/play-services-fido-20.0.1.pom",
+      "sha256": "f2e38c39d300961c9ab771a4e3c781aab18e7cf547450846682a0a81eb30ce88"
+    },
+    {
+      "url": "https://repo.maven.apache.org/maven2/org/jetbrains/kotlinx/kotlinx-coroutines-android/1.8.0/kotlinx-coroutines-android-1.8.0.pom",
+      "sha256": "ba93fb4acbaf090ef15d52d899fcd05944c8ae2edac34dfc04560620699a8d8a"
+    },
+    {
+      "url": "https://repo.maven.apache.org/maven2/org/jetbrains/kotlin/kotlin-stdlib/1.8.21/kotlin-stdlib-1.8.21.pom",
+      "sha256": "fe0cd9e32193e453333fd2b1f577e662fb5abc6907102bb967817bc131280fd7"
+    },
+    {
+      "url": "https://repo.maven.apache.org/maven2/org/jetbrains/kotlinx/kotlinx-coroutines-core-jvm/1.8.0/kotlinx-coroutines-core-jvm-1.8.0.pom",
+      "sha256": "a5633abd53467ceb91622d81f2e982080877145e0b76e1b75788715434885d0b"
+    },
+    {
+      "url": "https://repo.maven.apache.org/maven2/org/jetbrains/kotlinx/kotlinx-coroutines-play-services/1.8.0/kotlinx-coroutines-play-services-1.8.0.pom",
+      "sha256": "24c0562127c57b2da136acd4890a2425febad8adc3ec9da10577735bb998e57f"
+    },
+    {
+      "url": "https://repo.maven.apache.org/maven2/org/jetbrains/kotlinx/kotlinx-coroutines-bom/1.8.0/kotlinx-coroutines-bom-1.8.0.pom",
+      "sha256": "1239e9dbe1397cd5971342956b2511bc3ace7b641842e4372a088dcfa8b9ad55"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/androidx/core/core-ktx/1.2.0/core-ktx-1.2.0.pom",
+      "sha256": "29eaddba4e6a35e68a128e594ebae3b72ef7e767f1b273ef93dc2ed019ff97f6"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/androidx/annotation/annotation/1.1.0/annotation-1.1.0.pom",
+      "sha256": "2e9372ba7780ef44952adbf86b66e1f08682c1e5277c926185f6564a13799efe"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/androidx/annotation/annotation-experimental/1.0.0/annotation-experimental-1.0.0.pom",
+      "sha256": "6b73ff6608f4b1d6cbab620b65708a382d0b39901cf4e6b0d16f84a1b04d7732"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/androidx/collection/collection/1.1.0/collection-1.1.0.pom",
+      "sha256": "67e9066ca4acfdc6e3cc508293c31ba0398057ff118e4f70b1e1813c9a3456d1"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/androidx/activity/activity/1.5.1/activity-1.5.1.pom",
+      "sha256": "d29ccdce46f4c71a01aee60baf832346286f381d9d11bcc73eebed5d1af72cdd"
+    },
+    {
+      "url": "https://repo.maven.apache.org/maven2/org/jetbrains/kotlin/kotlin-stdlib/1.9.21/kotlin-stdlib-1.9.21.pom",
+      "sha256": "c807d92f7c6aa1b65c06cf87232363504e690fca3f3c1e27206630a1322fd7e0"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/androidx/savedstate/savedstate/1.2.0/savedstate-1.2.0.pom",
+      "sha256": "3e11c019ffe6053b3b9879a23107d6d6f1059e92339ba524e19674720fa7ddbe"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-viewmodel-savedstate/2.5.1/lifecycle-viewmodel-savedstate-2.5.1.pom",
+      "sha256": "3d77fa3b0e026d86b723bbc134742e232e8f99ce18a11df5b789562e9a6c0a6f"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-viewmodel/2.5.1/lifecycle-viewmodel-2.5.1.pom",
+      "sha256": "93e5cfccbc9fd2f8a1092ec06b0757bd834e63dcd2a8001b594239ab1e4a6de1"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-livedata-core/2.5.1/lifecycle-livedata-core-2.5.1.pom",
+      "sha256": "642f0e95da3f386bb1d136ef8a11481dccd384c28a093d94b5c7bcdaa2efa5b3"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/androidx/core/core/1.2.0/core-1.2.0.pom",
+      "sha256": "3d1f4e37b77dd92353879a040ab4ce2f706798bcbdf066147491c3642b3f79a6"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/androidx/viewpager/viewpager/1.0.0/viewpager-1.0.0.pom",
+      "sha256": "1f72f836339d03c6eb013f65075e76ca87075a577578eb4f95f74a3a5d253128"
+    },
+    {
+      "url": "https://repo.maven.apache.org/maven2/org/jetbrains/annotations/23.0.0/annotations-23.0.0.pom",
+      "sha256": "c9490f655132328df2cfbcfdf743f53fc3916d6c1d10437175a6ca6e3a67771c"
+    },
+    {
+      "url": "https://repo.maven.apache.org/maven2/org/jetbrains/kotlin/kotlin-stdlib-common/1.8.21/kotlin-stdlib-common-1.8.21.pom",
+      "sha256": "e19a5577cbcea89728970db5333c8264c8c69ae722eeb79cbf41d5f0b0c9ae65"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/androidx/core/core/1.8.0/core-1.8.0.pom",
+      "sha256": "79ecc797a5d200c4be3f6756d2cbb6fa46fe582192304377e8a6410f6066eb3e"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-common/2.5.1/lifecycle-common-2.5.1.pom",
+      "sha256": "82d2192e3de9fdd7f45b9088e27315e7dbec02d094632faa6a39251690d28cc0"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/androidx/arch/core/core-common/2.1.0/core-common-2.1.0.pom",
+      "sha256": "83bbb3960eaabc600ac366c94cb59414e441532a1d6aa9388b0b8bfface5cf01"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/androidx/tracing/tracing/1.0.0/tracing-1.0.0.pom",
+      "sha256": "cd0299a90d4720d78f1cfb5ff7505f4dbc1a70d05fe23fd9f4d4b77ea59ca05e"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/androidx/arch/core/core-runtime/2.1.0/core-runtime-2.1.0.pom",
+      "sha256": "c0c4ed0160cd2ca18390015de8b392b697c173327c6b2c0947d4e62f6958c05d"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-runtime/2.5.1/lifecycle-runtime-2.5.1.pom",
+      "sha256": "6a390ba7ac02c9004a0a454efc27f925936cc26527e82bc62caafb4fcb0f0db2"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/androidx/customview/customview/1.0.0/customview-1.0.0.pom",
+      "sha256": "ce9e47b87184f5bd5e139e9becd5b26476d42d78c31bf2fdedc37acb41b9ad49"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/androidx/versionedparcelable/versionedparcelable/1.1.0/versionedparcelable-1.1.0.pom",
+      "sha256": "c729c7be0cc06323bda829d460666e79dbd43b799a21089a44bd3b293dc253b5"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/androidx/annotation/annotation-experimental/1.1.0/annotation-experimental-1.1.0.pom",
+      "sha256": "550a6601e1af47cf99501cc6cc15d1ebe9cef17b51e5dd58b6ab6c23568ef7a9"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/androidx/concurrent/concurrent-futures/1.0.0/concurrent-futures-1.0.0.pom",
+      "sha256": "4505b9a5e30a9418b59a9ad6702c3e4193aea6e691a3d03cf220c7640ad083e2"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/androidx/versionedparcelable/versionedparcelable/1.1.1/versionedparcelable-1.1.1.pom",
+      "sha256": "5f51e65873ca612de3838fa90d2ee95b8d040efd31b9c390a19bf94d615cdb2f"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/androidx/annotation/annotation/1.2.0/annotation-1.2.0.pom",
+      "sha256": "62fb6dca2777efe08e7077d6b872d69110619df7fc21c99a6f54066499cc0383"
+    },
+    {
+      "url": "https://repo.maven.apache.org/maven2/com/google/guava/listenablefuture/1.0/listenablefuture-1.0.pom",
+      "sha256": "53873caf26bc1ed8a567ea6c939ab2aaa3f47a5e32d5cade95ddf5080d23238a"
+    },
+    {
+      "url": "https://repo.maven.apache.org/maven2/com/google/guava/guava-parent/26.0-android/guava-parent-26.0-android.pom",
+      "sha256": "f8698ab46ca996ce889c1afc8ca4f25eb8ac6b034dc898d4583742360016cc04"
+    },
+    {
+      "url": "https://repo.maven.apache.org/maven2/org/sonatype/oss/oss-parent/9/oss-parent-9.pom",
+      "sha256": "fb40265f982548212ff82e362e59732b2187ec6f0d80182885c14ef1f982827a"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/androidx/activity/activity/1.5.1/activity-1.5.1.aar",
+      "sha256": "4b04b42d2c1f81c02faf0f7b6e9cc9fede10fdee8f66136cd4b99f88e8f48c0f"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/androidx/arch/core/core-runtime/2.1.0/core-runtime-2.1.0.aar",
+      "sha256": "dd77615bd3dd275afb11b62df25bae46b10b4a117cd37943af45bdcbf8755852"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/androidx/annotation/annotation/1.2.0/annotation-1.2.0.jar",
+      "sha256": "9029262bddce116e6d02be499e4afdba21f24c239087b76b3b57d7e98b490a36"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/androidx/arch/core/core-common/2.1.0/core-common-2.1.0.jar",
+      "sha256": "fe1237bf029d063e7f29fe39aeaf73ef74c8b0a3658486fc29d3c54326653889"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/androidx/collection/collection/1.1.0/collection-1.1.0.jar",
+      "sha256": "632a0e5407461de774409352940e292a291037724207a787820c77daf7d33b72"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/androidx/annotation/annotation-experimental/1.1.0/annotation-experimental-1.1.0.aar",
+      "sha256": "0157de61a2064047896a058080f3fd67ba57ad9a94857b3f7a363660243e3f90"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/androidx/concurrent/concurrent-futures/1.0.0/concurrent-futures-1.0.0.jar",
+      "sha256": "5595a40e278a7b39fa78a09490e3d7f3faa95c7b01447148bd38b5ade0605c35"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/androidx/customview/customview/1.0.0/customview-1.0.0.aar",
+      "sha256": "20e5b8f6526a34595a604f56718da81167c0b40a7a94a57daa355663f2594df2"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-common/2.5.1/lifecycle-common-2.5.1.jar",
+      "sha256": "20ad1520f625cf455e6afd7290988306d3a9886efa993e0860fbabf4bb3f7bda"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/androidx/core/core-ktx/1.2.0/core-ktx-1.2.0.aar",
+      "sha256": "dcb74d510d552b35eff73b0dd27b829649535f3902e5b5a1f26040383c10a940"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/androidx/fragment/fragment/1.5.7/fragment-1.5.7.aar",
+      "sha256": "59c74110b99378885ed06242f8a26da305ea4dca53ed60163540dd0e2e3c6675"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/androidx/core/core/1.8.0/core-1.8.0.aar",
+      "sha256": "48c64a15ec3eb11bfb33339e5ceb70ec7f821bd2dfa2eb8675ebd5353317e792"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-viewmodel-savedstate/2.5.1/lifecycle-viewmodel-savedstate-2.5.1.aar",
+      "sha256": "8481141f97f0e6213dd33fcc89a784c4bd11a6ff7d4779a1cf6a0e9fbdbf24e0"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/androidx/savedstate/savedstate/1.2.0/savedstate-1.2.0.aar",
+      "sha256": "2de528d6898e95ef020d22d9ffdf9d1f77cbdd93f92d39dfaa5d5c43b0c311c8"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/androidx/loader/loader/1.1.0/loader-1.1.0.aar",
+      "sha256": "a83b597cd2409dc177f7f932f7c4082ef7b5508b69b6c4ba71607e75dbd99971"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-runtime/2.5.1/lifecycle-runtime-2.5.1.aar",
+      "sha256": "33b0d73dc2f028fceb3599bacabe563c3db6d26f3513d889595863536a4ac8c0"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-livedata-core/2.5.1/lifecycle-livedata-core-2.5.1.aar",
+      "sha256": "ee792103ca248bfaf150c45a93871e4cf7e8cebab990e0f62f7de5d4ff2f209f"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-viewmodel/2.5.1/lifecycle-viewmodel-2.5.1.aar",
+      "sha256": "14a27d5fb8a1436b1b7dec18bebaa66c830cdbbc8e28a81ce5f85b7c33b3ae9d"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/androidx/tracing/tracing/1.0.0/tracing-1.0.0.aar",
+      "sha256": "07b8b6139665b884a162eccf97891ca50f7f56831233bf25168ae04f7b568612"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/androidx/viewpager/viewpager/1.0.0/viewpager-1.0.0.aar",
+      "sha256": "147af4e14a1984010d8f155e5e19d781f03c1d70dfed02a8e0d18428b8fc8682"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/com/google/android/gms/play-services-auth-api-phone/18.0.2/play-services-auth-api-phone-18.0.2.aar",
+      "sha256": "bfdf380e7400a9d950cba4dedc152b1bce614a87353009e851087428927cc240"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/androidx/versionedparcelable/versionedparcelable/1.1.1/versionedparcelable-1.1.1.aar",
+      "sha256": "57e8d93260d18d5b9007c9eed3c64ad159de90c8609ebfc74a347cbd514535a4"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/com/google/android/gms/play-services-auth/22.0.0/play-services-auth-22.0.0.aar",
+      "sha256": "0897c1ad398cae3f7a743a24d66373cc7440e63d11e7429ed9a17a77a61c96dc"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/com/google/android/gms/play-services-auth-base/18.0.10/play-services-auth-base-18.0.10.aar",
+      "sha256": "d8bff2c98d239633fb550229e527779425bfb51ff04b96ac0f12d3acba0b1f42"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/com/google/android/gms/play-services-base/18.5.0/play-services-base-18.5.0.aar",
+      "sha256": "59a5c0c2da12311d75d965ce1f419498536b1a167fb28ff7dfc2dfd9cefa4157"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/com/google/android/gms/play-services-basement/18.9.0/play-services-basement-18.9.0.aar",
+      "sha256": "c6ed7236b1b3ce0296b508a5c0a09108fd52d83559d35cad2639505cd04ab255"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/com/google/android/gms/play-services-tasks/18.2.0/play-services-tasks-18.2.0.aar",
+      "sha256": "7f2aaa8f502068eaf54356ca92aec04271d6e7c416c52c45c0d23440fcbd1654"
+    },
+    {
+      "url": "https://dl.google.com/dl/android/maven2/com/google/android/gms/play-services-fido/20.0.1/play-services-fido-20.0.1.aar",
+      "sha256": "b3526f0caedaa96c526cc4c9ba94b229dad5afe31f32f46f6cd668a03624fd42"
+    },
+    {
+      "url": "https://repo.maven.apache.org/maven2/com/google/guava/listenablefuture/1.0/listenablefuture-1.0.jar",
+      "sha256": "e4ad7607e5c0477c6f890ef26a49cb8d1bb4dffb650bab4502afee64644e3069"
+    },
+    {
+      "url": "https://repo.maven.apache.org/maven2/org/jetbrains/annotations/23.0.0/annotations-23.0.0.jar",
+      "sha256": "7b0f19724082cbfcbc66e5abea2b9bc92cf08a1ea11e191933ed43801eb3cd05"
+    },
+    {
+      "url": "https://repo.maven.apache.org/maven2/org/jetbrains/kotlinx/kotlinx-coroutines-android/1.8.0/kotlinx-coroutines-android-1.8.0.jar",
+      "sha256": "aad1c54d3e4c2a0558a246e9e11610aa12bd7075756b7c39dea15ef84f9fff48"
+    },
+    {
+      "url": "https://repo.maven.apache.org/maven2/org/jetbrains/kotlinx/kotlinx-coroutines-play-services/1.8.0/kotlinx-coroutines-play-services-1.8.0.jar",
+      "sha256": "2d6e60b3db6300e20319f30c7c7736267f57b93324b32e94916e6f6028b5b9c5"
+    },
+    {
+      "url": "https://repo.maven.apache.org/maven2/org/jetbrains/kotlinx/kotlinx-coroutines-core-jvm/1.8.0/kotlinx-coroutines-core-jvm-1.8.0.jar",
+      "sha256": "9860906a1937490bf5f3b06d2f0e10ef451e65b95b269f22daf68a3d1f5065c5"
+    },
+    {
+      "url": "https://repo.maven.apache.org/maven2/org/jetbrains/kotlin/kotlin-stdlib/1.9.21/kotlin-stdlib-1.9.21.jar",
+      "sha256": "3b479313ab6caea4e5e25d3dee8ca80c302c89ba73e1af4dafaa100f6ef9296a"
+    }
+  ]
+}
