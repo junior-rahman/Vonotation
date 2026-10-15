@@ -58,4 +58,26 @@ final class AccessibilityEditor extends InputMethod {
             }
         };
     }
+    CursorDeletion.Port captureDeletion(){
+        if(!eligible())return null;
+        EditorInfo info=getCurrentInputEditorInfo();final String pkg=info.packageName;final int field=info.fieldId;final long expected=generation;
+        return new CursorDeletion.Port(){
+            public boolean current(){EditorInfo active=getCurrentInputEditorInfo();return eligible() && expected==generation && pkg.equals(active.packageName) && field==active.fieldId;}
+            public EditorInsertion.Snapshot read(){return current()?InputSnapshots.from(getCurrentInputConnection().getSurroundingText(EditorInsertion.CONTEXT,EditorInsertion.CONTEXT,0)):null;}
+            public boolean delete(CursorDeletion.Plan plan){
+                if(!current() || !CursorDeletion.same(plan.source,read()))return false;
+                AccessibilityInputConnection connection=getCurrentInputConnection();
+                if(plan.selected)connection.commitText("",1,null);
+                else {
+                    // Android's accessibility bridge ends composition before this empty commit.
+                    // Then delete only before the unchanged current caret, never select an old range.
+                    connection.commitText("",1,null);
+                    if(!current() || !CursorDeletion.same(plan.source,read()))return false;
+                    connection.deleteSurroundingText(plan.beforeUnits,0);
+                }
+                return true;
+            }
+        };
+    }
+
 }

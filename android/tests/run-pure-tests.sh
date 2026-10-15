@@ -7,7 +7,7 @@ out="${1:-$root/app/build/pure-tests}"
 rm -rf "$out"; mkdir -p "$out"
 src="$root/app/src/main/java/app/voiceflow"
 prod=(Cleaner TextInsertion TranscriptGuard LanguagePolicy EditorInsertion LiveInsertion BubblePlacement HistoryDays DictationProblem RecordingMode KeyMask OwnWindow GoogleAuthError AccessibilityList)
-for extra in PunctuationCommands ClipboardText QuickThoughtPolicy; do [[ -f "$src/$extra.java" ]] && prod+=("$extra"); done
+for extra in PunctuationCommands ClipboardText QuickThoughtPolicy UpdatePolicy CursorDeletion LineConnectionState; do [[ -f "$src/$extra.java" ]] && prod+=("$extra"); done
 files=(); for p in "${prod[@]}"; do files+=("$src/$p.java"); done
 suites=(); for t in "$root"/tests/*Test.java; do suites+=("$t"); done
 compiler=(javac)

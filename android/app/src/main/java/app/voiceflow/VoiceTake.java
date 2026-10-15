@@ -23,6 +23,13 @@ final class VoiceTake {
         default void finishedAll(java.util.List<File> files) { if(files!=null && !files.isEmpty()) finished(files.get(0)); }
     }
     private static VoiceTake current;
+    private static final java.util.concurrent.atomic.AtomicInteger pendingWork=new java.util.concurrent.atomic.AtomicInteger();
+    private final java.util.concurrent.atomic.AtomicBoolean countedWork=new java.util.concurrent.atomic.AtomicBoolean();
+    private volatile boolean finalizing;
+    /** Includes setup, capture, recorder finalization and the completed-file save callback. */
+    static boolean updateBusy(){return pendingWork.get()>0;}
+    private void beginWork(){if(countedWork.compareAndSet(false,true))pendingWork.incrementAndGet();}
+    private void completeWork(){if(countedWork.compareAndSet(true,false))pendingWork.decrementAndGet();}
     private final Context context;
     private final Listener listener;
     private final Handler handler=new Handler(Looper.getMainLooper());
@@ -87,7 +94,7 @@ final class VoiceTake {
     static void cancel(){if(current!=null && current.note && current.active)return;if(current!=null){current.drop();current=null;}}
 
     private void start() {
-        active=true;
+        beginWork();active=true;
         if(note)holdWake();
         executor.execute(()->{
             String failure=null;
@@ -187,7 +194,7 @@ final class VoiceTake {
 
     private void stop() {
         if(!active)return;
-        active=false;handler.removeCallbacks(quietPoll);handler.removeCallbacks(rotate);handler.removeCallbacks(meter);
+        finalizing=true;active=false;handler.removeCallbacks(quietPoll);handler.removeCallbacks(rotate);handler.removeCallbacks(meter);
         int[] bars=pack(new java.util.ArrayList<>(levels));
         executor.execute(()->{
             File done=seal();
@@ -196,9 +203,11 @@ final class VoiceTake {
             lastBars=bars;
             java.util.List<File> ready=new java.util.ArrayList<>(parts);
             handler.post(()->{
-                if(current==this)current=null;
-                if(untilQuiet && !heardSpeech){for(File silent:ready)silent.delete();listener.failed("Nothing was recorded.");return;}
-                if(ready.isEmpty())listener.failed("Nothing was recorded.");else listener.finishedAll(ready);
+                try{
+                    if(current==this)current=null;
+                    if(untilQuiet && !heardSpeech){for(File silent:ready)silent.delete();listener.failed("Nothing was recorded.");return;}
+                    if(ready.isEmpty())listener.failed("Nothing was recorded.");else listener.finishedAll(ready);
+                }finally{completeWork();}
             });
         });
     }
@@ -213,7 +222,10 @@ final class VoiceTake {
 
     private void drop() {
         active=false;handler.removeCallbacks(quietPoll);handler.removeCallbacks(rotate);handler.removeCallbacks(meter);
-        executor.execute(()->{try{if(started && recorder!=null)recorder.stop();}catch(RuntimeException ignored){} release();if(!note && file!=null)file.delete();file=null;parts.clear();releaseWake();});
+        executor.execute(()->{
+            try{try{if(started && recorder!=null)recorder.stop();}catch(RuntimeException ignored){}release();if(!note && file!=null)file.delete();file=null;parts.clear();releaseWake();}
+            finally{if(!finalizing)completeWork();} // A queued finishedAll callback still owns finalization.
+        });
     }
 
     private void holdWake() {

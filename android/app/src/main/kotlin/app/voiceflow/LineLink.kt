@@ -6,27 +6,50 @@ import com.flyfishxu.kadb.cert.KadbCert
 import com.flyfishxu.kadb.shell.AdbShellPacket
 import java.io.File
 import java.io.OutputStream
+import android.util.AtomicFile
+import java.io.DataInputStream
+import java.io.DataOutputStream
 import kotlinx.coroutines.runBlocking
 
 /** Talks to the phone's own wireless debugging. Connected only for a pairing or a call, then closed. */
 object LineLink {
     private var folder: File? = null
+    private var loaded = false
+    private var identitySaved = false
 
     /** Loads the key that survived the last update. Without this, every update looks unpaired. */
-    fun install(context: Context) {
+    @Synchronized fun install(context: Context) {
         val dir = File(context.applicationContext.filesDir, "line")
+        if (loaded && folder == dir) return
         if (!dir.isDirectory) dir.mkdirs()
         folder = dir
+        loaded = true
+        identitySaved = false
+        val identity = AtomicFile(File(dir, "identity"))
+        try {
+            DataInputStream(identity.openRead()).use { input ->
+                val certSize = input.readInt()
+                require(certSize in 1..65536)
+                val certBytes = ByteArray(certSize).also { input.readFully(it) }
+                val keySize = input.readInt()
+                require(keySize in 1..65536)
+                val keyBytes = ByteArray(keySize).also { input.readFully(it) }
+                KadbCert.set(certBytes, keyBytes)
+                identitySaved = true
+            }
+            return
+        } catch (_: Exception) { /* Older installations keep the same identity in two files. */ }
         val cert = File(dir, "cert")
         val key = File(dir, "key")
         if (cert.length() <= 0 || key.length() <= 0) return
-        try { KadbCert.set(cert.readBytes(), key.readBytes()) } catch (_: Exception) {}
+        try {
+            KadbCert.set(cert.readBytes(), key.readBytes())
+            identitySaved = true
+            keep() // Import, retaining the original files for recovery.
+        } catch (_: Exception) {}
     }
 
-    fun saved(): Boolean {
-        val dir = folder ?: return false
-        return File(dir, "cert").length() > 0 && File(dir, "key").length() > 0
-    }
+    @Synchronized fun saved(): Boolean = identitySaved
 
     fun pair(host: String, port: Int, code: String) {
         runBlocking { Kadb.pair(host, port, code, "VonoTation") }
@@ -47,10 +70,15 @@ object LineLink {
     /** Starts the shell recorder and copies its audio to [sink]. Close the result to hang up the connection. */
     fun record(host: String, port: Int, sink: OutputStream): AutoCloseable {
         val kadb = connect(host, port)
-        val listed = kadb.shell("pm path app.voiceflow").allOutput
-        val apk = listed.lineSequence().map { it.removePrefix("package:").trim() }.firstOrNull { it.endsWith(".apk") }
-            ?: throw IllegalStateException("Could not find VonoTation on this phone.")
-        val shell = kadb.openShell("CLASSPATH='$apk' exec app_process /system/bin app.voiceflow.CallShell")
+        val shell = try {
+            val listed = kadb.shell("pm path app.voiceflow").allOutput
+            val apk = listed.lineSequence().map { it.removePrefix("package:").trim() }.firstOrNull { it.endsWith(".apk") }
+                ?: throw IllegalStateException("Could not find VonoTation on this phone.")
+            kadb.openShell("CLASSPATH='$apk' exec app_process /system/bin app.voiceflow.CallShell")
+        } catch (error: Exception) {
+            try { kadb.close() } catch (_: Exception) {}
+            throw error
+        }
         val thread = Thread({
             try {
                 while (true) {
@@ -77,8 +105,8 @@ object LineLink {
     /** The address wireless debugging advertised, then the phone talking to itself. */
     private fun connect(host: String, port: Int): Kadb {
         val hosts = LinkedHashSet<String>()
-        if (host.isNotBlank()) hosts.add(host)
         hosts.add("127.0.0.1")
+        if (host.isNotBlank()) hosts.add(host)
         var last: Exception? = null
         for (candidate in hosts) {
             var kadb: Kadb? = null
@@ -97,13 +125,24 @@ object LineLink {
         throw last ?: IllegalStateException("Wireless debugging did not answer.")
     }
 
-    private fun keep() {
-        val dir = folder ?: return
+    @Synchronized private fun keep() {
+        val dir = folder ?: throw IllegalStateException("Pairing storage is not ready. Open VonoTation and try again.")
+        val identity = AtomicFile(File(dir, "identity"))
+        var output: java.io.FileOutputStream? = null
         try {
             val pair = KadbCert.getOrError()
-            File(dir, "cert").writeBytes(pair.first)
-            File(dir, "key").writeBytes(pair.second)
-        } catch (_: Exception) {}
+            require(pair.first.isNotEmpty() && pair.second.isNotEmpty())
+            output = identity.startWrite()
+            val data = DataOutputStream(output)
+            data.writeInt(pair.first.size); data.write(pair.first)
+            data.writeInt(pair.second.size); data.write(pair.second)
+            data.flush()
+            identity.finishWrite(output)
+            identitySaved = true
+        } catch (error: Exception) {
+            identity.failWrite(output)
+            throw IllegalStateException("Pairing connected, but its key could not be saved. Free some storage and pair again.", error)
+        }
     }
 
     private fun auth(error: Exception): Boolean {

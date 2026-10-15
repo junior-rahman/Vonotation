@@ -498,7 +498,7 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
                 }
                 if(event.getAction()==MotionEvent.ACTION_UP&&held&&fan!=null&&fan.isOpen()){down=false;v.setPressed(false);dragging=false;fan.release(event.getRawX(),event.getRawY(),slid);return true;}
                 if(event.getAction()==MotionEvent.ACTION_UP){down=false;handler.removeCallbacks(longPress);v.setPressed(false);dragging=false;int inset=Ui.dp(FlowAccessibility.this,4);if(moved){Store.prefs(FlowAccessibility.this).edit().putInt("rail_anchor_x",layout.x+layout.width-inset-(diameter()+1)/2).putInt("rail_anchor_y",layout.y+inset+diameter()/2).apply();positionBubble();}else if(!held)v.performClick();return true;}
-                if(event.getAction()==MotionEvent.ACTION_CANCEL){down=false;handler.removeCallbacks(longPress);v.setPressed(false);dragging=false;positionBubble();return true;}return false;
+                if(event.getAction()==MotionEvent.ACTION_CANCEL){down=false;handler.removeCallbacks(longPress);v.setPressed(false);dragging=false;if(fan!=null&&fan.isOpen())fan.cancelDeleteGesture();positionBubble();return true;}return false;
             }
         });
     }
@@ -519,13 +519,15 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
         if(fan!=null&&fan.isOpen())return;
         int[] loc=new int[2];mic.getLocationOnScreen(loc);float cx=loc[0]+mic.getWidth()/2f,cy=loc[1]+mic.getHeight()/2f;
         fan=new ArcFan(this,manager,new ArcFan.Actions(){
-            public void deleteWord(){deleteWordBeforeCaret();}
+            public void beginDelete(){beginDeleteGesture();}
+            public void endDelete(){endDeleteGesture();}
+            public boolean deleteWord(){return deleteWordBeforeCaret();}
             public void openClipboard(){showClipTray();}
             public void prepareClipboardPaste(){preparePillPaste();}
             public void cancelClipboardPaste(){clearPillPaste();}
             public void pasteClipboard(String value){pasteAtCaret(value);}
             public void openKeyboard(){openTypingKeyboardOnce();}
-            public void closed(){hideClipTray();fan=null;}
+            public void closed(){endDeleteGesture();hideClipTray();fan=null;}
         });
         ClipList.capture(this);fan.clipboardPreview(focusedInputIsSensitive()?null:ClipList.latest());
         fan.open(cx,cy,caretLine(),imeHeight());
@@ -544,16 +546,68 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
             if(field.height()>Ui.dp(this,72))field.bottom=field.top+Ui.dp(this,40);return field;
         }catch(RuntimeException e){return null;}finally{f.recycle();}
     }
-    /** Deletes the word before the caret (and the spaces after it) in the focused field. */
-    void deleteWordBeforeCaret(){
-        AccessibilityNodeInfo f=focusedField();if(f==null)return;
-        try{f.refresh();if(Build.VERSION.SDK_INT>=26&&f.isShowingHintText())return;CharSequence t=f.getText();if(t==null||t.length()==0)return;
-            int end=f.getTextSelectionEnd();if(end<0||end>t.length())end=t.length();int i=end;
-            while(i>0&&Character.isWhitespace(t.charAt(i-1)))i--;while(i>0&&!Character.isWhitespace(t.charAt(i-1)))i--;
-            if(i==end)return;String next=t.subSequence(0,i).toString()+t.subSequence(end,t.length());
-            android.os.Bundle a=new android.os.Bundle();a.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,next);
-            if(f.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,a)){android.os.Bundle sel=new android.os.Bundle();sel.putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT,i);sel.putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT,i);f.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION,sel);}
-        }finally{f.recycle();}
+    private CursorDeletion.Session deleteSession;
+    private AccessibilityNodeInfo deleteIdentity;
+    private boolean deleteReported;
+    private void endDeleteGesture(){deleteSession=null;if(deleteIdentity!=null)deleteIdentity.recycle();deleteIdentity=null;}
+    private boolean deleteFieldCurrent(){
+        if(deleteIdentity==null)return false;AccessibilityNodeInfo current=focusedField();
+        try{return current!=null && current.refresh() && current.equals(deleteIdentity) && !current.isPassword() && !FlowKeyboard.isPasswordType(current.getInputType());}
+        finally{if(current!=null)current.recycle();}
+    }
+    private static boolean knownDeletePosition(EditorInsertion.Snapshot snapshot){return snapshot!=null && snapshot.start>=0 && snapshot.end>=0;}
+    private void beginDeleteGesture(){
+        endDeleteGesture();deleteReported=false;AccessibilityNodeInfo focused=focusedField();
+        if(focused==null)return;
+        try{
+            if(!focused.refresh() || focused.isPassword() || FlowKeyboard.isPasswordType(focused.getInputType()))return;
+            deleteIdentity=AccessibilityNodeInfo.obtain(focused);
+            CursorDeletion.Port nativePort=Build.VERSION.SDK_INT>=33 && editor!=null?editor.captureDeletion():null;
+            if(nativePort==null || !knownDeletePosition(nativePort.read()))nativePort=FlowKeyboard.instance==null?null:FlowKeyboard.instance.captureDeletion(focused.getPackageName());
+            if(nativePort==null || !knownDeletePosition(nativePort.read()))nativePort=nodeDeletionPort();
+            final CursorDeletion.Port chosen=nativePort;
+            deleteSession=new CursorDeletion.Session(new CursorDeletion.Port(){
+                public boolean current(){return deleteFieldCurrent() && chosen.current();}
+                public EditorInsertion.Snapshot read(){return current()?chosen.read():null;}
+                public boolean delete(CursorDeletion.Plan plan){return current() && chosen.delete(plan);}
+            });
+        }catch(RuntimeException unavailable){endDeleteGesture();}finally{focused.recycle();}
+    }
+    /** Fresh offsets only. No unknown-cursor/end-of-text fallback. */
+    private EditorInsertion.Snapshot readDeleteNode(AccessibilityNodeInfo field){
+        if(field==null || !field.refresh() || (Build.VERSION.SDK_INT>=26 && field.isShowingHintText()))return null;
+        CharSequence value=field.getText();if(value==null)return null;String text=value.toString();
+        int a=field.getTextSelectionStart(),b=field.getTextSelectionEnd();if(a<0 || b<0 || a>text.length() || b>text.length())return null;
+        int lo=Math.min(a,b),hi=Math.max(a,b);return new EditorInsertion.Snapshot(text.substring(0,lo),text.substring(lo,hi),text.substring(hi),a,b);
+    }
+    private static boolean supportsDeleteAction(AccessibilityNodeInfo field,int wanted){for(AccessibilityNodeInfo.AccessibilityAction action:field.getActionList())if(action.getId()==wanted)return true;return false;}
+    private static Bundle selectionArgs(int a,int b){Bundle args=new Bundle();args.putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT,a);args.putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT,b);return args;}
+    /** Older/custom editors: validate both edit actions, then restore and verify the exact cursor. */
+    private CursorDeletion.Port nodeDeletionPort(){
+        return new CursorDeletion.Port(){
+            public boolean current(){return deleteFieldCurrent();}
+            public EditorInsertion.Snapshot read(){if(!current())return null;AccessibilityNodeInfo field=focusedField();try{return readDeleteNode(field);}finally{if(field!=null)field.recycle();}}
+            public boolean delete(CursorDeletion.Plan plan){
+                if(!current())return false;AccessibilityNodeInfo field=focusedField();
+                try{
+                    if(field==null || !CursorDeletion.same(plan.source,readDeleteNode(field)) || !supportsDeleteAction(field,AccessibilityNodeInfo.ACTION_SET_TEXT) || !supportsDeleteAction(field,AccessibilityNodeInfo.ACTION_SET_SELECTION))return false;
+                    if(!field.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION,selectionArgs(Math.min(plan.source.start,plan.source.end),Math.max(plan.source.start,plan.source.end))) || !CursorDeletion.same(plan.source,readDeleteNode(field)))return false;
+                    String next=plan.remainingBefore+plan.source.after;Bundle args=new Bundle();args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,next);
+                    if(!field.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,args))return false;
+                    // ACTION_SET_TEXT commonly moves the cursor; explicitly restore this edit's boundary.
+                    field.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION,selectionArgs(plan.start,plan.start));
+                    EditorInsertion.Snapshot result=readDeleteNode(field);
+                    return result!=null && result.start==plan.start && result.end==plan.start && result.before.equals(plan.remainingBefore) && result.selected.isEmpty() && result.after.equals(plan.source.after);
+                }finally{if(field!=null)field.recycle();}
+            }
+        };
+    }
+    /** Deletes the exact selection, or the preceding Unicode-safe word at the user's current caret. */
+    boolean deleteWordBeforeCaret(){
+        if(deleteSession==null)beginDeleteGesture();
+        boolean removed=false;try{removed=deleteSession!=null && deleteSession.delete();}catch(RuntimeException unavailable){}
+        if(!removed && !deleteReported){deleteReported=true;Toast.makeText(this,"Tap the text cursor again, or use your keyboard to delete.",Toast.LENGTH_SHORT).show();}
+        return removed;
     }
     private FrameLayout clipTray;
     private ClipPasteTarget clipTarget,pillTarget;

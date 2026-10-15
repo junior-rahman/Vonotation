@@ -44,6 +44,7 @@ public final class CallService extends Service {
         notifications.createNotificationChannel(new NotificationChannel("calls","Call recording",NotificationManager.IMPORTANCE_LOW));
         PendingIntent stop=PendingIntent.getService(this,43,new Intent(this,CallService.class).setAction(STOP),PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
         Notification notice=new Notification.Builder(this,"calls").setSmallIcon(android.R.drawable.ic_btn_speak_now)
+            .setOnlyAlertOnce(true).setDefaults(0).setSound(null).setVibrate(new long[0]).setShowWhen(false)
             .setContentTitle("Recording this call").setContentText("VonoTation is keeping the call. Tap Finish when it ends.").setOngoing(true)
             .addAction(new Notification.Action.Builder(android.R.drawable.ic_media_pause,"Finish",stop).build()).build();
         if(Build.VERSION.SDK_INT>=30)startForeground(43,notice,ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE);

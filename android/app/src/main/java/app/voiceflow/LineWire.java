@@ -18,13 +18,20 @@ import java.util.concurrent.atomic.AtomicReference;
 final class LineWire {
     interface Callback { void saved(); void failed(); }
     private static final Handler main=new Handler(Looper.getMainLooper());
-    private static volatile boolean going;
-    private static Thread worker;
-    private static AutoCloseable link;
+    private static final class Session {
+        volatile boolean going=true;
+        volatile AutoCloseable link;
+        Thread worker;
+        final java.util.concurrent.atomic.AtomicBoolean ended=new java.util.concurrent.atomic.AtomicBoolean();
+    }
+    private static volatile Session session;
+    private static final java.util.concurrent.atomic.AtomicInteger pending=new java.util.concurrent.atomic.AtomicInteger();
     private LineWire() {}
 
     static boolean paired(Context context){return Store.bool(context,"line_paired",false);}
-    static boolean running(){return going;}
+    static boolean running(){Session active=session;return active!=null && active.going;}
+    /** Includes stop-time encoding and handing the saved audio to Notes. */
+    static boolean updateBusy(){return pending.get()>0;}
 
     static final class End { String host; int port; }
     private static volatile End cached;
@@ -32,12 +39,46 @@ final class LineWire {
     static void remember(End end){cached=end;}
     static void forget(){cached=null;}
 
+    /** Only this phone's ADB endpoint is relevant; nearby phones advertise the same service type. */
+    static boolean local(java.net.InetAddress host) {
+        if(host==null)return false;
+        if(host.isLoopbackAddress())return true;
+        try{return java.net.NetworkInterface.getByInetAddress(host)!=null;}
+        catch(java.net.SocketException error){return false;}
+    }
+
     static End find(Context context,String type) {
         NsdManager nsd=(NsdManager)context.getSystemService(Context.NSD_SERVICE);
         if(nsd==null)return null;
         if(type.contains("connect")){End known=cached;if(known!=null)return known;}
         CountDownLatch latch=new CountDownLatch(1);
         AtomicReference<End> found=new AtomicReference<>();
+        java.util.concurrent.atomic.AtomicBoolean finished=new java.util.concurrent.atomic.AtomicBoolean();
+        class Resolver {
+            final java.util.ArrayDeque<NsdServiceInfo> queue=new java.util.ArrayDeque<>();
+            boolean resolving;
+            void add(NsdServiceInfo info){if(finished.get())return;queue.add(info);next();}
+            void next(){
+                if(finished.get() || resolving || queue.isEmpty())return;
+                NsdServiceInfo info=queue.removeFirst();resolving=true;
+                try{nsd.resolveService(info,new NsdManager.ResolveListener(){
+                    public void onResolveFailed(NsdServiceInfo failed,int error){main.post(()->{
+                        resolving=false;
+                        if(error==NsdManager.FAILURE_ALREADY_ACTIVE){queue.addLast(info);main.postDelayed(()->next(),250);}
+                        else next();
+                    });}
+                    public void onServiceResolved(NsdServiceInfo resolved){main.post(()->{
+                        resolving=false;
+                        if(finished.get())return;
+                        if(local(resolved.getHost()) && resolved.getPort()>0){
+                            End end=new End();end.host=resolved.getHost().getHostAddress();end.port=resolved.getPort();
+                            if(found.compareAndSet(null,end))latch.countDown();
+                        }else next();
+                    });}
+                });}catch(RuntimeException error){resolving=false;main.post(()->next());}
+            }
+        }
+        Resolver resolver=new Resolver();
         NsdManager.DiscoveryListener discovery=new NsdManager.DiscoveryListener() {
             public void onDiscoveryStarted(String serviceType) {}
             public void onDiscoveryStopped(String serviceType) {}
@@ -48,18 +89,12 @@ final class LineWire {
                 String got=serviceInfo.getServiceType()==null?"":serviceInfo.getServiceType();
                 if(got.length()>0 && type.contains("pairing") && !got.contains("pairing"))return;
                 if(got.length()>0 && type.contains("connect") && got.contains("pairing"))return;
-                nsd.resolveService(serviceInfo,new NsdManager.ResolveListener() {
-                    public void onResolveFailed(NsdServiceInfo info,int error) {}
-                    public void onServiceResolved(NsdServiceInfo info) {
-                        if(found.get()!=null || info.getHost()==null)return;
-                        End end=new End();end.host=info.getHost().getHostAddress();end.port=info.getPort();
-                        found.set(end);latch.countDown();
-                    }
-                });
+                main.post(()->resolver.add(serviceInfo));
             }
         };
         main.post(()->{try{nsd.discoverServices(type,NsdManager.PROTOCOL_DNS_SD,discovery);}catch(RuntimeException error){latch.countDown();}});
         try{latch.await(6,TimeUnit.SECONDS);}catch(InterruptedException ignored){}
+        finished.set(true);
         main.post(()->{try{nsd.stopServiceDiscovery(discovery);}catch(RuntimeException ignored){}});
         return found.get();
     }
@@ -76,6 +111,7 @@ final class LineWire {
                 LineLink.INSTANCE.pair("127.0.0.1",end.port,code.trim());
             }
             Store.prefs(context).edit().putBoolean("line_paired",true).apply();
+            forget();
             LineWatch.cleared(context);
         } finally {LineWatch.resume();}
     }
@@ -85,25 +121,30 @@ final class LineWire {
         return message.contains("closed") || message.contains("reset") || message.contains("refused") || message.contains("abort");
     }
 
-    private static final java.util.concurrent.atomic.AtomicBoolean ended=new java.util.concurrent.atomic.AtomicBoolean();
-
-    static boolean start(Context context,File dest,Callback done) {
-        if(going || !paired(context))return false;
-        ended.set(false);going=true;
-        worker=new Thread(()->run(context,dest,done),"line-call");
-        worker.start();
+    static synchronized boolean start(Context context,File dest,Callback done) {
+        if(running() || !paired(context))return false;
+        Session active=new Session();session=active;
+        pending.incrementAndGet();
+        active.worker=new Thread(()->run(context,dest,done,active),"line-call");
+        active.worker.start();
         return true;
     }
 
     static void stop() {
-        going=false;
-        AutoCloseable current=link;
-        if(current!=null)try{current.close();}catch(Exception ignored){}
-        Thread thread=worker;
-        if(thread!=null && thread!=Thread.currentThread())try{thread.join(4000);}catch(InterruptedException ignored){}
+        Session active=session;
+        if(active==null || !active.going)return;
+        active.going=false;
+        Runnable close=()->{
+            AutoCloseable current=active.link;
+            if(current!=null)try{current.close();}catch(Exception ignored){}
+            Thread thread=active.worker;
+            if(thread!=null && thread!=Thread.currentThread())try{thread.join(4000);}catch(InterruptedException ignored){}
+        };
+        if(Looper.myLooper()==Looper.getMainLooper())new Thread(close,"line-stop").start();
+        else close.run();
     }
 
-    private static void run(Context context,File dest,Callback done) {
+    private static void run(Context context,File dest,Callback done,Session active) {
         AutoCloseable connection=null;
         AacFile aac=null;
         boolean wrote=false;
@@ -115,27 +156,27 @@ final class LineWire {
                 try{end=find(context,"_adb-tls-connect._tcp.");}
                 finally{LineWatch.resume();}
             }
-            if(end==null || !going){finish(done,false);return;}
+            if(end==null || !active.going){finish(active,done,false);return;}
             Exception failed=null;
-            for(int attempt=0;attempt<2 && going && connection==null;attempt++){
+            for(int attempt=0;attempt<2 && active.going && connection==null;attempt++){
                 if(attempt>0){
                     try{Thread.sleep(700);}catch(InterruptedException ignored){}
                     LineWatch.hold();
-                    try{End again=find(context,"_adb-tls-connect._tcp.");if(again!=null)end=again;}
+                    try{forget();End again=find(context,"_adb-tls-connect._tcp.");if(again!=null)end=again;}
                     finally{LineWatch.resume();}
                 }
                 try{
                     PipedInputStream read=new PipedInputStream(64*1024);
                     PipedOutputStream write=new PipedOutputStream(read);
                     connection=LineLink.INSTANCE.record(end.host,end.port,write);
-                    link=connection;
+                    active.link=connection;
                     failed=null;
                     InputStream in=read;
                     ByteArrayOutputStream pending=new ByteArrayOutputStream();
                     byte[] buf=new byte[4096];
                     int rate=16000,channels=1;
                     boolean headed=false;
-                    while(going){
+                    while(active.going){
                         int n=in.read(buf);
                         if(n<0)break;
                         if(n==0)continue;
@@ -159,21 +200,27 @@ final class LineWire {
                 }catch(Exception error){
                     failed=error;
                     if(connection!=null)try{connection.close();}catch(Exception ignored){}
-                    connection=null;link=null;
+                    connection=null;active.link=null;
                 }
             }
             if(failed!=null)throw failed;
         } catch(Exception ignored) {}
         if(aac!=null)aac.close();
         if(connection!=null)try{connection.close();}catch(Exception ignored){}
-        link=null;
-        finish(done,wrote && dest.isFile() && dest.length()>1000);
+        active.link=null;
+        finish(active,done,wrote && dest.isFile() && dest.length()>1000);
     }
 
-    private static void finish(Callback done,boolean ok) {
-        if(!ended.compareAndSet(false,true))return;
-        going=false;worker=null;
-        if(done!=null){if(ok)done.saved();else done.failed();}
+    private static synchronized void finish(Session active,Callback done,boolean ok) {
+        if(!active.ended.compareAndSet(false,true))return;
+        active.going=false;active.worker=null;
+        main.post(()->{
+            try{if(done!=null){if(ok)done.saved();else done.failed();}}
+            finally{
+                pending.decrementAndGet();
+                synchronized(LineWire.class){if(session==active)session=null;}
+            }
+        });
     }
 
     private static int index(byte[] all) {

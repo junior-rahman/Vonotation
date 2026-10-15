@@ -1,0 +1,86 @@
+VonoTation 0.1.9-preview — October 15, 2026
+
+Signed combined update based on 0.1.8-preview.
+Package: app.voiceflow | versionCode: 81 | minSdk: 26 | targetSdk: 35
+
+In-app updates
+The existing Settings Update button checks the public GitHub latest.json feed,
+shows check/download/verification progress, verifies declared length and SHA-256,
+and verifies APK package, version and the installed signing certificate before
+preparing installation. Install permission is requested only for a verified new
+version, and returning from Android settings resumes the prepared update.
+Interrupted preparation or confirmation can continue from a verified cache;
+active Android install sessions are retained. Final confirmation remains Android's
+installer screen. Installation waits while recording, transcription, note/call
+processing or audio finalization is active. No silent install is promised.
+
+Deletion at the current cursor
+Delete now uses the current input and cursor. A selection deletes that exact
+range; a collapsed cursor keeps the existing preceding-word deletion behavior.
+Middle-of-field text after the cursor remains intact. Reversed selections and
+Unicode are handled without splitting surrogate pairs. Holding Delete stops if
+the user moves the cursor, changes text or input, releases, slides away or cancels.
+Unknown cursor positions no longer fall back to the end of the field. Native
+editor operations are preferred, with a guarded cursor-restoring node fallback.
+
+Call Notes connection and notifications
+Routine connection notices use a new low-importance silent channel so the old
+high-importance setting cannot make each retry pop up. One continuous outage is
+deduplicated, and notifications/reconnect work are gated by call recording being
+enabled. Discovery filters to this device, resolves serially, ignores stale
+callbacks, and refreshes a changed wireless-debug port instead of retrying a
+known failed endpoint. Pairing identity is atomically saved with legacy identity
+retained across app updates. A confirmed rejected pairing still offers Pair again.
+Call shutdown now closes connections off the main thread and isolates each call
+session. Finish on a short failed call cannot restart microphone fallback.
+
+These changes improve recovery; Android/OEM/network changes can still disable
+wireless debugging or stop discovery. They do not guarantee permanent connection
+or exempt recording from Android's background microphone restrictions.
+
+Existing features and design
+Quick thoughts and the compact clipboard from 0.1.8 are included. Quick thoughts
+is opt-in; disabling it hides the dot and Thoughts card while retaining notes.
+The clipboard keeps one latest-copy pill and a three-row scrollable history popup.
+Android controls clipboard access, so an explicit Clipboard tap may be needed
+before the latest copy is available. Saved history is the app's own captured list.
+The existing layout, four original cards and shared Daybook/Ui/FloatingIcon design
+files are retained. Reminder scheduling remains future work.
+
+Validation
+- Full Android Gradle :app:assemblePreview passed, including Java/Kotlin, resources,
+  DEX packaging and vital lint. The final incremental build includes the repair-
+  state priority fix found during independent review.
+- All 19 pure Java suites passed: 79 current-cursor deletion checks, 17 connection
+  recovery checks, update schema/HTTPS/hash/size/signer/active-session checks, and
+  existing editor/transcript/privacy regressions.
+- Independent updater, deletion and Call Notes source reviews found no remaining
+  reported blocker. Native deletion fixture source compiled but was not run.
+- APK package/version and v2 signature verified by SDK35 tools. Certificate
+  matches the independently verified 0.1.7 APK and 0.1.8 preview:
+  5dca2219fbe89fb885b24c904fd4c57d3b58930922d21d455fc10d7a35f7568a
+- APK SHA-256: 6912cdfdf827014c446128d7946c5fef4cf4cec11983da5854cd462232c9ba0c
+- Source delta against 0.1.8-preview: 27 files.
+
+Not yet verified on a phone/emulator: Samsung cursor/touch behavior, notification
+presentation, actual updater permission/installer return, reboot/app-update
+reconnection, OEM wireless debugging, background call microphone capture, live
+provider requests or Drive backup/restore. No APK was installed on the user's
+phone by this work. No unrelated audit issue is claimed fixed.
+
+Installation
+Open VonoTation Settings, then Update. If the older installed build opens Android
+install-permission settings, allow VonoTation and tap Update again after returning.
+Confirm Android's installer prompt. Future updates use the revised flow.
+The signing certificate matches the verified 0.1.7/0.1.8 APKs; uninstalling is not
+needed for those matching builds. Different signing keys cannot update in place.
+
+Source
+VoiceFlow/ contains the editable Android project. The patch applies to the
+0.1.8-preview source. Private signing keys, local.properties, build/cache outputs
+and redundant historical archives are excluded. Historical documentation is a
+baseline record; app/build.gradle and this file identify the current preview.
+Build with JDK17, Android SDK35 and Build Tools35.0.0:
+  ./gradlew :app:assembleDebug
+Compatible preview signing requires the existing key through VOICEFLOW_KEYSTORE;
+the private signing key is not included.

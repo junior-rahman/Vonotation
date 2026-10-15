@@ -130,6 +130,23 @@ public final class FlowKeyboard extends InputMethodService implements Dictation.
             }finally{c.endBatchEdit();}
         }
     };
+    CursorDeletion.Port captureDeletion(CharSequence packageName){
+        EditorInfo initial=getCurrentInputEditorInfo();
+        if(!hasActiveEditor() || privateEditor() || initial==null || packageName==null || !initial.packageName.contentEquals(packageName))return null;
+        final long owner=session;final String pkg=initial.packageName;final int field=initial.fieldId;
+        return new CursorDeletion.Port(){
+            public boolean current(){EditorInfo active=getCurrentInputEditorInfo();return hasActiveEditor() && session==owner && active!=null && pkg.equals(active.packageName) && field==active.fieldId && !privateEditor();}
+            public EditorInsertion.Snapshot read(){return current()?InputSnapshots.readCurrent(getCurrentInputConnection()):null;}
+            public boolean delete(CursorDeletion.Plan plan){
+                if(!current())return false;InputConnection connection=getCurrentInputConnection();
+                connection.beginBatchEdit();try{
+                    connection.finishComposingText();
+                    if(!current() || !CursorDeletion.same(plan.source,read()))return false;
+                    return plan.selected?connection.commitText("",1):connection.deleteSurroundingText(plan.beforeUnits,0);
+                }finally{connection.endBatchEdit();}
+            }
+        };
+    }
     private void record(){
         EditorInfo info=getCurrentInputEditorInfo();if(busy || info==null || info.inputType==InputType.TYPE_NULL)return;
         if(!isPassword(info) && FlowAccessibility.instance!=null && FlowAccessibility.instance.focusedInputIsSensitive()){Toast.makeText(this,"This credential field does not expose a compatible private input connection.",Toast.LENGTH_LONG).show();return;}

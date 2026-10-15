@@ -17,15 +17,16 @@ final class Calls {
         Notes.callsMode(true);
         if(arming){arming=false;if(ready(activity)){Store.prefs(activity).edit().putBoolean("record_calls",true).apply();battery(activity);CallWatch.wake(activity);}}
         if(Notes.opened()){Notes.show(activity,body,refresh);return;}
+        boolean on=CallWatch.on(activity);
         boolean paired=LineWire.paired(activity);
-        boolean down=paired && LineWatch.settled() && !LineWatch.up();
-        boolean stale=paired && LineWatch.needsReconnect();
+        boolean stale=on && paired && LineWatch.needsReconnect();
+        boolean down=on && paired && !stale && LineWatch.settled() && !LineWatch.up();
         if(down || stale){
             LinearLayout downCard=Daybook.card(activity);
             downCard.setPadding(Ui.dp(activity,16),Ui.dp(activity,14),Ui.dp(activity,16),Ui.dp(activity,14));
-            downCard.addView(Daybook.text(activity,down?"Wireless debugging is off.":"VonoTation is disconnected.",16,Daybook.ink(activity),true));
+            downCard.addView(Daybook.text(activity,down?"Call connection unavailable.":"VonoTation is disconnected.",16,Daybook.ink(activity),true));
             Ui.space(downCard,6);
-            downCard.addView(Daybook.text(activity,down?"Turn it back on, then pair again. Until then a call only catches your side, out loud.":"Wireless debugging came back on a new connection. Pair again or a call only catches your side, out loud.",13,Daybook.muted(activity),false));
+            downCard.addView(Daybook.text(activity,down?"Turn on wireless debugging. Your saved pairing will reconnect automatically when it becomes available. Until then calls use speakerphone.":"This phone rejected the saved pairing. Pair again to record through the earpiece; until then calls use speakerphone.",13,Daybook.muted(activity),false));
             Ui.space(downCard,10);
             downCard.addView(Daybook.button(activity,"Open wireless debugging",true,v->{try{activity.startActivity(new Intent(android.provider.Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS));}catch(RuntimeException error){android.widget.Toast.makeText(activity,"Turn on developer options first. Settings, About phone, tap Build number.",android.widget.Toast.LENGTH_LONG).show();}}),new LinearLayout.LayoutParams(-1,Ui.dp(activity,48)));
             if(!down){
@@ -42,17 +43,16 @@ final class Calls {
             }
             body.addView(downCard);Ui.space(body,12);
         }
-        boolean on=CallWatch.on(activity);
         LinearLayout card=Daybook.card(activity);
         card.setPadding(Ui.dp(activity,16),Ui.dp(activity,16),Ui.dp(activity,16),Ui.dp(activity,16));
         card.addView(Daybook.text(activity,on?"A call writes itself down here, after you hang up.":"Turn it on, and the call is kept without opening VonoTation.",14,Daybook.muted(activity),false));
         Ui.space(card,8);
-        String quiet=down?"Wireless debugging is off, so a call only catches your side.":stale?"Disconnected. Pair again or a call only catches your side.":"Both sides, with the phone at your ear. VonoTation sleeps between calls.";
+        String quiet=down?"Wireless debugging is unavailable; calls use speakerphone.":stale?"Pairing needs attention; calls use speakerphone.":"Both sides, with the phone at your ear. VonoTation sleeps between calls.";
         card.addView(Daybook.text(activity,paired?quiet:"Until earpiece access is paired, a call plays out loud so both sides are saved.",13,Daybook.muted(activity),false));
         if(dock!=null){
             dock.removeAllViews();
             android.widget.Button toggle=Daybook.button(activity,on?"Turn off":"Record calls",!on,v->{
-                if(on){Store.prefs(activity).edit().putBoolean("record_calls",false).apply();CallWatch.quit(activity);arming=false;refresh.run();}
+                if(on){Store.prefs(activity).edit().putBoolean("record_calls",false).apply();CallWatch.quit(activity);LineWatch.start(activity,null);arming=false;refresh.run();}
                 else enable(activity,refresh);
             });
             Daybook.pill(toggle,!on);
@@ -109,6 +109,7 @@ final class Calls {
         if(!need.isEmpty()){arming=true;activity.requestPermissions(need.toArray(new String[0]),23);return;}
         arming=false;
         Store.prefs(activity).edit().putBoolean("record_calls",true).apply();
+        LineWatch.start(activity,null);
         battery(activity);
         refresh.run();
     }

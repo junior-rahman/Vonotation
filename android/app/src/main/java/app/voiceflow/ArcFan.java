@@ -26,7 +26,7 @@ import android.widget.TextView;
  * A single text pill beside Clipboard pastes the latest readable plain-text copy.
  */
 final class ArcFan {
-    interface Actions { void deleteWord(); void openClipboard(); void prepareClipboardPaste(); void cancelClipboardPaste(); void pasteClipboard(String value); void openKeyboard(); void closed(); }
+    interface Actions { default void beginDelete(){} default void endDelete(){} boolean deleteWord(); void openClipboard(); void prepareClipboardPaste(); void cancelClipboardPaste(); void pasteClipboard(String value); void openKeyboard(); void closed(); }
     static final float R_DP=76,MARGIN_DP=8,TILE_DP=48;
     static final int DWELL_MS=450,REDUCED_FADE_MS=150;
     // [Delete, Clipboard, Keyboard]. Checked so 48 dp tiles stay at least 8 dp apart.
@@ -38,8 +38,8 @@ final class ArcFan {
     private FrameLayout root;private final View[] tiles=new View[4];private final TextView[] labels=new TextView[4];private Ring ring;
     private TextView clipPill;private RectF clipPillBounds;private String clipboardValue,pressedClipboardValue;
     float cx,cy;int edge;int[] angles;int rotation;
-    private int hover=-1;private boolean touchable,closing,wordDone;private long lastAct;
-    private final Runnable dwell=new Runnable(){public void run(){if(hover==1&&root!=null){Haptics.fire(ctx,Haptics.POP);actions.deleteWord();wordDone=true;if(ring!=null)ring.set(0);mark();h.postDelayed(this,REPEAT_MS);}}};
+    private int hover=-1;private boolean touchable,closing,wordDone,deleting,deleteCanceled;private long lastAct;
+    private final Runnable dwell=new Runnable(){public void run(){if(hover==1&&root!=null){wordDone=true;if(!actions.deleteWord()){endDelete();return;}Haptics.fire(ctx,Haptics.POP);if(ring!=null)ring.set(0);mark();h.postDelayed(this,REPEAT_MS);}}};
 
     ArcFan(Context ctx,WindowManager wm,Actions actions){this.ctx=ctx;this.wm=wm;this.actions=actions;density=ctx.getResources().getDisplayMetrics().density;R=R_DP*density;M=MARGIN_DP*density;T=TILE_DP*density;}
     boolean isOpen(){return root!=null&&!closing;}
@@ -98,10 +98,11 @@ final class ArcFan {
             tile.setId(View.generateViewId());tile.setContentDescription(names[i]);tile.setFocusable(false);tile.setFocusableInTouchMode(false);tile.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
             final int idx=i;tile.setOnClickListener(v->act(idx));
             tile.setOnTouchListener((v,e)->{if(!touchable)return false;int m=e.getActionMasked();
-                if(m==MotionEvent.ACTION_DOWN){v.setPressed(true);if(idx==1){repeats=0;h.removeCallbacks(repeat);h.postDelayed(repeat,DWELL_MS);}return true;}
+                if(m==MotionEvent.ACTION_DOWN){v.setPressed(true);if(idx==1){beginDelete();deleteCanceled=false;repeats=0;h.removeCallbacks(repeat);h.postDelayed(repeat,DWELL_MS);}return true;}
                 boolean inside=e.getX()>=-8*density&&e.getY()>=-8*density&&e.getX()<=v.getWidth()+8*density&&e.getY()<=v.getHeight()+8*density;
-                if(m==MotionEvent.ACTION_UP){v.setPressed(false);if(idx==1){h.removeCallbacks(repeat);if(repeats==0&&inside)act(1);}else if(inside)act(idx);return true;}
-                if(m==MotionEvent.ACTION_CANCEL){v.setPressed(false);if(idx==1)h.removeCallbacks(repeat);return true;}return true;});
+                if(m==MotionEvent.ACTION_MOVE && idx==1 && !inside){deleteCanceled=true;h.removeCallbacks(repeat);endDelete();v.setPressed(false);return true;}
+                if(m==MotionEvent.ACTION_UP){v.setPressed(false);if(idx==1){h.removeCallbacks(repeat);if(repeats==0&&inside&&!deleteCanceled)act(1);endDelete();}else if(inside)act(idx);return true;}
+                if(m==MotionEvent.ACTION_CANCEL){v.setPressed(false);if(idx==1){h.removeCallbacks(repeat);endDelete();}return true;}return true;});
             tile.setOnFocusChangeListener((v,f)->labels[idx].setVisibility(f?View.VISIBLE:View.INVISIBLE));
             root.addView(tile,new FrameLayout.LayoutParams(Math.round(T),Math.round(T)));tiles[i]=tile;
             TextView label=Ui.text(ctx,short_[i],11,Daybook.ink(ctx),true);label.setBackground(Ui.shape(Daybook.surface(ctx),8,ctx));label.setPadding(Math.round(6*density),Math.round(2*density),Math.round(6*density),Math.round(2*density));label.setVisibility(View.INVISIBLE);label.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
@@ -181,9 +182,9 @@ final class ArcFan {
     }
     void track(float rawX,float rawY){
         if(!isOpen())return;int now=hit(rawX,rawY);if(now==hover)return;
-        setHover(now);mark();
+        if(hover==1)endDelete();setHover(now);mark();
         h.removeCallbacks(dwell);if(ring!=null)ring.set(0);
-        if(now==1){wordDone=false;if(ring!=null)ring.run(DWELL_MS);h.postDelayed(dwell,DWELL_MS);}
+        if(now==1){beginDelete();wordDone=false;if(ring!=null)ring.run(DWELL_MS);h.postDelayed(dwell,DWELL_MS);}
     }
     private void setHover(int now){
         if(hover>=0){tiles[hover].animate().scaleX(1).scaleY(1).setDuration(90).start();labels[hover].setVisibility(View.INVISIBLE);}
@@ -192,27 +193,32 @@ final class ArcFan {
     }
     void release(float rawX,float rawY,boolean moved){
         if(!isOpen())return;h.removeCallbacks(dwell);if(ring!=null)ring.set(0);
-        if(!moved){setHover(-1);makeTouchable();mark();return;}
+        if(!moved){endDelete();setHover(-1);makeTouchable();mark();return;}
         int target=hit(rawX,rawY);setHover(-1);
-        if(target==1){if(!wordDone)act(1);makeTouchable();return;}
+        if(target==1){if(!wordDone)act(1);endDelete();makeTouchable();return;}
+        endDelete();
         if(target>0)act(target);else if(target==0)close();else makeTouchable();
     }
+    void cancelDeleteGesture(){h.removeCallbacks(dwell);h.removeCallbacks(repeat);endDelete();wordDone=true;deleteCanceled=true;if(ring!=null)ring.set(0);setHover(-1);makeTouchable();}
     private void makeTouchable(){if(root==null||touchable)return;touchable=true;try{WindowManager.LayoutParams lp=(WindowManager.LayoutParams)root.getLayoutParams();lp.flags&=~WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;wm.updateViewLayout(root,lp);}catch(RuntimeException ignored){}}
     static final int REPEAT_MS=300;private int repeats;
-    private final Runnable repeat=new Runnable(){public void run(){if(root==null||closing)return;repeats++;act(1);h.postDelayed(this,REPEAT_MS);}};
-    private void act(int i){
-        if(i==1){Haptics.fire(ctx,Haptics.RELEASE);actions.deleteWord();mark();}
+    private final Runnable repeat=new Runnable(){public void run(){if(root==null||closing||deleteCanceled)return;repeats++;if(!act(1)){endDelete();return;}h.postDelayed(this,REPEAT_MS);}};
+    private void beginDelete(){if(!deleting){actions.beginDelete();deleting=true;}}
+    private void endDelete(){if(deleting){actions.endDelete();deleting=false;}}
+    private boolean act(int i){
+        if(i==1){boolean single=!deleting;if(single)beginDelete();boolean removed=actions.deleteWord();if(single)endDelete();if(!removed)return false;Haptics.fire(ctx,Haptics.RELEASE);mark();}
         else if(i==2){Haptics.fire(ctx,Haptics.RELEASE);actions.openClipboard();mark();}
         else if(i==3){Haptics.fire(ctx,Haptics.RELEASE);remove();h.post(actions::openKeyboard);}
         else close();
+        return true;
     }
     void close(){
-        if(root==null||closing)return;closing=true;h.removeCallbacks(dwell);
+        if(root==null||closing)return;closing=true;endDelete();h.removeCallbacks(dwell);h.removeCallbacks(repeat);
         if(!ValueAnimator.areAnimatorsEnabled())fade(false,this::remove);
         else{animate(false,2);animate(false,1);animate(false,0);}
     }
     void dismissNow(){remove();}
-    private void remove(){actions.cancelClipboardPaste();h.removeCallbacksAndMessages(null);if(root!=null){try{wm.removeView(root);}catch(RuntimeException ignored){}root=null;clipPill=null;clipPillBounds=null;pressedClipboardValue=null;actions.closed();}}
+    private void remove(){endDelete();actions.cancelClipboardPaste();h.removeCallbacksAndMessages(null);if(root!=null){try{wm.removeView(root);}catch(RuntimeException ignored){}root=null;clipPill=null;clipPillBounds=null;pressedClipboardValue=null;actions.closed();}}
 
     final class Ring extends View {
         float p;long t0;int dur;final Paint pt=new Paint(Paint.ANTI_ALIAS_FLAG);

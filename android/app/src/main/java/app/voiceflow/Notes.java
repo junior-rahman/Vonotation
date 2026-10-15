@@ -25,14 +25,18 @@ import org.json.JSONObject;
 final class Notes {
     static final String[] CODES={"auto","en","bn","hi","es","ne"};
     static final String[] NAMES={"Auto","English","বাংলা","हिन्दी","Español","नेपाली"};
-    private static long open=-1,transcribing=-1;
+    private static long open=-1;
+    private static volatile long transcribing=-1;
     private static String pick="auto";
-    private static boolean fixing,busy,original,choosing;
+    private static boolean fixing,original,choosing;
+    private static volatile boolean busy;
     private static List<File> queue=new ArrayList<>();
     private static int queueAt;
     private static MediaPlayer player;
     private static long playing=-1,liveId=-1;
-    private static boolean draining,translating;
+    private static volatile boolean draining;
+    private static boolean translating;
+    private static final java.util.concurrent.atomic.AtomicInteger thoughtWork=new java.util.concurrent.atomic.AtomicInteger();
     private static Wave liveWave,playWave;
     private static TextView liveTime,playTime;
     private static long totalDuration,playedBefore;
@@ -43,6 +47,8 @@ final class Notes {
     static void thoughtsMode(){callsOnly=false;thoughtsOnly=true;}
     static boolean thoughtOpened(Context context){JSONObject note=find(context,open);return note!=null && note.optBoolean("thought");}
     static boolean opened(){return open>=0;}
+    /** Updater gate includes queued thought formatting until its guarded save finishes. */
+    static boolean updateBusy(){return busy || draining || transcribing>=0 || thoughtWork.get()>0;}
     private static Runnable onChange=()->{};
     private static final java.util.concurrent.ExecutorService work=java.util.concurrent.Executors.newSingleThreadExecutor();
 
@@ -809,6 +815,7 @@ final class Notes {
         final long revision=captured.optLong("revision",1);
         final String raw=captured.optString("raw");
         if(raw.isEmpty() || Vault.get(app).isEmpty())return;
+        thoughtWork.incrementAndGet();
         work.execute(()->{
             try {
                 String formatted=QuickThoughtPolicy.formatted(raw,new CloudApi(app).touchUp(raw));
@@ -826,6 +833,7 @@ final class Notes {
                 }
                 poke();
             } catch(Exception ignored){/* The original is already durable. */}
+            finally{thoughtWork.decrementAndGet();}
         });
     }
 

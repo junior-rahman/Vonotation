@@ -23,7 +23,7 @@ import android.telephony.TelephonyCallback;
 import android.telephony.TelephonyManager;
 import java.io.File;
 
-/** Stays up while call recording is on, starts a recording when a call connects, and stops when it ends. */
+/** A transient foreground recorder, started by the phone-state receiver only for a connected call. */
 public final class CallWatch extends Service {
     static final String STOP="app.voiceflow.CALL_STOP";
     private static final String QUIT="app.voiceflow.CALL_QUIT";
@@ -33,6 +33,8 @@ public final class CallWatch extends Service {
     private PhoneStateListener legacy;
     private TelephonyCallback modern;
     private boolean ear;
+    private boolean ending;
+    private long recordingGeneration;
 
     static boolean on(Context context){return Store.bool(context,"record_calls",false);}
     private static volatile boolean expect;
@@ -53,12 +55,12 @@ public final class CallWatch extends Service {
         }catch(SecurityException ignored){}
     }
 
-    static void wake(Context context){}
+    static void wake(Context context){LineWatch.start(context,null);}
 
     static void recordNow(Context context){
         Intent intent=new Intent(context,CallWatch.class).setAction(NOW);
         try{if(Build.VERSION.SDK_INT>=26)context.startForegroundService(intent);else context.startService(intent);}
-        catch(RuntimeException ignored){}
+        catch(RuntimeException error){android.util.Log.w("VonoTation","Android did not allow call recording to start",error);}
     }
 
     static void quit(Context context){
@@ -71,13 +73,16 @@ public final class CallWatch extends Service {
     @Override public int onStartCommand(Intent intent,int flags,int startId){
         String action=intent==null?null:intent.getAction();
         if(STOP.equals(action) || QUIT.equals(action)){
+            ending=true;
             if(LineWire.running()){LineWire.stop();return START_NOT_STICKY;}
             ShellEar.stop();
             if(VoiceTake.callRunning()){VoiceTake.finish();handler.postDelayed(this::endWatch,2500);return START_NOT_STICKY;}
             endWatch();
             return START_NOT_STICKY;
         }
-        recordingNotice();
+        ending=false;
+        if(!recordingNotice()){endWatch();return START_NOT_STICKY;}
+        LineWatch.start(this,null);
         ensureEar();
         int state=TelephonyManager.CALL_STATE_IDLE;
         try{if(telephony!=null)state=telephony.getCallState();}catch(SecurityException ignored){}
@@ -86,28 +91,29 @@ public final class CallWatch extends Service {
         return START_NOT_STICKY;
     }
 
-    @Override public void onDestroy(){LineWire.stop();dropEar();super.onDestroy();}
+    @Override public void onDestroy(){ending=true;LineWire.stop();dropEar();super.onDestroy();}
 
     private boolean forcedSpeaker;
 
     private void begin(){
-        recordingNotice();
+        if(ending || !recordingNotice())return;
         if(LineWire.running() || ShellEar.running() || VoiceTake.callRunning())return;
         if(VoiceTake.noteRunning()){decline(this);return;}
         File folder=new File(getFilesDir(),"notes");
         if(!folder.isDirectory())folder.mkdirs();
         long id=System.currentTimeMillis();
         File dest=new File(folder,id+"-0.m4a");
+        long take=++recordingGeneration;
         if(LineWire.paired(this) && LineWire.start(this,dest,new LineWire.Callback(){
-            public void saved(){Notes.keepFile(CallWatch.this,dest);endWatch();}
-            public void failed(){if(dest.exists() && dest.length()<1000)dest.delete();if(stillInCall())mic();else endWatch();}
+            public void saved(){Notes.keepFile(CallWatch.this,dest);if(take==recordingGeneration)endWatch();}
+            public void failed(){if(dest.exists() && dest.length()<1000)dest.delete();if(take!=recordingGeneration)return;if(!ending && stillInCall())mic();else endWatch();}
         }))return;
         mic();
     }
 
-    private void mic(){if(!lineOpen())speakerOn();Notes.beginCall(this);}
+    private void mic(){if(ending)return;if(!lineOpen())speakerOn();Notes.beginCall(this);}
 
-    private void endWatch(){speakerOff();try{stopForeground(STOP_FOREGROUND_REMOVE);}catch(RuntimeException ignored){}stopSelf();}
+    private void endWatch(){ending=true;speakerOff();try{stopForeground(STOP_FOREGROUND_REMOVE);}catch(RuntimeException ignored){}stopSelf();}
 
     /** True when this phone lets a normal app open the call audio itself. */
     private boolean lineOpen() {
@@ -160,6 +166,7 @@ public final class CallWatch extends Service {
         if(!on(this))return;
         if(state==TelephonyManager.CALL_STATE_OFFHOOK)begin();
         else if(state==TelephonyManager.CALL_STATE_IDLE){
+            ending=true;
             boolean live=LineWire.running() || ShellEar.running() || VoiceTake.callRunning();
             if(LineWire.running())LineWire.stop();
             else if(ShellEar.running())ShellEar.stop();
@@ -167,7 +174,6 @@ public final class CallWatch extends Service {
             else endWatch();
             speakerOff();
             if(live)handler.postDelayed(this::tagLatest,1600);
-            handler.postDelayed(this::tagLatest,1600);
         }
     }
 
@@ -209,14 +215,13 @@ public final class CallWatch extends Service {
         public void onCallStateChanged(int state){changed(state);}
     }
 
-    private void watchNotice(){foreground("Call recording is on","Phone calls are saved in Calls.",false);}
-    private void recordingNotice(){foreground(LineWire.paired(this)?"Recording both sides":"Recording this call",LineWire.paired(this)?"Earpiece. Nothing stays running after the call.":"Playing out loud so the other person is included.",true);}
+    private boolean recordingNotice(){return foreground("Recording this call","Saved in Calls after you hang up.",true);}
 
-    private void foreground(String title,String text,boolean recording){
+    private boolean foreground(String title,String text,boolean recording){
         NotificationManager notifications=(NotificationManager)getSystemService(NOTIFICATION_SERVICE);
         notifications.createNotificationChannel(new NotificationChannel("callwatch","Call recording",NotificationManager.IMPORTANCE_LOW));
         PendingIntent open=PendingIntent.getActivity(this,44,new Intent(this,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
-        Notification.Builder builder=new Notification.Builder(this,"callwatch").setSmallIcon(android.R.drawable.ic_btn_speak_now).setContentTitle(title).setContentText(text).setOngoing(true).setContentIntent(open);
+        Notification.Builder builder=new Notification.Builder(this,"callwatch").setSmallIcon(android.R.drawable.ic_btn_speak_now).setContentTitle(title).setContentText(text).setOngoing(true).setOnlyAlertOnce(true).setDefaults(0).setSound(null).setVibrate(new long[0]).setShowWhen(false).setContentIntent(open);
         if(recording){
             PendingIntent stop=PendingIntent.getService(this,45,new Intent(this,CallWatch.class).setAction(STOP),PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
             builder.addAction(new Notification.Action.Builder(android.R.drawable.ic_media_pause,"Finish",stop).build());
@@ -226,6 +231,7 @@ public final class CallWatch extends Service {
             if(Build.VERSION.SDK_INT>=34)startForeground(44,notice,recording?ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE:ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
             else if(Build.VERSION.SDK_INT>=29 && recording)startForeground(44,notice,ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE);
             else startForeground(44,notice);
-        }catch(RuntimeException ignored){}
+            return true;
+        }catch(RuntimeException error){android.util.Log.w("VonoTation","Android did not allow the call microphone foreground service",error);return false;}
     }
 }

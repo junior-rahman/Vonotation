@@ -16,7 +16,8 @@ final class InputSnapshots {
         int lo=Math.min(a,b),hi=Math.max(a,b),offset=value.getOffset();
         return new EditorInsertion.Snapshot(text.substring(0,lo),text.substring(lo,hi),text.substring(hi),offset<0?-1:offset+a,offset<0?-1:offset+b);
     }
-    static EditorInsertion.Snapshot read(InputConnection connection,int selectionStart,int selectionEnd) {
+    /** Fresh editor-reported offsets only; cached callback positions are insufficient for destructive edits. */
+    static EditorInsertion.Snapshot readCurrent(InputConnection connection) {
         if(connection==null)return null;
         if(Build.VERSION.SDK_INT>=31) {
             EditorInsertion.Snapshot result=from(connection.getSurroundingText(EditorInsertion.CONTEXT,EditorInsertion.CONTEXT,0));
@@ -28,6 +29,11 @@ final class InputSnapshots {
             int a=extracted.selectionStart,b=extracted.selectionEnd;String text=extracted.text.toString();int lo=Math.min(a,b),hi=Math.max(a,b);
             if(hi<=text.length())return new EditorInsertion.Snapshot(text.substring(Math.max(0,lo-EditorInsertion.CONTEXT),lo),text.substring(lo,hi),text.substring(hi,Math.min(text.length(),hi+EditorInsertion.CONTEXT)),extracted.startOffset+a,extracted.startOffset+b);
         }
+        return null;
+    }
+    static EditorInsertion.Snapshot read(InputConnection connection,int selectionStart,int selectionEnd) {
+        if(connection==null)return null;
+        EditorInsertion.Snapshot current=readCurrent(connection);if(current!=null)return current;
         CharSequence before=connection.getTextBeforeCursor(EditorInsertion.CONTEXT,0),after=connection.getTextAfterCursor(EditorInsertion.CONTEXT,0),selected=connection.getSelectedText(0);
         if(before==null || after==null)return null;
         return new EditorInsertion.Snapshot(before.toString(),selected==null?"":selected.toString(),after.toString(),selectionStart,selectionEnd);

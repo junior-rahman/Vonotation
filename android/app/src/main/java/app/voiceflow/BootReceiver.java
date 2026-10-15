@@ -19,7 +19,11 @@ public final class BootReceiver extends BroadcastReceiver {
         final Context app = context.getApplicationContext();
         // Give Android a few seconds to bind the service before deciding it didn't start (receiver limit is 10 s).
         new Handler(Looper.getMainLooper()).postDelayed(() -> {
-            try { BubbleHealth.checkAfterRestart(app, action.endsWith("BOOT_COMPLETED") ? "boot" : "update"); }
+            try {
+                BubbleHealth.checkAfterRestart(app, action.endsWith("BOOT_COMPLETED") ? "boot" : "update");
+                // Reload the saved ADB identity and rediscover its new port; never re-pair or start a microphone at boot.
+                LineWatch.start(app,null);
+            }
             finally { pending.finish(); }
         }, 7000);
     }
