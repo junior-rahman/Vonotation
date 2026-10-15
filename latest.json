@@ -1,9 +1,9 @@
 {
-  "versionCode": 81,
-  "versionName": "0.1.9-preview",
-  "apk": "https://github.com/JuelHossain/Vonotation/releases/download/v0.1.9-preview/VonoTation-0.1.9-preview.apk",
-  "sha256": "6912cdfdf827014c446128d7946c5fef4cf4cec11983da5854cd462232c9ba0c",
-  "size": 6140610,
+  "versionCode": 82,
+  "versionName": "0.1.10-preview",
+  "apk": "https://github.com/JuelHossain/Vonotation/releases/download/v0.1.10-preview/VonoTation-0.1.10-preview.apk",
+  "sha256": "8456f37aaa7fd77f1cd9c8e89b8aad9bb0cbdb3aac664bd77c4306c306f33aed",
+  "size": 6143018,
   "package": "app.voiceflow",
-  "notes": "Verified in-app updates, current-cursor deletion and quiet Call Notes reconnection. Includes Quick thoughts and compact clipboard. Build and 19 logic suites passed; phone testing pending."
+  "notes": "Quick thoughts now has its own visible Settings section and Open Thoughts action. Added guarded note formatting and titles while retaining originals. Build and 20 test suites passed; phone testing pending."
 }
