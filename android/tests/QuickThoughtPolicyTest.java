@@ -20,8 +20,8 @@ public final class QuickThoughtPolicyTest {
         check("আমার কথা".equals(QuickThoughtPolicy.formatted("আমার কথা","My words")),"translation rejected");
         check("fuck this".equals(QuickThoughtPolicy.formatted("fuck this","I cannot help with that")),"refusal rejected");
         check("fallback".equals(QuickThoughtPolicy.title(" ","fallback")),"empty title fallback");
-        check("Buy milk tomorrow.".equals(QuickThoughtPolicy.title("Buy milk tomorrow. Then call Juel","fallback")),"extract first sentence");
-        check("one two three four five six seven eight…".equals(QuickThoughtPolicy.title("one two three four five six seven eight nine ten","fallback")),"title word limit");
+        check("Buy milk tomorrow".equals(QuickThoughtPolicy.title("Buy milk tomorrow. Then call Juel","fallback")),"meaningful complete source phrase");
+        String longSource="one two three four five six seven eight nine ten";check(QuickThoughtPolicy.titleAccepted(longSource,QuickThoughtPolicy.title(longSource,"fallback")),"bounded source-anchored title");
         check(QuickThoughtPolicy.canApply("source",1,true,true,"source",1),"current response applies");
         check(!QuickThoughtPolicy.canApply("source",1,false,false,"",-1),"deleted thought stays deleted");
         check(!QuickThoughtPolicy.canApply("source",1,true,true,"source",2),"edit supersedes old formatting");

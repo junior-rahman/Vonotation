@@ -3,7 +3,7 @@ android {
     namespace 'app.voiceflow'
     compileSdk 35
     buildToolsVersion '35.0.0'
-    defaultConfig { applicationId 'app.voiceflow'; minSdk 26; targetSdk 35; versionCode 81; versionName '0.1.9-preview' }
+    defaultConfig { applicationId 'app.voiceflow'; minSdk 26; targetSdk 35; versionCode 82; versionName '0.1.10-preview' }
     compileOptions { sourceCompatibility JavaVersion.VERSION_1_8; targetCompatibility JavaVersion.VERSION_1_8 }
     kotlinOptions { jvmTarget = '1.8' }
     buildFeatures { aidl true }

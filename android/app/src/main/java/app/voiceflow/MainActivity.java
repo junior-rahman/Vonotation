@@ -240,7 +240,7 @@ public final class MainActivity extends Activity {
         final int generation=summaryGeneration;CloudApi api=new CloudApi(this);summaryApi=api;
         summaryWorker.execute(()->{try{for(HistoryDays.Day day:days){if(generation!=summaryGeneration || Thread.currentThread().isInterrupted())return;try{String recap=api.summarizeDay(day,model);runOnUiThread(()->{if(generation!=summaryGeneration || settingsVisible)return;HistoryDays.Day current=null;for(HistoryDays.Day candidate:historyDays())if(candidate.key.equals(day.key))current=candidate;if(current==null || !HistoryDays.fingerprint(current,model,endpoint).equals(HistoryDays.fingerprint(day,model,endpoint))){render();return;}DailySummaryCache.put(this,day,model,endpoint,recap);DayCard card=dayCards.get(day.key);if(card!=null){card.summary.setText(recap);card.summary.setTextColor(Daybook.ink(this));card.status.setText("AI recap · "+modelName(ModelCatalog.CLEANUP_NAMES,ModelCatalog.CLEANUP_IDS,model));card.status.setVisibility(View.VISIBLE);card.retry.setVisibility(View.GONE);}});}catch(Exception error){runOnUiThread(()->{if(generation!=summaryGeneration || settingsVisible)return;for(HistoryDays.Day pending:days){DayCard card=dayCards.get(pending.key);if(card!=null && DailySummaryCache.get(this,pending,model,endpoint).isEmpty()){card.summary.setText("Recap unavailable. Your dictations are below.");card.summary.setTextColor(Daybook.muted(this));card.status.setText(error.getMessage()==null?"Check your connection and API settings.":error.getMessage());card.status.setVisibility(View.VISIBLE);card.retry.setVisibility(View.VISIBLE);}}});break;}}}finally{CloudApi done=api;runOnUiThread(()->{if(summaryApi==done)summaryApi=null;});}});
     }
-    /** Round5: four expandable cards (one open at a time). Copper and Sand tokens unchanged; structure only. */
+    /** Expandable settings cards (one open at a time), using the existing Copper and Sand tokens. */
     private static String openCard="cloud";
     private void settings() {
         boolean keyed=!Vault.get(this).isEmpty();
@@ -290,7 +290,6 @@ public final class MainActivity extends Activity {
             settingRow(dict,"Cleanup style",Store.verbatim(this)?"Verbatim":"Basic","cleanup",v->openPanel("cleanup"));separator(dict);
             String size=Store.get(this,"bubble_size","small");if(!size.equals("medium")&&!size.equals("large"))size="small";
             settingRow(dict,"Bubble size",Character.toUpperCase(size.charAt(0))+size.substring(1),"size",v->openPanel("size"));separator(dict);
-            toggle(dict,"Quick thoughts","Keep an idle edge dot and a Thoughts card. Turning off hides both; saved thoughts stay on this phone.","quick_thoughts",false,()->{deckReady=false;if(!Store.quickThoughts(this)){if(Notes.thoughtOpened(this))Notes.back();if(part==4)part=0;}render();});separator(dict);
             toggle(dict,"Haptic feedback","","haptic_feedback",true,null);separator(dict);
             toggle(dict,"Save dictations","Up to 100 on this phone.","save_history",true,null);separator(dict);
             recapToggle(dict);separator(dict);
@@ -302,6 +301,24 @@ public final class MainActivity extends Activity {
                 TextView x=Daybook.text(this,"×",20,Daybook.muted(this),false);x.setGravity(Gravity.CENTER);x.setContentDescription("Remove "+entry[1]);x.setOnClickListener(v->{Daybook.feedback(v);java.util.List<String> keep=new java.util.ArrayList<>();for(String line:Store.get(this,"dictionary","").split("\\r?\\n"))if(!line.equals(entry[2]))keep.add(line);Store.prefs(this).edit().putString("dictionary",android.text.TextUtils.join("\n",keep)).apply();render();});chip.addView(x,new LinearLayout.LayoutParams(Ui.dp(this,44),Ui.dp(this,44)));
                 LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-1,-2);cp.bottomMargin=Ui.dp(this,6);chips.addView(chip,cp);}
             dict.addView(chips);dict.addView(Daybook.button(this,"Add word",false,v->openPanel("dictionary")));Ui.space(dict,10);
+        }
+        LinearLayout thoughts=card("thoughts","Quick thoughts",Store.quickThoughts(this)?"On":"Off");
+        if(thoughts!=null){
+            toggle(thoughts,"Quick thoughts","Keep an idle edge dot and a Thoughts card. Turning off hides both; saved thoughts stay on this phone.","quick_thoughts",false,()->{
+                deckReady=false;
+                if(Store.quickThoughts(this)){Notes.back();part=4;}
+                else{if(Notes.thoughtOpened(this))Notes.back();if(part==4)part=0;}
+                render();
+            });
+            if(Store.quickThoughts(this)){
+                if(FlowAccessibility.instance==null)hint(thoughts,"Connect Floating microphone under Permissions to use the edge dot outside VonoTation. You can still record inside Thoughts.");
+                Ui.space(thoughts,10);
+                thoughts.addView(Daybook.button(this,"Open Thoughts",true,v->{
+                    if(!Store.quickThoughts(this)){render();return;}
+                    Notes.back();settingsVisible=false;panel="";part=4;deckReady=false;render();
+                }),new LinearLayout.LayoutParams(-1,Ui.dp(this,48)));
+            }
+            Ui.space(thoughts,10);
         }
         // Backup (on hold)
         LinearLayout backup=card("backup","Backup","On hold");

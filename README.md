@@ -1,32 +1,25 @@
 # VonoTation
 
-Android dictation, voice notes, translation and call recording.
+Current signed preview: **0.1.10-preview**, version code **82**, package `app.voiceflow`.
 
-Current signed preview: **0.1.9-preview**, version code **81**, package `app.voiceflow`.
+[Download APK, source and checksums](https://github.com/JuelHossain/Vonotation/releases/tag/v0.1.10-preview) · [Android source](android/) · [Changes and validation](release-notes/v0.1.10-preview.txt)
 
-- [Download APK, source and checksums](https://github.com/JuelHossain/Vonotation/releases/tag/v0.1.9-preview)
-- [Android source](android/)
-- [Changes and verification limits](release-notes/v0.1.9-preview.txt)
-- [Previous 0.1.8 preview](https://github.com/JuelHossain/Vonotation/releases/tag/v0.1.8-preview)
+## Quick thoughts
 
-This build includes the optional Quick thoughts card and compact clipboard from 0.1.8, plus:
+Open **Settings → Quick thoughts → On → Open Thoughts**. Record there, or tap the faint edge dot outside VonoTation when no input is active. The outside dot needs Floating microphone under Permissions. With an input active, normal dictation remains unchanged.
 
-- In-app update progress, verified downloads and Android installation handoff.
-- Deletion at the current cursor or selected range, with guarded held deletion.
-- Quiet, deduplicated Call Notes connection notices and improved local reconnection/pairing preservation.
+Turning the setting off hides the Thoughts home card and dot while retaining notes. The microphone stays closed while idle; expanded controls shrink after 60 seconds idle. The original words save before optional organization. The current Notes model formats paragraphs/bullets and selects a short source-anchored title; unsupported changes fall back safely. You can read the original, edit or delete. Reminders remain a future feature.
 
-The existing design is retained. Full Android preview build, APK signature/identity checks and all 19 pure Java suites passed. Phone/Samsung cursor and touch behavior, installer permission return, notification presentation, reboot/update reconnection, OEM wireless debugging, background microphone startup and live provider/backup operations remain untested on a device. Reminders remain future work.
+Earlier previews hid this default-off setting under Dictation and provided only light cleanup/opening-word titles. This build makes the control directly visible in Settings, opens Thoughts without searching the deck, adds guarded structured organization, and prevents an unchanged Save changes action from undoing formatting. Existing styles and the four original home cards are retained.
 
-## Update inside the app
+## Updates and existing fixes
 
-Open **Settings → Update**. Allow VonoTation to install apps if Android asks, then confirm installation. An older installed build may need Update tapped again after returning from Android permission settings. The new updater resumes a verified prepared update automatically on permission return and defers installation while audio work is active.
+Open **Settings → Update**, allow installation if Android asks, then confirm Android's installer. An older build may need Update tapped again after returning from permission settings. The public `latest.json` feed advances only after its public APK is verified. The updater verifies hash, size, package, version and installed signing identity; it defers while audio work is active.
 
-The public `latest.json` feed keeps the legacy top-level `versionCode`, `versionName` and `apk` fields and adds SHA-256 and byte size. A feed advances only after its public release APK is verified. No silent installation is promised.
+The compact clipboard, current-cursor deletion and quiet Call Notes recovery fixes from 0.1.9 remain included. Android/OEM/network changes can still disable wireless debugging; permanent connection is not promised.
 
-## Source and builds
+## Verification and source
 
-Signing keys, user API keys, recordings, machine caches and account data are excluded. Historical documents under `android/` describe earlier builds; `android/app/build.gradle` identifies the current source version.
+Android preview build, vital lint, APK identity/signature checks and all 20 pure Java suites passed, including 96 organization checks. Actual phone/Samsung/Niagara UI, microphone/provider responses, installer return, notifications, wireless debugging and live backup/restore remain unverified. Title safeguards are conservative best-effort checks; the original is retained.
 
-Use JDK 17, Android SDK 35 and Build Tools 35.0.0. Run `bash gradlew :app:assembleDebug` inside `android`. A preview signed for installation over an existing app requires the existing private signing key through `VOICEFLOW_KEYSTORE`; it is not included. The published 0.1.7, 0.1.8 and 0.1.9 APKs share the verified signing certificate, so those matching builds update in place.
-
-Prepared preview manifests and artifacts are published by `.github/workflows/publish-preview.yml`. It validates APK identity, hashes, sizes and source exclusions, uploads to an owned draft, then publishes a prerelease without replacing existing assets.
+Private signing keys, user API keys, recordings, caches and machine configuration are excluded. Historical documents under `android/` describe older builds; `android/app/build.gradle` identifies this preview. Use JDK 17, Android SDK 35 and Build Tools 35.0.0; run `bash gradlew :app:assembleDebug` inside `android`. Compatible preview signing needs the existing private key through `VOICEFLOW_KEYSTORE`; it is not included. Verified 0.1.7/0.1.8/0.1.9/0.1.10 APKs use the same signing identity.

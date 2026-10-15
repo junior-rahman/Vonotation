@@ -45,6 +45,7 @@ final class Notes {
     private static java.lang.ref.WeakReference<Activity> screen=new java.lang.ref.WeakReference<>(null);
     static void callsMode(boolean on){callsOnly=on;thoughtsOnly=false;}
     static void thoughtsMode(){callsOnly=false;thoughtsOnly=true;}
+    static boolean hasThought(Context context,long id){synchronized(Store.class){JSONObject note=find(context,id);return note!=null && note.optBoolean("thought");}}
     static boolean thoughtOpened(Context context){JSONObject note=find(context,open);return note!=null && note.optBoolean("thought");}
     static boolean opened(){return open>=0;}
     /** Updater gate includes queued thought formatting until its guarded save finishes. */
@@ -478,7 +479,7 @@ final class Notes {
     }
     static String name(String code){for(int i=0;i<CODES.length;i++)if(CODES[i].equals(code))return NAMES[i];return code==null||code.isEmpty()?"Auto":code;}
     private static String titleOf(JSONObject note){
-        if(note.optBoolean("thought"))return note.optString("title",QuickThoughtPolicy.title(note.optString("text"),"Quick thought"));
+        if(note.optBoolean("thought")){String saved=note.optString("title","").trim();return saved.isEmpty()?QuickThoughtPolicy.title(note.optString("text"),"Quick thought"):saved;}
         if(note.optBoolean("call") && note.optString("text","").isEmpty() && note.optString("summary","").isEmpty()){String who=note.optString("who","");return who.isEmpty()?"Phone call":who;}
         String summary=note.optString("summary","").replace('\n',' ').trim();
         if(!summary.isEmpty()){int dot=summary.indexOf('.');String line=dot>20 && dot<90?summary.substring(0,dot):summary;return line.length()>80?line.substring(0,80).trim():line;}
@@ -818,7 +819,7 @@ final class Notes {
         thoughtWork.incrementAndGet();
         work.execute(()->{
             try {
-                String formatted=QuickThoughtPolicy.formatted(raw,new CloudApi(app).touchUp(raw));
+                QuickThoughtPolicy.Organized organized=new CloudApi(app).organizeThought(raw);
                 synchronized(Store.class){
                     JSONObject current=find(app,id);
                     // Deletion, a restore or an edit supersedes an in-flight response.
@@ -826,7 +827,7 @@ final class Notes {
                     String before=Store.get(app,"notes","[]");JSONArray old=new JSONArray(before),next=new JSONArray();
                     for(int i=0;i<old.length();i++){
                         JSONObject note=old.optJSONObject(i);if(note==null)continue;
-                        if(note.optLong("id")==id){note.put("text",formatted).put("title",QuickThoughtPolicy.title(formatted,"Quick thought")).put("revision",revision+1);}
+                        if(note.optLong("id")==id){note.put("text",organized.body).put("title",organized.title).put("revision",revision+1);}
                         next.put(note);
                     }
                     if(!Store.prefs(app).edit().putString("notes",next.toString()).commit())Store.prefs(app).edit().putString("notes",before).commit();

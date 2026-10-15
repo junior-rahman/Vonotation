@@ -1,0 +1,74 @@
+VonoTation 0.1.10-preview — October 15, 2026
+
+Quick thoughts discovery and organization correction.
+Package app.voiceflow | versionCode 82 | minSdk 26 | targetSdk 35
+
+Why the feature was difficult to find
+0.1.8 and 0.1.9 included Quick thoughts, but it was off by default and hidden
+inside the collapsed Dictation settings section. Its Thoughts home card was
+intentionally hidden while off, and no direct route selected the fifth card.
+Those builds used light punctuation cleanup and opening-word titles; this was
+less organization than the original feature request described.
+
+What changed
+- Quick thoughts has its own visible Settings section with an On/Off status,
+  using the existing settings card, switch and button design.
+- Turning it on selects the Thoughts card for the next return Home. Open
+  Thoughts is also available inside the enabled section. No microphone starts
+  without a deliberate Record thought or edge-dot tap.
+- The current Notes model now receives a structured title/body organization
+  request. It chooses relevant short source-anchored title wording and lays out
+  the spoken text in paragraphs or bullets where useful. It preserves the same
+  spoken-word order, names, numbers, symbols, uncertainty and language.
+- Original words are durably saved before organization. Unsupported responses,
+  changed meaning-bearing text, answers/refusals or translation are rejected;
+  the original and a neutral source-only title remain available. Edit/delete/
+  restore revision guards prevent late responses from overwriting newer work.
+  A valid organized body survives a rejected title by using the safe fallback title.
+- Save changes preserves existing organization when the capture text was not
+  edited. Actual edits remain authoritative; deleted thoughts are not recreated.
+
+How to use it
+1. Open Settings, then Quick thoughts, and switch it On.
+2. Tap Open Thoughts to reach its card, then Record thought; or leave VonoTation
+   and tap the faint edge dot when no input field is active.
+3. Speak, then Stop. The thought saves automatically before optional organization.
+4. Open a thought to read its organized text, view the original, edit or delete.
+
+The outside-app dot requires the existing Floating microphone accessibility
+service and microphone permission. Inside VonoTation use Record thought.
+With a text input focused, normal dictation remains unchanged. Expanded idle
+controls shrink after 60 seconds; active recording/processing keeps its active UI.
+Turning Quick thoughts Off hides its outside dot, Thoughts home card and thought
+views, while retaining saved notes. The setting remains available to re-enable it.
+
+Existing behavior
+The 0.1.9 updater, cursor-aware deletion and quiet Call Notes recovery fixes are
+retained. The four original home cards and shared Daybook/Ui/FloatingIcon design
+files are unchanged. Reminder scheduling remains a future feature.
+
+Verification
+Full Android assemblePreview build, Java/Kotlin compilation, DEX/resources,
+vital lint, all 20 pure Java suites and independent source review passed. The
+96 organization checks and 24 capture checks cover source words/numbers/symbols,
+safe bullet formatting,
+title constraints, language/uncertainty preservation, unchanged capture saves
+and safe fallback. Title checks are conservative best-effort safeguards, not a
+semantic proof. The
+source delta from 0.1.9 is 8 files; included patch applies to 0.1.9.
+APK SHA-256: 8456f37aaa7fd77f1cd9c8e89b8aad9bb0cbdb3aac664bd77c4306c306f33aed
+APK signing certificate SHA-256 (same verified 0.1.7/0.1.8/0.1.9 identity):
+5dca2219fbe89fb885b24c904fd4c57d3b58930922d21d455fc10d7a35f7568a
+
+Still unverified: phone/Samsung/Niagara UI and edge-dot behavior, live microphone/
+provider organization responses, actual permission/installer return and live
+backup/restore. No phone installation or live provider request was performed.
+AI organization can fall back to the original; the original is always retained.
+
+Source
+The VoiceFlow folder is editable source. Private signing keys, build outputs,
+local.properties, caches and redundant archives are excluded. Historical documents
+describe earlier builds; app/build.gradle and this file identify this preview.
+Use JDK 17, Android SDK 35 and Build Tools 35.0.0. From VoiceFlow:
+  bash gradlew :app:assembleDebug
+Compatible preview signing requires the existing key through VOICEFLOW_KEYSTORE.

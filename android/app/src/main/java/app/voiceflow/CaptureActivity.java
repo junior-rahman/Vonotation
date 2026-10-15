@@ -104,8 +104,14 @@ public final class CaptureActivity extends Activity implements Dictation.Listene
     private void accept() {
         String text=editor.getText().toString().trim(); if(text.isEmpty()) { notice.setText("Add some text or try another recording."); notice.setVisibility(android.view.View.VISIBLE); return; }
         if(thought){
-            if(!delivered){thoughtId=Notes.keepThought(this,System.currentTimeMillis(),raw,duration);delivered=thoughtId>0;}
-            if(!delivered || !Notes.editThought(this,thoughtId,text)){notice.setText("Could not save your thought. Your words are still here. Try again.");notice.setVisibility(android.view.View.VISIBLE);return;}
+            boolean newlySaved=false;
+            if(!delivered){thoughtId=Notes.keepThought(this,System.currentTimeMillis(),raw,duration);delivered=thoughtId>0;newlySaved=delivered;}
+            if(!delivered){notice.setText("Could not save your thought. Your words are still here. Try again.");notice.setVisibility(android.view.View.VISIBLE);return;}
+            if(!Notes.hasThought(this,thoughtId)){notice.setText("This thought was deleted. Your words are still here to copy.");notice.setVisibility(android.view.View.VISIBLE);return;}
+            if(QuickThoughtPolicy.hasUserEdits(raw,text)){
+                if(!Notes.editThought(this,thoughtId,text)){notice.setText("Could not save your changes. Your words are still here. Try again.");notice.setVisibility(android.view.View.VISIBLE);return;}
+            }else if(newlySaved)Notes.formatThought(getApplicationContext(),thoughtId);
+            // An untouched raw editor must not overwrite organized text or supersede its in-flight worker.
             finish();return;
         }
         synchronized(Store.class){if(!delivered)Store.save(this,raw,text,duration);delivered=true;DraftState.set(text);}finish();
