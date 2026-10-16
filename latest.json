@@ -1,9 +1,9 @@
 {
-  "versionCode": 87,
-  "versionName": "0.1.15-preview",
-  "apk": "https://github.com/junior-rahman/Vonotation/releases/download/v0.1.15-preview/VonoTation-0.1.15-preview.apk",
-  "sha256": "2c9efb767596be93d5556a425176c94d2a78c1f3839b671a22bf945f263c04b8",
-  "size": 6186026,
+  "versionCode": 88,
+  "versionName": "0.1.16-preview",
+  "apk": "https://github.com/junior-rahman/Vonotation/releases/download/v0.1.16-preview/VonoTation-0.1.16-preview.apk",
+  "sha256": "4512b02df1edff7722cd030e73330c7d80cf98209437bb86f2ae2c6b991b6d90",
+  "size": 6206674,
   "package": "app.voiceflow",
-  "notes": "Priority reliability fixes for Quick Thoughts and recording completion, Call Notes cleanup and reconnection alerts, cursor delete/paste, note processing and retries, encrypted text-backup verification, playback and safe in-app installation. Existing visuals are retained for this bugfix release. Phone/device testing remains pending."
+  "notes": "New Clipboard card with expandable daily copies, full text kept locally for 30 days and automatic expiry. The compact clipboard pill and tray remain. Also includes dictation that continues across apps until Finish, recording screen-awake, improved browser input detection, a distinct Thought icon with haptics, and concise thought summaries. Phone/device testing remains pending."
 }
