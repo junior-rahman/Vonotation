@@ -12,6 +12,15 @@ final class BackupIntegrationTests: XCTestCase {
         model = nil
         try? FileManager.default.removeItem(at: root)
     }
+    private func fixture(_ note: VonoNote) -> VonoNote {
+        var value = note
+        value.createdAt = Date(timeIntervalSince1970: floor(Date().timeIntervalSince1970))
+        value.updatedAt = value.createdAt
+        return value
+    }
+    private func clipboardFixture(_ text: String) -> ClipItem {
+        ClipItem(text: text, createdAt: Date(timeIntervalSince1970: floor(Date().timeIntervalSince1970)))
+    }
     private func loaded(_ snapshot: AppSnapshot) async throws -> AppModel {
         let store = LocalStore(rootURL: root)
         try await store.save(snapshot, generation: 1)
@@ -25,9 +34,9 @@ final class BackupIntegrationTests: XCTestCase {
     }
 
     func testExportIncludesCompletedTextAndExcludesClipboardAudioAndPendingWork() async throws {
-        let complete = VonoNote(kind: .thought, title: "Saved thought", transcript: "Completed original words", rawTranscript: "Completed original words", summary: "Completed thought", audioFileName: "saved.m4a", state: .ready)
+        let complete = fixture(VonoNote(kind: .thought, title: "Saved thought", transcript: "Completed original words", rawTranscript: "Completed original words", summary: "Completed thought", audioFileName: "saved.m4a", state: .ready))
         let pending = VonoNote(kind: .dictation, title: "Queued offline", audioFileName: "pending.m4a", state: .pending)
-        let clip = ClipItem(text: "PRIVATE CLIPBOARD MUST STAY LOCAL")
+        let clip = clipboardFixture("PRIVATE CLIPBOARD MUST STAY LOCAL")
         let value = try await loaded(AppSnapshot(notes: [complete, pending], clips: [clip]))
         let password = "Test backup passphrase 89"
         let archiveURL = try await value.exportBackup(password: password)
@@ -47,7 +56,7 @@ final class BackupIntegrationTests: XCTestCase {
     func testRestoreKeepsPendingAudioAndClipboardWhileReplacingCompletedText() async throws {
         let pending = VonoNote(kind: .thought, title: "Offline source", audioFileName: "queued.m4a", state: .pending)
         let old = VonoNote(kind: .dictation, title: "Old text", transcript: "Old completed text", rawTranscript: "Old completed text", state: .ready)
-        let clip = ClipItem(text: "Local Clipboard remains")
+        let clip = clipboardFixture("Local Clipboard remains")
         let value = try await loaded(AppSnapshot(notes: [pending, old], clips: [clip]))
         let store = LocalStore(rootURL: root)
         let source = try XCTUnwrap(store.audioURL(fileName: "queued.m4a"))
@@ -69,7 +78,7 @@ final class BackupIntegrationTests: XCTestCase {
     }
 
     func testWrongPasswordLeavesPublishedAndDurableDataUnchanged() async throws {
-        let original = VonoNote(kind: .dictation, title: "Keep this", transcript: "Keep all original text", rawTranscript: "Keep all original text", state: .ready)
+        let original = fixture(VonoNote(kind: .dictation, title: "Keep this", transcript: "Keep all original text", rawTranscript: "Keep all original text", state: .ready))
         let value = try await loaded(AppSnapshot(notes: [original]))
         let payload = BackupPayload(notes: [], settings: AppSettings())
         let archive = try BackupArchive.encrypt(json: LocalStore.encoder().encode(payload), password: "Correct passphrase")

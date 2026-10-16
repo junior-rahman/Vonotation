@@ -11,10 +11,19 @@ final class LocalStoreTests: XCTestCase {
         root = nil
     }
 
+    private func fixture(_ note: VonoNote) -> VonoNote {
+        var value = note
+        // JSON milliseconds intentionally do not preserve Date() submicrosecond bits.
+        // Exact model equality uses an exactly representable timestamp fixture.
+        value.createdAt = Date(timeIntervalSince1970: floor(Date().timeIntervalSince1970))
+        value.updatedAt = value.createdAt
+        return value
+    }
+
     func testLateOlderSaveCannotReplaceNewerSnapshot() async throws {
         let store = LocalStore(rootURL: root)
-        let old = AppSnapshot(notes: [VonoNote(kind: .dictation, title: "Old", transcript: "Old data")])
-        let current = AppSnapshot(notes: [VonoNote(kind: .dictation, title: "New", transcript: "Latest data")])
+        let old = AppSnapshot(notes: [fixture(VonoNote(kind: .dictation, title: "Old", transcript: "Old data"))])
+        let current = AppSnapshot(notes: [fixture(VonoNote(kind: .dictation, title: "New", transcript: "Latest data"))])
         try await store.save(current, generation: 12)
         try await store.save(old, generation: 11)
         let restored = try await store.load()
@@ -28,7 +37,7 @@ final class LocalStoreTests: XCTestCase {
         let audio = Data([1, 8, 3, 5, 13, 21])
         try audio.write(to: file)
         let source = String(repeating: "A complete long transcript 🗒️\n", count: 500)
-        let pending = VonoNote(kind: .thought, title: "Waiting for connection", transcript: source, rawTranscript: source, audioFileName: "queued-audio.m4a", state: .pending)
+        let pending = fixture(VonoNote(kind: .thought, title: "Waiting for connection", transcript: source, rawTranscript: source, audioFileName: "queued-audio.m4a", state: .pending))
         let snapshot = AppSnapshot(notes: [pending])
         try await store.save(snapshot, generation: 1)
         let relaunched = LocalStore(rootURL: root)

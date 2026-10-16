@@ -21,15 +21,22 @@ final class DaybookUITests: XCTestCase {
 
     private func openCard(_ id: String) {
         let button = app.buttons[id]
-        // Reset to the leading edge before seeking a card that may be off either side.
-        if !button.isHittable {
+        let navigation = app.scrollViews.firstMatch
+        // XCTest can raise an activation-point failure when isHittable is queried
+        // for an offscreen SwiftUI button. Seek by native geometry before tapping.
+        func isInsideNavigation() -> Bool {
+            guard button.exists else { return false }
+            let frame = button.frame, viewport = navigation.frame.intersection(app.frame)
+            return !frame.isEmpty && frame.minX >= viewport.minX && frame.maxX <= viewport.maxX
+        }
+        if !isInsideNavigation() {
             for _ in 0..<3 { app.scrollViews.firstMatch.swipeRight() }
         }
-        for _ in 0..<6 where !button.isHittable {
-            app.scrollViews.firstMatch.swipeLeft()
+        for _ in 0..<6 where !isInsideNavigation() {
+            navigation.swipeLeft()
         }
         XCTAssertTrue(button.waitForExistence(timeout: 5), id)
-        XCTAssertTrue(button.isHittable, id)
+        XCTAssertTrue(isInsideNavigation(), id)
         button.tap()
     }
 

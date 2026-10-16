@@ -112,15 +112,19 @@ struct DaybookHome: View {
                 guard url.scheme == "vonotation" else { return }
                 let action = url.host ?? ""
                 if action == "thought" || action == "record-thought" {
-                    page = .thoughts
                     Task {
-                        do { try await VonoRuntime.begin(kind: .thought) }
+                        do {
+                            try await VonoRuntime.begin(kind: .thought)
+                            if model.settings.quickThoughts { page = .thoughts }
+                        }
                         catch { model.errorMessage = error.localizedDescription }
                     }
                 } else if action == "dictate" {
-                    page = .dictations
                     Task {
-                        do { try await VonoRuntime.begin(kind: .dictation) }
+                        do {
+                            try await VonoRuntime.begin(kind: .dictation)
+                            page = .dictations
+                        }
                         catch { model.errorMessage = error.localizedDescription }
                     }
                 }

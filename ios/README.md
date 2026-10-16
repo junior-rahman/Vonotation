@@ -59,13 +59,13 @@ The script fails if Xcode, an available iPhone simulator or an available iPad si
 On a Mac runner it:
 
 1. Checks the source inventory against the actual checked-in Xcode project.
-2. Builds the native application and native XCTest/XCUITest bundles.
+2. Builds the native application and native XCTest/XCUITest bundles, then checks the actual generated metadata for both recording intents and their shortcut phrases.
 3. Runs policy, encrypted archive, full-text persistence and UI tests on both an available iPhone and iPad simulator.
 4. Captures native simulator screenshots of Home, Dictation, Thoughts, Clipboard and Settings. These screenshots use explicitly isolated **DEBUG UI fixtures**, not user data or live provider results.
 5. Compiles the Release application with the physical-device iOS SDK, with signing disabled.
 6. Builds a Release simulator archive and records source/artifact hashes in `build/ci/VERIFICATION.json` only after every command above succeeds.
 
-GitHub Actions uses the repository’s `.github/workflows/ios-ci.yml`. Failed runs retain logs and `.xcresult` evidence; simulator artifacts are exposed only when the verification step succeeds. A green run covers the listed tests, not every possible app/device/network combination.
+GitHub Actions uses the repository’s `.github/workflows/ios-ci.yml`. Failed runs retain logs, `.xcresult` evidence and exported native test attachments; simulator artifacts are exposed only when the verification step succeeds. Diagnostic failure screenshots are kept separately from the ten planned review screenshots. A green run covers the listed tests, not every possible app/device/network combination.
 
 The initial source was prepared on Linux, where Xcode and Apple simulators are unavailable. **Do not label this preview as natively tested unless the corresponding macOS CI run and its `VERIFICATION.json` have actually succeeded.** Physical hardware audio quality, long background recordings, user signing/provisioning, live provider accounts and App Store review still require their respective environments.
 

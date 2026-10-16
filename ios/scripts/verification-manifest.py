@@ -30,6 +30,10 @@ for family in ("iPhone", "iPad"):
         raise SystemExit(f"Native tests incomplete for {family}: expected {expected_tests}, actual {counts}")
     test_summaries[family] = {"counts": counts, "summary_sha256": sha(out / f"{family}-test-summary.json"), "tree_sha256": sha(out / f"{family}-test-tree.json")}
 source_zip = out / "VonoTation-iOS-0.1.17-source.zip"
+intent_report_path = out / "intent-metadata-validation.json"
+intent_report = json.loads(intent_report_path.read_text())
+if not intent_report.get("checks") or not all(intent_report["checks"].values()):
+    raise SystemExit("Generated App Intent metadata validation is incomplete")
 with zipfile.ZipFile(source_zip, "w", compression=zipfile.ZIP_DEFLATED) as bundle:
     for path in source_paths:
         bundle.write(path, "VonoTation-iOS/" + path.relative_to(root).as_posix())
@@ -41,6 +45,7 @@ manifest = {
     "source_payload_sha256": hashlib.sha256(json.dumps(sources, sort_keys=True, separators=(",", ":")).encode()).hexdigest(),
     "device_sdk_build_results": json.loads((out / "device-sdk-build.json").read_text()),
     "device_sdk_build_log_sha256": sha(out / "logs/device-sdk-build.log"),
+    "intent_metadata_validation": {"sha256": sha(intent_report_path), "checks": intent_report["checks"]},
     "checks": {"iphone_xctest_xcuitest": "passed", "ipad_xctest_xcuitest": "passed", "iphoneos_sdk_compile_unsigned": "passed", "simulator_archive": "passed"},
     "not_tested": ["Physical iPhone/iPad hardware", "Real microphone quality and long background recording on hardware", "User Apple Account signing and provisioning", "Live paid transcription provider credentials", "App Store/TestFlight distribution"],
     "artifact": {"name": simulator_zip.name, "size": simulator_zip.stat().st_size, "sha256": sha(simulator_zip), "install_target": "iOS Simulator on a Mac; not an installable iPhone IPA"},
