@@ -244,6 +244,7 @@ final class Translate {
 
     private static void arm(Activity activity,Runnable refresh,boolean oneWay) {
         if(paused||speaking||hushed||activity.isFinishing())return;
+        if(Dictation.isWorking()){Toast.makeText(activity,"Finish your dictation first.",Toast.LENGTH_LONG).show();return;}
         if(CaptureBarrier.installPending(activity)){Toast.makeText(activity,"Finish or cancel the app update before recording.",Toast.LENGTH_LONG).show();return;}
         if(VoiceTake.noteRunning() || VoiceTake.thoughtRunning())return;
         if(VoiceTake.callRunning() || LineWire.running())return;
@@ -397,12 +398,13 @@ final class Translate {
 
     private static void capture(Activity activity,Runnable refresh,boolean oneWay) {
         if(listening||paused||speaking||hushed)return;
+        if(Dictation.isWorking()){session=false;paused=true;dropEar();refresh.run();return;}
         if(CaptureBarrier.installPending(activity)){session=false;listening=false;Toast.makeText(activity,"Finish or cancel the app update before recording.",Toast.LENGTH_LONG).show();refresh.run();return;}
         if(activity.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){if(!askedMic){askedMic=true;activity.requestPermissions(new String[]{android.Manifest.permission.RECORD_AUDIO},22);}return;}
         session=true;sessionKind=oneWay?LISTEN:TOGETHER;listening=true;
         VoiceTake.begin(activity,new VoiceTake.Listener(){
             public void listening(){activity.runOnUiThread(refresh);}
-            public void failed(String message){activity.runOnUiThread(()->{listening=false;if(keepGoing(message)){capture(activity,refresh,oneWay);return;}if(session && !paused && !speaking){capture(activity,refresh,oneWay);return;}if(message!=null && !message.isEmpty())Toast.makeText(activity,message,Toast.LENGTH_LONG).show();refresh.run();});}
+            public void failed(String message){activity.runOnUiThread(()->{listening=false;if(keepGoing(message)&&!paused&&!speaking){activity.getWindow().getDecorView().postDelayed(()->{if(session&&!paused&&!speaking)capture(activity,refresh,oneWay);},350);return;}endListen();paused=true;if(message!=null&&!message.isEmpty())Toast.makeText(activity,message,Toast.LENGTH_LONG).show();refresh.run();});}
             public void finished(File file){activity.runOnUiThread(()->{listening=false;interpret(activity,file,refresh,oneWay);});}
         },true);
         refresh.run();

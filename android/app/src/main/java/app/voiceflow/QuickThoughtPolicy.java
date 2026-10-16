@@ -3,7 +3,7 @@ package app.voiceflow;
 /** Pure rules for opt-in thought capture. No commands, translation or AI replies. */
 final class QuickThoughtPolicy {
     static final long IDLE_MS=60_000L;
-    static final int SUMMARY_VERSION=2;
+    static final int SUMMARY_VERSION=3;
     static boolean visible(boolean enabled,boolean interactive,boolean locked,boolean appOpen,boolean captureOpen,boolean inputActive,boolean recording){
         return enabled && interactive && !locked && !appOpen && !captureOpen && !inputActive && !recording;
     }
@@ -12,8 +12,8 @@ final class QuickThoughtPolicy {
     }
     static final class Organized {
         final String title,body,summary;
-        final boolean accepted;
-        Organized(String title,String body,String summary,boolean accepted){this.title=title;this.body=body;this.summary=summary;this.accepted=accepted;}
+        final boolean accepted,summarized;
+        Organized(String title,String body,String summary,boolean accepted,boolean summarized){this.title=title;this.body=body;this.summary=summary;this.accepted=accepted;this.summarized=summarized;}
     }
     /** A malformed or unfaithful response never replaces the complete original. */
     static Organized organizeReply(String raw,String response){
@@ -29,63 +29,139 @@ final class QuickThoughtPolicy {
         String source=raw==null?"":raw.trim();
         if(!bodyAccepted(source,proposedBody))return fallback(raw);
         String title=titleAccepted(source,proposedTitle)?proposedTitle.trim():title(source,"Quick thought");
-        String summary=detailedSummary(source,proposedSummary);
-        return new Organized(title,proposedBody.trim(),summary,true);
+        Summary summary=summaryReply(source,proposedSummary);
+        return new Organized(title,proposedBody.trim(),summary.text,true,summary.accepted);
     }
-    private static Organized fallback(String raw){String source=raw==null?"":raw.trim();return new Organized(title(source,"Quick thought"),source,summary(source),false);}
-    /** Detailed excerpts: complete source sentences, with coverage across the note and no lost caveats. */
+    private static Organized fallback(String raw){String source=raw==null?"":raw.trim();return new Organized(title(source,"Quick thought"),source,summary(source),false,false);}
+    /** A concise paraphrase may differ from the transcript; these checks reject obvious unsupported facts.
+     * They are conservative lexical guards, not a proof of semantic equivalence. The full body has its
+     * separate exact-word guard and is never replaced by a summary. */
     static boolean summaryAccepted(String raw,String candidate){
-        if(raw==null||candidate==null||candidate.trim().isEmpty()||candidate.length()>raw.length()*4L+1024)return false;
-        java.util.List<SummarySentence> source=summarySentences(raw),chosen=summarySentences(candidate);
-        if(chosen.isEmpty()||chosen.size()<summaryCount(source.size())||chosen.size()>source.size())return false;
-        int sourceWords=0,chosenWords=0;for(SummarySentence sentence:source)sourceWords+=sentence.words;for(SummarySentence sentence:chosen)chosenWords+=sentence.words;
-        if(chosenWords<(sourceWords+1)/2)return false;
-        int next=0,bands=source.size()>4?4:1,coverage=0;StringBuilder matched=new StringBuilder();
-        for(SummarySentence excerpt:chosen){
-            boolean found=false;
-            for(;next<source.size();next++){
-                SummarySentence original=source.get(next);
-                if(bodyAccepted(original.text,excerpt.text)&&questionMark(original.text)==questionMark(excerpt.text)){found=true;matched.append(original.text).append('\n');coverage|=1<<Math.min(bands-1,next*bands/source.size());next++;break;}
-                if(original.required)return false;
+        if(raw==null||candidate==null||candidate.trim().isEmpty()||candidate.length()>raw.length()*2L+256)return false;
+        java.util.List<Token> sourceWords=tokens(raw),summaryWords=tokens(candidate);
+        if(sourceWords.isEmpty()||summaryWords.isEmpty()||LanguagePolicy.scriptDrift(raw,candidate))return false;
+        int size=sourceWords.size(),count=summaryWords.size();
+        // A short phrase may already be its own gist. Longer notes must actually be condensed.
+        if(size>12 && count>=size)return false;
+        if(size>=30 && count>Math.max(12,(int)Math.ceil(size*.55)))return false;
+        if(!containsItems(TranscriptGuard.numbers(raw),TranscriptGuard.numbers(candidate))
+            ||!containsSymbols(TranscriptGuard.symbols(raw),TranscriptGuard.symbols(candidate))
+            ||!containsItems(spacedSigns(raw),spacedSigns(candidate))
+            ||!containsSymbols(extraSymbols(raw),extraSymbols(candidate)))return false;
+        java.util.Set<String> vocabulary=contentWords(raw),proposed=contentWords(candidate);
+        int supported=0;for(String word:proposed)if(vocabulary.contains(word))supported++;
+        if(proposed.isEmpty()||(vocabulary.size()>2&&proposed.size()<2)||supported<Math.min(2,proposed.size())||supported*100<proposed.size()*45||!namesGrounded(raw,candidate))return false;
+        java.util.List<SummarySentence> source=summarySentences(raw);
+        for(SummarySentence part:summarySentences(candidate)){
+            java.util.Set<String> words=contentWords(part.text);SummarySentence best=null;int bestScore=0;
+            for(SummarySentence original:source){
+                int score=overlap(words,original.content);
+                // Later equal matches win so an earlier claim cannot hide its later correction.
+                if(score>0 && score>=bestScore){bestScore=score;best=original;}
             }
+            if(best==null||bestScore<Math.min(2,words.size())||!qualifiersKept(best.text,part.text))return false;
+            if(!numericContextKept(best.text,part.text))return false;
+        }
+        return true;
+    }
+    static final class Summary {
+        final String text;final boolean accepted;
+        Summary(String text,boolean accepted){this.text=text;this.accepted=accepted;}
+    }
+    static Summary summaryReply(String raw,String candidate){boolean accepted=summaryAccepted(raw,candidate);return new Summary(accepted?candidate.trim():summary(raw),accepted);}
+    static String detailedSummary(String raw,String candidate){return summaryReply(raw,candidate).text;}
+    private static final String SUMMARY_STOP=" i me my we our you your he she they them his her their a an the this that these those and or to of for on in at is are was were be been being have has had do does did it its just really very some something thing thought thoughts note quick then so with as also because from by into one more much all any about ";
+    private static final String NEGATIVE=" no not never unapproved unconfirmed undecided cannot can't don't doesn't didn't won't wouldn't shouldn't couldn't isn't aren't wasn't weren't haven't hasn't hadn't mustn't needn't shan't ain't refuse refuses refused avoid avoids avoided cancel cancels canceled cancelled decline declines declined reject rejects rejected deny denies denied without না নয় হয়নি na nai noy nah नहीं ";
+    private static final String TENTATIVE=" maybe may might could would should perhaps possibly probably unsure uncertain unclear undecided unlikely unconfirmed unverified unproven reluctant hesitant doubt doubts doubtful whether wonder wondering think thinking hope hoping wish consider considering হয়তো সম্ভবত hoyto hoytoba shombhoboto शायद quizás quizas ";
+    private static final String CONDITION=" if unless until only যদি jodi अगर si ";
+    private static final String ACTION=" buy sell call pay send book cancel order move measure paint repaint prepare deliver ship leave bring keep delete save record meet approve approved reject rejected accept accepted ";
+    private static java.util.Set<String> contentWords(String text){java.util.LinkedHashSet<String> result=new java.util.LinkedHashSet<>();for(Token word:tokens(text))if(!listed(SUMMARY_STOP,word.word))result.add(folded(word.word));return result;}
+    private static boolean namesGrounded(String source,String candidate){
+        java.util.HashSet<String> known=new java.util.HashSet<>();for(Token word:tokens(source))known.add(folded(word.word));
+        for(Token word:tokens(candidate)){
+            if(!Character.isUpperCase(word.word.codePointAt(0))||known.contains(folded(word.word)))continue;
+            int before=word.start-1;while(before>=0&&Character.isWhitespace(candidate.charAt(before)))before--;
+            if(before>=0&&".!?।。！？؟•".indexOf(candidate.charAt(before))<0)return false;
+        }
+        return true;
+    }
+    private static int overlap(java.util.Set<String> a,java.util.Set<String> b){int count=0;for(String word:a)if(b.contains(word))count++;return count;}
+    private static boolean containsItems(java.util.List<String> source,java.util.List<String> selected){java.util.ArrayList<String> remaining=new java.util.ArrayList<>(source);for(String item:selected)if(!remaining.remove(item))return false;return true;}
+    private static boolean containsSymbols(String source,String candidate){java.util.ArrayList<String> before=new java.util.ArrayList<>(),after=new java.util.ArrayList<>();for(int at=0;at<source.length();){int cp=source.codePointAt(at);at+=Character.charCount(cp);before.add(new String(Character.toChars(cp)));}for(int at=0;at<candidate.length();){int cp=candidate.codePointAt(at);at+=Character.charCount(cp);after.add(new String(Character.toChars(cp)));}return containsItems(before,after);}
+    private static boolean has(String text,String list){for(Token word:tokens(text))if(listed(list,word.word))return true;return false;}
+    private static boolean negativeScopeKept(String source,String candidate){
+        // "Do not want a reminder to buy milk" cannot turn into "Do not buy milk".
+        // Ordinary negative paraphrases (not approved / unapproved) need no exact-word match.
+        java.util.List<Token> words=tokens(source);
+        for(int i=0;i+1<words.size();i++)if(listed(NEGATIVE,words.get(i).word)&&listed(" want wish desire need ",words.get(i+1).word)){
+            if(!has(candidate," want wish desire need reminder request "))return false;
+        }
+        return true;
+    }
+    private static boolean qualifiersKept(String source,String candidate){
+        if(has(source,NEGATIVE)!=has(candidate,NEGATIVE)||has(source,TENTATIVE)!=has(candidate,TENTATIVE))return false;
+        if(!negativeScopeKept(source,candidate))return false;
+        for(Token word:tokens(source))if(listed(CONDITION,word.word)&&!has(candidate," "+folded(word.word)+" "))return false;
+        boolean sourceQuestion=questionMark(source),summaryQuestion=questionMark(candidate)||has(candidate," whether unresolved unknown ");
+        if(sourceQuestion&&!summaryQuestion)return false;
+        return !questionMark(candidate)||sourceQuestion||has(source,TENTATIVE);
+    }
+    /** Do not reassign an amount to another action when compressing a compound source sentence. */
+    private static boolean numericContextKept(String source,String candidate){
+        if(TranscriptGuard.numbers(candidate).isEmpty())return true;
+        java.util.List<Token> original=tokens(source),proposed=tokens(candidate);
+        for(int i=0;i<proposed.size();i++)if(proposed.get(i).word.matches(".*\\p{N}.*")){
+            String value=TranscriptGuard.digits(proposed.get(i).word),action=priorAction(proposed,i);boolean found=false;
+            for(int n=0;n<original.size();n++)if(value.equals(TranscriptGuard.digits(original.get(n).word))&&(action.isEmpty()||action.equals(priorAction(original,n)))){found=true;break;}
             if(!found)return false;
         }
-        for(;next<source.size();next++)if(source.get(next).required)return false;
-        return coverage==(1<<bands)-1&&bodyAccepted(matched.toString(),candidate);
+        return true;
     }
-    static String detailedSummary(String raw,String candidate){return summaryAccepted(raw,candidate)?candidate.trim():summary(raw);}
-    private static int summaryCount(int size){return size<=4?size:(2*size+2)/3;}
+    private static String priorAction(java.util.List<Token> words,int at){for(int i=at-1;i>=0;i--)if(listed(ACTION,words.get(i).word))return folded(words.get(i).word);return "";}
     private static final class SummarySentence {
-        final String text;final int words;final boolean required;
-        SummarySentence(String text){this.text=text;java.util.List<Token> parts=tokens(text);words=parts.size();boolean keep=questionMark(text);for(Token word:parts)if(listed(PROTECTED,word.word)||listed(" correction corrected actually ",word.word))keep=true;required=keep;}
+        final String text;final int words;final java.util.Set<String> content;
+        SummarySentence(String text){this.text=text;words=tokens(text).size();content=contentWords(text);}
     }
     private static java.util.List<SummarySentence> summarySentences(String raw){
-        java.util.ArrayList<SummarySentence> result=new java.util.ArrayList<>();for(String part:sentences(raw)){SummarySentence sentence=new SummarySentence(part);if(sentence.words>0)result.add(sentence);}return result;
-    }
-    /** Proportionate local fallback keeps the beginning, middle, ending, and every stated caveat. */
-    static String summary(String raw){
-        String text=raw==null?"":raw.trim();java.util.List<SummarySentence> source=summarySentences(text);int size=source.size();
-        if(size==0)return text;
-        boolean[] selected=new boolean[size];int target=summaryCount(size),totalWords=0,keptWords=0;
-        for(int i=0;i<size;i++){totalWords+=source.get(i).words;if(source.get(i).required)selected[i]=true;}
-        for(int i=0;i<target;i++)selected[target==1?0:(int)Math.round((double)i*(size-1)/(target-1))]=true;
-        int bands=size>4?4:1;
-        for(int band=0;band<bands;band++){
-            int first=(size*band+bands-1)/bands,end=(size*(band+1)+bands-1)/bands;boolean covered=false;
-            for(int i=first;i<end;i++)if(selected[i]){covered=true;break;}
-            if(!covered)selected[(first+end-1)/2]=true;
+        java.util.ArrayList<SummarySentence> result=new java.util.ArrayList<>();
+        String normalized=raw.replaceAll("(?m)^[ \\t]*•[ \\t]+","").replaceAll("[\\r\\n]+"," ");
+        for(String sentence:sentences(normalized))for(String part:independentClauses(sentence)){
+            SummarySentence item=new SummarySentence(part.trim());if(item.words>0)result.add(item);
         }
-        java.util.ArrayList<Integer> omitted=new java.util.ArrayList<>();for(int i=0;i<size;i++)if(selected[i])keptWords+=source.get(i).words;else omitted.add(i);
-        java.util.Collections.sort(omitted,(a,b)->Integer.compare(source.get(b).words,source.get(a).words));
-        for(int at:omitted){if(keptWords>=(totalWords+1)/2)break;selected[at]=true;keptWords+=source.get(at).words;}
-        String excerpt=joinSummary(source,selected);
-        // Repeated identical sentences can make the conservative source alignment ambiguous.
-        // Keep the complete source in that case rather than guess which occurrence was selected.
-        return summaryAccepted(text,excerpt)?excerpt:joinSummary(source,null);
+        return result;
     }
-    private static String joinSummary(java.util.List<SummarySentence> source,boolean[] selected){
-        StringBuilder out=new StringBuilder();int count=0;for(int i=0;i<source.size();i++)if(selected==null||selected[i]){if(count>0)out.append(count%3==0?"\n\n":" ");out.append(source.get(i).text);count++;}return out.toString();
+    /** Semicolons can separate independent ideas; a leading condition and quoted text stay intact. */
+    private static java.util.List<String> independentClauses(String text){
+        java.util.ArrayList<String> result=new java.util.ArrayList<>();
+        if(text.matches("(?is)^(?:if|unless|until|when|once)\\b.*")){result.add(text);return result;}
+        int start=0,depth=0;boolean quoted=false;
+        for(int i=0;i<text.length();i++){
+            char c=text.charAt(i);if(c=='"'||c=='“'||c=='”'){quoted=!quoted;continue;}
+            if(c=='('||c=='['||c=='{'){depth++;continue;}if(c==')'||c==']'||c=='}'){depth=Math.max(0,depth-1);continue;}
+            if(c==';'&&!quoted&&depth==0){String part=text.substring(start,i).trim();if(!part.isEmpty())result.add(part+".");start=i+1;}
+        }
+        String tail=text.substring(start).trim();if(!tail.isEmpty())result.add(tail);return result;
     }
+    /** Offline gist: select a few useful complete source ideas instead of presenting the whole
+     * transcript again. If one unstructured long sentence cannot be shortened safely, leave the
+     * summary empty until a provider can paraphrase it; the full transcript is already preserved. */
+    static String summary(String raw){
+        String text=raw==null?"":raw.trim();java.util.List<SummarySentence> source=summarySentences(text);
+        int total=tokens(text).size();if(total==0)return "";
+        java.util.ArrayList<SummarySentence> unique=new java.util.ArrayList<>();java.util.HashSet<String> seen=new java.util.HashSet<>();
+        for(SummarySentence sentence:source){String shortened=trimSummaryFiller(sentence.text);String key=tokenKey(shortened);if(seen.add(key))unique.add(new SummarySentence(shortened));}
+        if(total<=12){StringBuilder gist=new StringBuilder();for(SummarySentence sentence:unique){if(gist.length()>0)gist.append(' ');gist.append(sentence.text);}return gist.toString();}
+        int budget=Math.max(8,(int)Math.ceil(total*.35));int maxWords=Math.max(12,(int)Math.ceil(total*.55));
+        java.util.ArrayList<Integer> order=new java.util.ArrayList<>();for(int i=0;i<unique.size();i++)order.add(i);
+        java.util.Collections.sort(order,(a,b)->Integer.compare(summaryScore(unique.get(b),b,unique.size()),summaryScore(unique.get(a),a,unique.size())));
+        java.util.HashSet<Integer> selected=new java.util.HashSet<>();int kept=0;
+        for(int at:order){SummarySentence sentence=unique.get(at);if(sentence.words>maxWords||(kept>0&&kept+sentence.words>budget))continue;if(selected.size()>=4)break;selected.add(at);kept+=sentence.words;if(kept>=budget)break;}
+        StringBuilder gist=new StringBuilder();for(int i=0;i<unique.size();i++)if(selected.contains(i)){if(gist.length()>0)gist.append("\n\n");gist.append(unique.get(i).text);}
+        String result=gist.toString();return summaryAccepted(text,result)?result:"";
+    }
+    private static int summaryScore(SummarySentence sentence,int at,int size){int score=contentWords(sentence.text).size()*3-Math.max(0,sentence.words-24);if(at==0)score+=24;else if(at==size-1)score+=6;if(has(sentence.text,NEGATIVE)||has(sentence.text,TENTATIVE)||questionMark(sentence.text))score+=5;if(has(sentence.text," correction corrected actually instead "))score+=20;return score;}
+    private static String tokenKey(String text){StringBuilder key=new StringBuilder();for(Token word:tokens(text))key.append(folded(word.word)).append(' ');return key.toString();}
+    private static String trimSummaryFiller(String text){return text.replaceFirst("(?i)^(?:(?:okay|well|um|uh)[, ]+|I (?:just )?wanted to (?:make|leave) a (?:quick )?note (?:that|about) +|this is (?:just )?(?:a )?(?:quick )?(?:thought|note) about +)+","").trim();}
     private static final String ABBREVIATIONS=" mr mrs ms dr prof sr jr st vs etc eg ie fig no approx inc ltd ";
     private static boolean questionMark(String text){return text.indexOf('?')>=0||text.indexOf('？')>=0||text.indexOf('؟')>=0;}
     /** Conservative boundaries: decimals, initials, abbreviations, and quoted/nested punctuation stay together. */

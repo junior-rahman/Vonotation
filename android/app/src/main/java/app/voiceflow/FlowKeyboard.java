@@ -29,10 +29,10 @@ public final class FlowKeyboard extends InputMethodService implements Dictation.
     private int selectionStart=-1,selectionEnd=-1;
     private long selectionRevision,targetSelectionRevision;
     private int sensitiveStart,sensitiveEnd,sensitiveCursor;
-    private String targetPackage="",lastPackage="",lastPartial="";
+    private String targetPackage="",lastPartial="";
     private String pendingRaw="",pendingText="",pendingWarning="";
     private boolean pendingWriteAccepted;
-    private int lastField,targetField;
+    private int targetField;
     private Dictation dictation;
     private EditorInsertion insertion;
     private boolean busy,finishing,inputActive,inputWindowRequested;
@@ -45,12 +45,14 @@ public final class FlowKeyboard extends InputMethodService implements Dictation.
     @Override public View onCreateInputView(){return null;}
     boolean hasInputSession(){return inputActive && getCurrentInputConnection()!=null;}
     boolean hasActiveEditor(){EditorInfo info=getCurrentInputEditorInfo();return hasInputSession() && info!=null && info.inputType!=InputType.TYPE_NULL;}
+    /** Clipboard callbacks may inspect cached IME metadata, never an accessibility node. */
+    static boolean clipboardSensitiveContext(){FlowKeyboard owner=instance;if(owner==null || !owner.inputActive)return false;EditorInfo info=owner.getCurrentInputEditorInfo();return info!=null && isPasswordType(info.inputType);}
     boolean inputWindowRequestedFor(CharSequence packageName){EditorInfo info=getCurrentInputEditorInfo();return inputWindowRequested && hasActiveEditor() && info!=null && packageName!=null && packageName.toString().equals(info.packageName);}
     /** Track explicit show/hide requests even though this IME has no visible window. */
     @Override public AbstractInputMethodImpl onCreateInputMethodInterface(){
         return new InputMethodImpl(){
             @Override public void showSoftInput(int flags,android.os.ResultReceiver receiver){inputWindowRequested=true;super.showSoftInput(flags,receiver);refreshBubble();}
-            @Override public void hideSoftInput(int flags,android.os.ResultReceiver receiver){inputWindowRequested=false;finishInterrupted();super.hideSoftInput(flags,receiver);refreshBubble();}
+            @Override public void hideSoftInput(int flags,android.os.ResultReceiver receiver){inputWindowRequested=false;super.hideSoftInput(flags,receiver);refreshBubble();}
         };
     }
     boolean isRecording(){return busy;}
@@ -60,7 +62,6 @@ public final class FlowKeyboard extends InputMethodService implements Dictation.
     void floatingMic(){if(busy){if(!finishing && dictation!=null)dictation.stop();}else record();}
     void showTypingKeyboard(){
         if(getCurrentInputConnection()==null)return;
-        finishInterrupted();
         InputMethodManager manager=(InputMethodManager)getSystemService(INPUT_METHOD_SERVICE);
         String preferred=Store.get(this,"typing_keyboard","");
         for(android.view.inputmethod.InputMethodInfo ime:manager.getEnabledInputMethodList())if(!ime.getPackageName().equals(getPackageName()) && ime.getId().equals(preferred)){switchInputMethod(ime.getId());return;}
@@ -70,18 +71,18 @@ public final class FlowKeyboard extends InputMethodService implements Dictation.
     }
     @Override public void onStartInput(EditorInfo info,boolean restarting){
         super.onStartInput(info,restarting);
-        if(busy && sensitive){finishInterrupted();session++;}
-        if(!restarting || !lastPackage.equals(info.packageName) || lastField!=info.fieldId){
-            finishInterrupted();session++;
-        }
-        lastPackage=info.packageName;lastField=info.fieldId;selectionStart=info.initialSelStart;selectionEnd=info.initialSelEnd;inputActive=true;refreshBubble();
+        // A recording belongs to the editor session in which it began. Keep the
+        // microphone alive while Android replaces/hides input connections, but
+        // never let an old dictation follow a new editor into another field.
+        session++;
+        selectionStart=info.initialSelStart;selectionEnd=info.initialSelEnd;inputActive=true;refreshBubble();
         if(requiresTyping(info) && FlowAccessibility.instance==null)handler.post(()->{if(hasInputSession() && requiresTyping(getCurrentInputEditorInfo()))showTypingKeyboard();});
         if(!requiresTyping(info) && FlowAccessibility.instance==null && !setupNoticeShown){setupNoticeShown=true;Toast.makeText(this,"Enable Floating microphone in VonoTation Settings to show the keyboard controls.",Toast.LENGTH_LONG).show();}
         if(FlowAccessibility.instance!=null)setupNoticeShown=false;
     }
     @Override public void onStartInputView(EditorInfo info,boolean restarting){super.onStartInputView(info,restarting);refreshControls();refreshBubble();}
-    @Override public void onFinishInputView(boolean finishingInput){finishInterrupted();super.onFinishInputView(finishingInput);refreshBubble();}
-    @Override public void onFinishInput(){inputActive=false;inputWindowRequested=false;finishInterrupted();session++;super.onFinishInput();refreshBubble();}
+    @Override public void onFinishInputView(boolean finishingInput){if(finishingInput)session++;super.onFinishInputView(finishingInput);refreshBubble();}
+    @Override public void onFinishInput(){inputActive=false;inputWindowRequested=false;session++;super.onFinishInput();refreshBubble();}
     @Override public void onUpdateSelection(int oldStart,int oldEnd,int newStart,int newEnd,int candidatesStart,int candidatesEnd){
         super.onUpdateSelection(oldStart,oldEnd,newStart,newEnd,candidatesStart,candidatesEnd);if(selectionStart!=newStart || selectionEnd!=newEnd)selectionRevision++;selectionStart=newStart;selectionEnd=newEnd;
     }
@@ -113,7 +114,7 @@ public final class FlowKeyboard extends InputMethodService implements Dictation.
     }
     private void setStatus(String value){floatingStatus=value;refreshBubble();}
     private boolean privateEditor(){return isPassword(getCurrentInputEditorInfo()) || (FlowAccessibility.instance!=null && FlowAccessibility.instance.focusedInputIsSensitive());}
-    private boolean sameTarget(){EditorInfo info=getCurrentInputEditorInfo();return info!=null && session==targetSession && targetPackage.equals(info.packageName) && targetField==info.fieldId && (sensitive?isPassword(info):!privateEditor());}
+    private boolean sameTarget(){EditorInfo info=getCurrentInputEditorInfo();return hasInputSession() && info!=null && session==targetSession && targetPackage.equals(info.packageName) && targetField==info.fieldId && (sensitive?isPassword(info):!privateEditor());}
     void sensitiveInputChanged(){if(busy && sensitive && !sensitiveAttempted && sameTarget())sensitiveEdited=true;}
     private final EditorInsertion.Port port=new EditorInsertion.Port(){
         public boolean current(){return sameTarget();}
@@ -164,7 +165,7 @@ public final class FlowKeyboard extends InputMethodService implements Dictation.
     private String foregroundNotice=RecordingNotice.NONE;
     @Override public int onStartCommand(Intent intent,int flags,int id){if(intent!=null && "app.voiceflow.STOP_KEYBOARD".equals(intent.getAction()) && dictation!=null)dictation.stop();stopSelf(id);return START_NOT_STICKY;}
     @Override public void state(String value){if(!busy)return;finishing=dictation!=null && dictation.isFinishing();refreshControls();setStatus(value);}
-    @Override public void partial(String text){if(!busy || text.trim().isEmpty())return;lastPartial=text;if(sensitive)return;if(insertion!=null && !insertion.write(port,Store.clean(this,text)))setStatus("Input changed");}
+    @Override public void partial(String text){if(!busy || text.trim().isEmpty())return;lastPartial=text;if(sensitive)return;if(insertion!=null && !insertion.write(port,Store.clean(this,text)))setStatus("Listening… · Copy on Finish");}
     @Override public void level(float value){if(FlowAccessibility.instance!=null)FlowAccessibility.instance.keyboardLevel(value);}
     @Override public void result(String raw,String text,String warning){
         setStatus("Inserting…");finishResult(raw,text,warning,0,generation);
@@ -201,7 +202,6 @@ public final class FlowKeyboard extends InputMethodService implements Dictation.
         if(FlowAccessibility.instance!=null)FlowAccessibility.instance.showProblem(problem);
         else Toast.makeText(this,problem.detail,Toast.LENGTH_LONG).show();
     }
-    private void finishInterrupted(){if(busy && dictation!=null)dictation.stop();}
     private void endRecording(){generation++;busy=false;finishing=false;if(dictation!=null){dictation.close();dictation=null;}insertion=null;lastPartial="";pendingRaw="";pendingText="";pendingWarning="";pendingWriteAccepted=false;sensitive=false;sensitiveAttempted=false;sensitiveSent=false;sensitiveEdited=false;RecordingNotice.stop(this,foregroundNotice);foregroundNotice=RecordingNotice.NONE;refreshControls();}
     private void refreshBubble(){handler.post(()->{if(FlowAccessibility.instance!=null)FlowAccessibility.instance.updateBubble();});}
     private boolean pendingAcknowledged(){try{return sameTarget() && (sensitive?sensitiveSent && selectionStart==sensitiveCursor && selectionEnd==sensitiveCursor:pendingWriteAccepted && insertion!=null && insertion.matches(port.read()));}catch(RuntimeException unavailable){return false;}}

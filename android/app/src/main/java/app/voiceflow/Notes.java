@@ -724,7 +724,7 @@ final class Notes {
                     for(File audio:source)if(audio.isFile())audio.delete();
                     return THOUGHT_TRANSCRIPT_FILTERED;
                 }
-                for(int i=0;i<notes.length();i++){JSONObject note=notes.optJSONObject(i);if(note!=null&&note.optLong("id")==id){applyTranscription(note,result,note.optString("lang","auto"),raw.trim(),QuickThoughtPolicy.summary(raw));if(!note.optBoolean("user_edited"))note.put("title",QuickThoughtPolicy.title(raw,"Quick thought"));note.put("summary_version",QuickThoughtPolicy.SUMMARY_VERSION).put("revision",revision+1);}}
+                for(int i=0;i<notes.length();i++){JSONObject note=notes.optJSONObject(i);if(note!=null&&note.optLong("id")==id){applyTranscription(note,result,note.optString("lang","auto"),raw.trim(),QuickThoughtPolicy.summary(raw));if(!note.optBoolean("user_edited"))note.put("title",QuickThoughtPolicy.title(raw,"Quick thought"));note.put("summary_version",QuickThoughtPolicy.SUMMARY_VERSION).put("summary_local",true).put("summary_retry_after",0L).put("revision",revision+1);}}
                 if(Store.prefs(context).edit().putString("notes",notes.toString()).commit())return THOUGHT_TRANSCRIPT_SAVED;
                 Store.prefs(context).edit().putString("notes",before).commit();return THOUGHT_TRANSCRIPT_UNCHANGED;
             }catch(Exception unavailable){return THOUGHT_TRANSCRIPT_UNCHANGED;}
@@ -997,7 +997,7 @@ final class Notes {
             JSONObject thought=new JSONObject().put("id",id).put("created",id).put("thought",true)
                 .put("text",text).put("raw",raw).put("title",QuickThoughtPolicy.title(text,"Quick thought"))
                 .put("duration",Math.max(Math.max(0,duration),durations(audio))).put("lang",Store.language(context)).put("heard",Store.language(context))
-                .put("audio",audio.isEmpty()?"":audio.get(0).getName()).put("parts",names(audio)).put("summary",QuickThoughtPolicy.summary(raw)).put("summary_version",QuickThoughtPolicy.SUMMARY_VERSION).put("pending",false).put("revision",1L);
+                .put("audio",audio.isEmpty()?"":audio.get(0).getName()).put("parts",names(audio)).put("summary",QuickThoughtPolicy.summary(raw)).put("summary_version",QuickThoughtPolicy.SUMMARY_VERSION).put("summary_local",true).put("summary_retry_after",0L).put("pending",false).put("revision",1L);
             next.put(thought);
             appendRetained(next,notes,-1);
             // Commit so the UI only says Saved when storage has accepted the words.
@@ -1080,7 +1080,7 @@ final class Notes {
                     String before=Store.get(app,"notes","[]");JSONArray old=new JSONArray(before),next=new JSONArray();
                     for(int i=0;i<old.length();i++){
                         JSONObject note=old.optJSONObject(i);if(note==null)continue;
-                        if(note.optLong("id")==id){note.put("text",organized.body).put("title",organized.title).put("summary",organized.summary).put("summary_version",QuickThoughtPolicy.SUMMARY_VERSION).put("revision",revision+1);}
+                        if(note.optLong("id")==id){note.put("text",organized.body).put("title",organized.title).put("summary",organized.summary).put("summary_version",QuickThoughtPolicy.SUMMARY_VERSION).put("summary_local",!organized.summarized).put("summary_retry_after",0L).put("revision",revision+1);}
                         next.put(note);
                     }
                     if(!Store.prefs(app).edit().putString("notes",next.toString()).commit())Store.prefs(app).edit().putString("notes",before).commit();
@@ -1099,7 +1099,7 @@ final class Notes {
             String before=Store.get(context,"notes","[]");JSONArray old=new JSONArray(before),next=new JSONArray();
             for(int i=0;i<old.length();i++){
                 JSONObject note=old.optJSONObject(i);if(note==null)continue;
-                if(note.optLong("id")==id)note.put("user_edited",true).put("pending",false).put("text",text.trim()).put("title",QuickThoughtPolicy.title(text,"Quick thought")).put("summary",QuickThoughtPolicy.summary(text)).put("summary_version",QuickThoughtPolicy.SUMMARY_VERSION).put("revision",note.optLong("revision",1)+1);
+                if(note.optLong("id")==id)note.put("user_edited",true).put("pending",false).put("text",text.trim()).put("title",QuickThoughtPolicy.title(text,"Quick thought")).put("summary",QuickThoughtPolicy.summary(text)).put("summary_version",QuickThoughtPolicy.SUMMARY_VERSION).put("summary_local",true).put("summary_retry_after",0L).put("revision",note.optLong("revision",1)+1);
                 next.put(note);
             }
             boolean saved=Store.prefs(context).edit().putString("notes",next.toString()).commit();if(saved){DailySummaryCache.invalidateEntry(context,"thought",id);poke();}else Store.prefs(context).edit().putString("notes",before).commit();return saved;
@@ -1150,41 +1150,56 @@ final class Notes {
     static List<HistoryDays.Day> thoughtRecapDays(Context context){List<HistoryDays.Day> days=new ArrayList<>();for(ThoughtTimeline.Day day:thoughtDays(context))if(day.recap!=null)days.add(day.recap);return days;}
     private static String thoughtBody(JSONObject note){String text=note.optString("text");return text.trim().isEmpty()?note.optString("raw"):text;}
 
-    /** Upgrade old short summaries alone; text edits and retained audio never go through organization again. */
+    /** Replace old transcript-like summaries alone; edits and source audio never go through organization. */
     private static void upgradeThoughtSummary(Context context,JSONObject shown){
-        if(shown.optInt("summary_version",0)>=QuickThoughtPolicy.SUMMARY_VERSION || shown.optBoolean("recording") || shown.optBoolean("pending"))return;
+        int version=shown.optInt("summary_version",0);boolean upgrade=version<QuickThoughtPolicy.SUMMARY_VERSION;
+        if(version>QuickThoughtPolicy.SUMMARY_VERSION || (!upgrade&&!shown.optBoolean("summary_local")) || shown.optBoolean("recording") || shown.optBoolean("pending"))return;
         final Context app=context.getApplicationContext();final long id=shown.optLong("id"),revision=shown.optLong("revision",1);
         final String raw=shown.optString("raw"),text=shown.optString("text"),parts=String.valueOf(shown.opt("parts")),audio=shown.optString("audio");
         final String source=text.trim().isEmpty()?raw:text;if(source.trim().isEmpty())return;
-        final String fallback=QuickThoughtPolicy.summary(source),model=ThoughtDailySummaries.model(app),endpoint=ThoughtDailySummaries.endpoint(app);
-        synchronized(Store.class){
+        final String fallback=upgrade?QuickThoughtPolicy.summary(source):shown.optString("summary");
+        if(upgrade)synchronized(Store.class){
             JSONObject current=find(app,id);if(!thoughtSnapshot(current,revision,raw,text,parts,audio) || current.optInt("summary_version",0)>=QuickThoughtPolicy.SUMMARY_VERSION)return;
             try{
                 String before=Store.get(app,"notes","[]");JSONArray notes=new JSONArray(before);
-                for(int i=0;i<notes.length();i++){JSONObject note=notes.optJSONObject(i);if(note!=null&&note.optLong("id")==id)note.put("summary",fallback).put("summary_version",QuickThoughtPolicy.SUMMARY_VERSION);}
+                for(int i=0;i<notes.length();i++){JSONObject note=notes.optJSONObject(i);if(note!=null&&note.optLong("id")==id)note.put("summary",fallback).put("summary_version",QuickThoughtPolicy.SUMMARY_VERSION).put("summary_local",true).put("summary_retry_after",0L);}
                 if(!Store.prefs(app).edit().putString("notes",notes.toString()).commit()){Store.prefs(app).edit().putString("notes",before).commit();return;}
-                shown.put("summary",fallback).put("summary_version",QuickThoughtPolicy.SUMMARY_VERSION);
+                shown.put("summary",fallback).put("summary_version",QuickThoughtPolicy.SUMMARY_VERSION).put("summary_local",true).put("summary_retry_after",0L);
             }catch(Exception unavailable){return;}
         }
-        if(Vault.get(app).isEmpty() || !ThoughtDailySummaries.online(app))return;
+        // An already minimal phrase needs no paraphrase. Offline summaries remain eligible on reconnect.
+        if(TranscriptGuard.words(source).size()<=12 || shown.optLong("summary_retry_after",0)>System.currentTimeMillis() || Vault.get(app).isEmpty() || !ThoughtDailySummaries.online(app))return;
+        final String model=ThoughtDailySummaries.model(app),endpoint=ThoughtDailySummaries.endpoint(app),credential=summaryCredential(app);
         synchronized(thoughtSummaryUpgrades){if(!thoughtSummaryUpgrades.add(id))return;}
+        boolean reserved=false;
+        synchronized(Store.class){
+            JSONObject current=find(app,id);
+            if(thoughtSnapshot(current,revision,raw,text,parts,audio) && current.optString("summary").equals(fallback) && current.optBoolean("summary_local") && current.optLong("summary_retry_after",0)<=System.currentTimeMillis())try{
+                String before=Store.get(app,"notes","[]");JSONArray notes=new JSONArray(before);
+                for(int i=0;i<notes.length();i++){JSONObject note=notes.optJSONObject(i);if(note!=null&&note.optLong("id")==id)note.put("summary_retry_after",System.currentTimeMillis()+300_000L);}
+                reserved=Store.prefs(app).edit().putString("notes",notes.toString()).commit();if(!reserved)Store.prefs(app).edit().putString("notes",before).commit();
+            }catch(Exception unavailable){reserved=false;}
+        }
+        if(!reserved){synchronized(thoughtSummaryUpgrades){thoughtSummaryUpgrades.remove(id);}return;}
         thoughtWork.incrementAndGet();
         work.execute(()->{
             try{
-                if(!model.equals(ThoughtDailySummaries.model(app)) || !endpoint.equals(ThoughtDailySummaries.endpoint(app)))return;
-                synchronized(Store.class){JSONObject current=find(app,id);if(!thoughtSnapshot(current,revision,raw,text,parts,audio) || !current.optString("summary").equals(fallback))return;}
-                String summary=new CloudApi(app).thoughtSummary(source);
+                if(!summaryProviderMatches(app,model,endpoint,credential))return;
+                synchronized(Store.class){JSONObject current=find(app,id);if(!thoughtSnapshot(current,revision,raw,text,parts,audio) || !current.optString("summary").equals(fallback) || !current.optBoolean("summary_local"))return;}
+                QuickThoughtPolicy.Summary result=new CloudApi(app).thoughtSummaryResult(source);if(!result.accepted)return;String summary=result.text;
                 synchronized(Store.class){
                     JSONObject current=find(app,id);
-                    if(!thoughtSnapshot(current,revision,raw,text,parts,audio) || !current.optString("summary").equals(fallback) || !model.equals(ThoughtDailySummaries.model(app)) || !endpoint.equals(ThoughtDailySummaries.endpoint(app)))return;
+                    if(!thoughtSnapshot(current,revision,raw,text,parts,audio) || !current.optString("summary").equals(fallback) || !current.optBoolean("summary_local") || !summaryProviderMatches(app,model,endpoint,credential))return;
                     String before=Store.get(app,"notes","[]");JSONArray notes=new JSONArray(before);
-                    for(int i=0;i<notes.length();i++){JSONObject note=notes.optJSONObject(i);if(note!=null&&note.optLong("id")==id)note.put("summary",summary).put("summary_version",QuickThoughtPolicy.SUMMARY_VERSION);}
+                    for(int i=0;i<notes.length();i++){JSONObject note=notes.optJSONObject(i);if(note!=null&&note.optLong("id")==id)note.put("summary",summary).put("summary_version",QuickThoughtPolicy.SUMMARY_VERSION).put("summary_local",false).put("summary_retry_after",0L);}
                     if(!Store.prefs(app).edit().putString("notes",notes.toString()).commit())Store.prefs(app).edit().putString("notes",before).commit();
                 }
-            }catch(Exception unavailable){/* A detailed local extract is already saved. */}
+            }catch(Exception unavailable){/* Keep the concise local gist and retry after the cooldown. */}
             finally{synchronized(thoughtSummaryUpgrades){thoughtSummaryUpgrades.remove(id);}thoughtWork.decrementAndGet();poke();}
         });
     }
+    private static String summaryCredential(Context app){return Store.get(app,"api_secret","")+":"+Store.get(app,"api_iv","");}
+    private static boolean summaryProviderMatches(Context app,String model,String endpoint,String credential){return model.equals(ThoughtDailySummaries.model(app))&&endpoint.equals(ThoughtDailySummaries.endpoint(app))&&credential.equals(summaryCredential(app));}
     private static boolean thoughtSnapshot(JSONObject current,long revision,String raw,String text,String parts,String audio){
         return current!=null && current.optBoolean("thought") && !current.optBoolean("recording") && !current.optBoolean("pending") && current.optLong("revision",1)==revision && current.optString("raw").equals(raw) && current.optString("text").equals(text) && String.valueOf(current.opt("parts")).equals(parts) && current.optString("audio").equals(audio);
     }
@@ -1196,8 +1211,12 @@ final class Notes {
         body.addView(Daybook.text(activity,titleOf(note),22,Daybook.ink(activity),true));Ui.space(body,4);body.addView(Daybook.text(activity,when(note),12,Daybook.muted(activity),false));Ui.space(body,16);
         String summary=note.optString("summary");
         if(!original&&!summary.isEmpty()){
-            body.addView(Daybook.text(activity,"Detailed summary",12,Daybook.muted(activity),true));Ui.space(body,6);
+            body.addView(Daybook.text(activity,"Summary",12,Daybook.muted(activity),true));Ui.space(body,6);
             TextView recap=Daybook.text(activity,summary,16,Daybook.ink(activity),false);recap.setLineSpacing(Ui.dp(activity,3),1);recap.setTextIsSelectable(true);body.addView(recap);Ui.space(body,16);
+        }
+        if(!original&&summary.isEmpty()&&!recording&&!note.optBoolean("pending")&&!thoughtBody(note).trim().isEmpty()){
+            body.addView(Daybook.text(activity,"Summary",12,Daybook.muted(activity),true));Ui.space(body,6);
+            body.addView(Daybook.text(activity,"A concise summary will fill in when your provider is connected. Your full transcript is saved below.",14,Daybook.muted(activity),false));Ui.space(body,16);
         }
         body.addView(Daybook.text(activity,original?"Original transcript":"Full transcript",12,Daybook.muted(activity),true));Ui.space(body,6);
         if(!coming&&note.optBoolean("partial_transcript")){body.addView(Daybook.text(activity,"Partial transcript · some source segments still need transcription.",13,Daybook.muted(activity),false));Ui.space(body,6);}

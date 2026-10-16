@@ -11,6 +11,8 @@
     <instrumentation android:name="app.voiceflow.ThoughtSummaryRequestTest" android:targetPackage="app.voiceflow" android:functionalTest="true" />
     <instrumentation android:name="app.voiceflow.ApiRequestTest" android:targetPackage="app.voiceflow" android:functionalTest="true" />
     <instrumentation android:name="app.voiceflow.RecoveryTest" android:targetPackage="app.voiceflow" android:functionalTest="true" />
+    <instrumentation android:name="app.voiceflow.RecordingAwakeNativeTest" android:targetPackage="app.voiceflow" android:functionalTest="true" />
+    <instrumentation android:name="app.voiceflow.CloudPersistenceTest" android:targetPackage="app.voiceflow" android:functionalTest="true" />
     <application android:label="VoiceFlow native input regressions" android:debuggable="true" android:allowBackup="false" android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <!-- Deliberately no INTERNET permission and no HOME activity. -->
         <service android:name=".FakeSpeech" android:exported="true" android:permission="android.permission.BIND_SPEECH_RECOGNITION_SERVICE">

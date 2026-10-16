@@ -1,7 +1,14 @@
 # Native input regression fixture
 
+The current production engine is cloud-only. Saving `engine=system` or selecting
+FakeSpeech never changes that. Use `app.voiceflow.CloudPersistenceTest` for the
+current input/app-switch recording contract; its actual microphone captures use
+intercepted HTTPS and disposable text, without real provider traffic. The legacy
+InputRecoveryTest live-partial/FakeSpeech contract is dormant and declines to run
+by default. Its source is historical coverage, not evidence for current cloud UX.
+
 This focused APK makes existing native input regressions runnable against the current
-VoiceFlow app. It compiles nine current sources from `tests/fixtures`; it does not
+VoiceFlow app. It compiles the current sources from `tests/fixtures`; it does not
 ship production classes. The build verifies that the fixture and production APK have
 the same signing certificate. Do not interpret a successful build as a runtime pass.
 
@@ -36,8 +43,9 @@ Output: `build/tests/input-regressions/VoiceFlow-input-regressions-fixture.apk`.
 - The passwords, PINs, dictionary entries, API key, and speech results are synthetic
   constants. No account login, Google consent, real provider call, or Drive operation
   is needed. Never supply a real credential to these tests.
-- Select `app.voiceflow.fixture/.FakeSpeech` as the recognizer. Its callbacks are
-  local. ApiRequestTest and RecoveryTest intercept HTTPS in the app process and use
+- The legacy synthetic-speech fixtures select `app.voiceflow.fixture/.FakeSpeech`;
+  the current cloud engine does not call that service. ApiRequestTest, RecoveryTest
+  and CloudPersistenceTest intercept HTTPS in the app process and use
   the fake key `fixture-only-key`; their outgoing request bodies stay in memory.
 - The fixture package has no INTERNET permission. App-target instrumentation still
   runs with the production app's INTERNET permission, so the fixture manifest alone
@@ -106,6 +114,32 @@ stopping to inspect a surfaced app/system ANR instead of retrying around it.
 
 ## Components and coverage
 
+Current cloud persistence component:
+
+`app.voiceflow.fixture/app.voiceflow.CloudPersistenceTest` checks keyboard hide,
+field changes, app switching and returning while recording. It requires recording
+and the manual Finish control to stay active, no upload before Finish, full ordinary
+clipboard/History recovery without foreign insertion, and no conversion to Thoughts
+even with Quick thoughts enabled. A private input session must keep its final only
+in memory until explicit sensitive copy and leave History/Thoughts unchanged.
+Each run uses a random sentinel. Cleanup removes only newly created clipboard
+archive rows whose full text exactly matches that run's sentinels; it never clears
+the archive or removes preexisting rows. A current system clip is cleared only if
+it still contains one of that run's sentinels.
+
+`app.voiceflow.fixture/app.voiceflow.RecordingAwakeNativeTest` checks actual native
+display/CPU leases in the helper, display release on screen-off, close cleanup and
+late-callback refusal. It does not by itself prove physical device screen timeout.
+
+The `RecoveryTest` component exercises real cloud recorder files with mock HTTPS,
+legacy Activity background/Close finalization, worker cancellation and private
+explicit-copy recovery. Dormant Android speech timeout/empty-result cases were
+removed from its active run because production cannot select that engine.
+
+The following older UI components require individual contract review. In particular,
+AuthFieldTest, InputRecoveryTest and ComposeDeleteTest contain legacy synthetic
+speech/live-partial expectations and are not current cloud runtime evidence.
+
 Run the following components individually with `adb -s "$SERIAL" shell am instrument
 -w COMPONENT`, preserving all output and runtime logs per suite:
 
@@ -134,14 +168,23 @@ Run the following components individually with `adb -s "$SERIAL" shell am instru
    and require actual accessibility-visible/focused input before testing keyboard
    visibility. This does not hide the keyboard, change display size or lower SDK.
 3. `app.voiceflow.fixture/.InputRecoveryTest`
-   Checks original-field ownership, manual-edit preservation, direct-insertion
+   Checks that field changes and switching to Settings keep dictation active
+   until an explicit Finish, including returning to the original input. Requires
+   the original clipboard to remain unchanged before Finish and the full final
+   voice-IME result to be recovered when the old editor session cannot be proven.
+   Also checks original-field ownership, manual-edit preservation, direct-insertion
    clipboard behavior, and ordinary/private final recovery exactly once when the
-   accessibility service stops during a withheld editor acknowledgement.
+   accessibility service stops during a withheld editor acknowledgement. Private
+   recovery must leave the clipboard unchanged until explicit Copy privately.
 4. `app.voiceflow.fixture/.ComposeDeleteTest`
    Retains its historical component name. Checks real accessibility InputConnection
    composing spans and native dictation revision while preserving surrounding
    prefix/suffix text. Finish must return the idle main mic without floating
    editing/menu controls.
+5. `app.voiceflow.fixture/app.voiceflow.RecordingAwakeNativeTest`
+   Checks the real display/CPU wake-lock ownership in the recording helper,
+   screen-off release of its display lease, close cleanup, and late-callback refusal.
+   Building the fixture does not execute this device check.
 
 ### Explicitly retired floating-editing cases
 
@@ -159,8 +202,9 @@ Both affected suites report `retired_subcases` even on failure and explicitly
 exclude these cases from their PASS summaries. Ordinary typing-keyboard Delete
 and Return behavior belongs to SidePreview, which is a separate native suite.
 InputRecoveryTest retains all ownership, manual-edit, clipboard, sensitive final
-and exactly-once teardown assertions; only its obsolete post-Finish control wait
-changed. ApiRequestTest and RecoveryTest contain no obsolete floating-control
+and exactly-once teardown assertions. Its field-change and app-switch checks now
+require recording to remain active until manual Finish; private recovery requires
+an explicit Copy privately action. ApiRequestTest and RecoveryTest contain no obsolete floating-control
 strings and remain unchanged.
 
 Additional app-target suites are packaged for private-request/recovery coverage:
@@ -171,9 +215,10 @@ Additional app-target suites are packaged for private-request/recovery coverage:
    Does not need an editor or microphone recording. HTTPS is intercepted in-process.
 6. `app.voiceflow.fixture/app.voiceflow.RecoveryTest`
    Checks actual emulator recorder lifecycle with mock HTTPS, interruption/lock
-   recovery, fake speech timeouts, private History/draft exclusion and sensitive
-   clipboard fallback, and bounded worker startup/cancellation cleanup. Requires
-   RECORD_AUDIO, the fake recognition service, and the same isolation described above.
+   recovery for the unused legacy capture Activity, private History/draft exclusion
+   and explicit sensitive copy, and bounded worker startup/cancellation cleanup.
+   Requires RECORD_AUDIO and the same isolation described above. The current cloud
+   run does not select FakeSpeech or claim Android speech timeout coverage.
    This suite temporarily locks and wakes the emulator and restores app preferences.
    Automatic daily recaps are explicitly Off while the suite opens MainActivity to
    read the clipboard, preventing unrelated recap requests from contaminating

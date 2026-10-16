@@ -4,14 +4,15 @@ import java.util.ArrayList;
 
 /** Android-free clipboard rules. Preview formatting never changes the stored/pasted value. */
 final class ClipboardText {
-    static final int MAX_ITEMS=20,MAX_CHARS=4000;
+    /** Floating tray presentation only. The 30-day archive has no count or character eviction. */
+    static final int MAX_ITEMS=20;
     private ClipboardText() {}
     static boolean usable(String value){
         if(value==null || value.length()==0)return false;
         for(int i=0;i<value.length();){int cp=value.codePointAt(i);if(!Character.isWhitespace(cp)&&!Character.isSpaceChar(cp))return true;i+=Character.charCount(cp);}
         return false;
     }
-    static boolean storable(String value){return value!=null&&value.length()<=MAX_CHARS&&usable(value);}
+    static boolean storable(String value){return usable(value);}
     static String preview(String value){
         if(!usable(value))return "";
         StringBuilder out=new StringBuilder();boolean space=false;int count=0;
@@ -27,7 +28,7 @@ final class ClipboardText {
         if(previous!=null)for(String item:previous)if(storable(item)&&!out.contains(item)){out.add(item);if(out.size()==MAX_ITEMS)break;}
         return out.toArray(new String[0]);
     }
-    /** The current readable copy is runtime-only when too large for persistent history. Never truncate it. */
+    /** Keep the floating tray small; the separate Clipboard card can page through every saved copy. */
     static String[] withCurrent(String current,String[] saved){
         ArrayList<String> out=new ArrayList<>();if(usable(current))out.add(current);
         if(saved!=null)for(String item:saved)if(storable(item)&&!out.contains(item)){out.add(item);if(out.size()==MAX_ITEMS)break;}

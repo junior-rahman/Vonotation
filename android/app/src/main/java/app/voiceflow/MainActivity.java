@@ -51,9 +51,16 @@ public final class MainActivity extends Activity {
     private volatile CloudApi summaryApi;
     private String summaryInputs="";
     private final Runnable callConnectionChanged=()->{if(!isDestroyed())render();};
+    private final ClipboardCard clipboardCard=new ClipboardCard();
+    private boolean foreground;
+    private final Runnable clipboardChanged=()->{if(foreground&&!isDestroyed()&&!settingsVisible&&part==clipboardIndex())refreshClipboard();};
+    private int clipboardIndex(){return Store.quickThoughts(this)?5:4;}
+    private void refreshClipboard(){int index=clipboardIndex();if(deckPages==null||index>=deckPages.length)return;LinearLayout page=deckPages[index];int held=deckScrolls[index].getScrollY();page.removeAllViews();clipboardCard.show(this,page,this::refreshClipboard);deckScrolls[index].post(()->deckScrolls[index].scrollTo(0,held));}
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);Store.migrate(this);ClipList.watch(this);if(!CaptureActivity.visible)Store.removeStaleAudio(this);
-        if(state!=null){part=Math.max(0,Math.min(4,state.getInt("daybook_part",0)));settingsVisible=state.getBoolean("settings_visible",false);backupReturnFocus=state.getBoolean("backup_return_focus",false);panel=state.getString("daybook_panel","");origin=state.getString("daybook_origin","");homeTab=state.getString("home_tab","days");historyScrollY=Math.max(0,state.getInt("history_scroll_y",0));settingsScrollY=Math.max(0,state.getInt("settings_scroll_y",0));DraftState.restore(this,state);restoreSet(state,"days_open",expandedDays);restoreSet(state,"days_closed",collapsedDays);restoreSet(state,"entries_open",expandedEntries);heardDraft=state.getString("dictionary_heard","");preferredDraft=state.getString("dictionary_preferred","");}
+        if(state!=null){part=Math.max(0,Math.min(5,state.getInt("daybook_part",0)));settingsVisible=state.getBoolean("settings_visible",false);backupReturnFocus=state.getBoolean("backup_return_focus",false);panel=state.getString("daybook_panel","");origin=state.getString("daybook_origin","");homeTab=state.getString("home_tab","days");historyScrollY=Math.max(0,state.getInt("history_scroll_y",0));settingsScrollY=Math.max(0,state.getInt("settings_scroll_y",0));DraftState.restore(this,state);restoreSet(state,"days_open",expandedDays);restoreSet(state,"days_closed",collapsedDays);restoreSet(state,"entries_open",expandedEntries);heardDraft=state.getString("dictionary_heard","");preferredDraft=state.getString("dictionary_preferred","");}
+        clipboardCard.restore(state);
+        if(state!=null&&state.getBoolean("clipboard_selected",false))part=clipboardIndex();
         createShell();
         if(state==null)handleFix(getIntent());
         openCalls(getIntent());
@@ -65,7 +72,7 @@ public final class MainActivity extends Activity {
         if(intent==null || !intent.getBooleanExtra(EXTRA_OPEN_THOUGHTS,false))return false;
         intent.removeExtra(EXTRA_OPEN_THOUGHTS);
         if(!Store.quickThoughts(this))return false;
-        Notes.back();settingsVisible=false;panel="";part=4;deckReady=false;return true;
+        Notes.back();settingsVisible=false;panel="";part=4;deckReady=false;deckPages=null;return true;
     }
     /** Opens the setting a dictation problem points to. */
     private void handleFix(Intent intent){
@@ -84,11 +91,11 @@ public final class MainActivity extends Activity {
         requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},21);
     }
     private void restoreSet(Bundle state,String key,java.util.Set<String> target){java.util.ArrayList<String> saved=state.getStringArrayList(key);if(saved!=null)target.addAll(saved);}
-    @Override protected void onResume(){super.onResume();Notes.resumeThoughtSummaries(this);DriveBackup.schedule(this);Notes.catchUp(this);LineWatch.start(this,callConnectionChanged);maybeRequestNotifications();boolean focusBackup=backupReturnFocus;backupReturnFocus=false;render();AppUpdate.resume(this);if(focusBackup&&panel.isEmpty()){View row=settingRows.get("backup");if(row!=null)row.post(row::requestFocusFromTouch);}}
-    @Override public void onWindowFocusChanged(boolean hasFocus){super.onWindowFocusChanged(hasFocus);if(hasFocus&&settingsVisible&&panel.equals("permissions"))render();}
-    @Override protected void onPause(){LineWatch.detach(callConnectionChanged);Notes.pauseThoughtSummaries();AppUpdate.pause(this);saveScrollPosition();rememberDictionaryDraft();stopSummaryWork();super.onPause();}
-    @Override protected void onDestroy(){LineWatch.detach(callConnectionChanged);Notes.pauseThoughtSummaries();if(retryDictation!=null){retryDictation.cancel();retryDictation=null;}Notes.stop();Translate.stop();scrollGeneration++;stopSummaryWork();summaryWorker.shutdownNow();if(chimeTrack!=null){try{chimeTrack.release();}catch(RuntimeException ignored){}chimeTrack=null;}super.onDestroy();}
-    @Override protected void onSaveInstanceState(Bundle state){saveScrollPosition();rememberDictionaryDraft();state.putInt("history_scroll_y",historyScrollY);state.putInt("settings_scroll_y",settingsScrollY);state.putInt("daybook_part",part);state.putBoolean("settings_visible",settingsVisible);state.putBoolean("backup_return_focus",backupReturnFocus);state.putString("daybook_panel",panel);state.putString("daybook_origin",origin);state.putString("home_tab",homeTab);DraftState.save(this,state);state.putStringArrayList("days_open",new java.util.ArrayList<>(expandedDays));state.putStringArrayList("days_closed",new java.util.ArrayList<>(collapsedDays));state.putStringArrayList("entries_open",new java.util.ArrayList<>(expandedEntries));state.putString("dictionary_heard",heardDraft);state.putString("dictionary_preferred",preferredDraft);super.onSaveInstanceState(state);}
+    @Override protected void onResume(){super.onResume();foreground=true;ClipList.observe(clipboardChanged);ClipboardExpiryJob.schedule(this);Notes.resumeThoughtSummaries(this);DriveBackup.schedule(this);Notes.catchUp(this);LineWatch.start(this,callConnectionChanged);maybeRequestNotifications();boolean focusBackup=backupReturnFocus;backupReturnFocus=false;render();AppUpdate.resume(this);if(focusBackup&&panel.isEmpty()){View row=settingRows.get("backup");if(row!=null)row.post(row::requestFocusFromTouch);}}
+    @Override public void onWindowFocusChanged(boolean hasFocus){super.onWindowFocusChanged(hasFocus);if(hasFocus){ClipList.capture(this);if(settingsVisible&&panel.equals("permissions"))render();}}
+    @Override protected void onPause(){foreground=false;ClipList.forget(clipboardChanged);clipboardCard.stop();LineWatch.detach(callConnectionChanged);Notes.pauseThoughtSummaries();AppUpdate.pause(this);saveScrollPosition();rememberDictionaryDraft();stopSummaryWork();super.onPause();}
+    @Override protected void onDestroy(){foreground=false;ClipList.forget(clipboardChanged);clipboardCard.stop();LineWatch.detach(callConnectionChanged);Notes.pauseThoughtSummaries();if(retryDictation!=null){retryDictation.cancel();retryDictation=null;}Notes.stop();Translate.stop();scrollGeneration++;stopSummaryWork();summaryWorker.shutdownNow();if(chimeTrack!=null){try{chimeTrack.release();}catch(RuntimeException ignored){}chimeTrack=null;}super.onDestroy();}
+    @Override protected void onSaveInstanceState(Bundle state){clipboardCard.save(state);state.putBoolean("clipboard_selected",part==clipboardIndex());saveScrollPosition();rememberDictionaryDraft();state.putInt("history_scroll_y",historyScrollY);state.putInt("settings_scroll_y",settingsScrollY);state.putInt("daybook_part",part);state.putBoolean("settings_visible",settingsVisible);state.putBoolean("backup_return_focus",backupReturnFocus);state.putString("daybook_panel",panel);state.putString("daybook_origin",origin);state.putString("home_tab",homeTab);DraftState.save(this,state);state.putStringArrayList("days_open",new java.util.ArrayList<>(expandedDays));state.putStringArrayList("days_closed",new java.util.ArrayList<>(collapsedDays));state.putStringArrayList("entries_open",new java.util.ArrayList<>(expandedEntries));state.putString("dictionary_heard",heardDraft);state.putString("dictionary_preferred",preferredDraft);super.onSaveInstanceState(state);}
     @Override public void onBackPressed(){if(!panel.isEmpty())backToSettings();else if(settingsVisible){settingsVisible=false;render();}else if(Notes.opened()){Notes.back();render();}else super.onBackPressed();}
     private void createShell() {
         root=Ui.column(this);root.setBackground(new Daybook.Backdrop(this));getWindow().setStatusBarColor(Daybook.paper(this));getWindow().setNavigationBarColor(Daybook.paper(this));
@@ -105,14 +112,15 @@ public final class MainActivity extends Activity {
     private String screen(){return !settingsVisible?"home":panel.isEmpty()?"settings":"panel:"+panel;}
     private void render() {
         if(body==null)return;if("advanced".equals(panel))panel="";
-        int expectedCards=Store.quickThoughts(this)?5:4;
+        int expectedCards=Store.quickThoughts(this)?6:5;
+        if(deckPages!=null&&deckPages.length!=expectedCards){if(part==deckPages.length-1)part=expectedCards-1;else if(!Store.quickThoughts(this)&&part==4)part=0;}
         if(deckPages==null || deckPages.length!=expectedCards)deckReady=false;
         if(part>=expectedCards)part=0;
         if(!Store.quickThoughts(this) && Notes.thoughtOpened(this))Notes.back();
         boolean detail=!settingsVisible && Notes.opened();
         boolean deckHome=!settingsVisible && !detail;
         if(deckHome && deckReady && strip!=null && strip.getChildCount()>0){fillDeck();return;}
-        saveScrollPosition();rememberDictionaryDraft();renderedScreen=screen();hasRendered=true;stopSummaryWork();dayCards.clear();settingRows.clear();heardField=null;preferredField=null;body.removeAllViews();header.removeAllViews();if(footer!=null)footer.removeAllViews();if(strip!=null)strip.removeAllViews();deckReady=false;deck=null;
+        saveScrollPosition();rememberDictionaryDraft();renderedScreen=screen();hasRendered=true;stopSummaryWork();dayCards.clear();settingRows.clear();heardField=null;preferredField=null;clipboardCard.stop();body.removeAllViews();header.removeAllViews();if(footer!=null)footer.removeAllViews();if(strip!=null)strip.removeAllViews();deckReady=false;deck=null;
         if(settingsVisible){((View)header.getParent()).setVisibility(View.VISIBLE);if(footer!=null)footer.setVisibility(View.GONE);TextView back=Daybook.text(this,"‹",30,Daybook.accent(this),false);back.setGravity(Gravity.CENTER);back.setBackground(Daybook.ripple(this,android.graphics.Color.TRANSPARENT,14));back.setContentDescription(panel.isEmpty()?"Back to Home":"Back to Settings");back.setTooltipText(back.getContentDescription());back.setOnClickListener(v->{Daybook.feedback(v);if(panel.isEmpty()){settingsVisible=false;render();}else backToSettings();});LinearLayout.LayoutParams bp=new LinearLayout.LayoutParams(Ui.dp(this,44),Ui.dp(this,44));bp.rightMargin=Ui.dp(this,6);header.addView(back,bp);header.addView(Daybook.text(this,panel.isEmpty()?"Settings":panelTitle(panel),24,Daybook.ink(this),true),new LinearLayout.LayoutParams(0,-2,1));}
         else{((View)header.getParent()).setVisibility(View.GONE);footer.setVisibility(View.VISIBLE);Daybook.Mark mark=new Daybook.Mark(this);LinearLayout.LayoutParams mp=new LinearLayout.LayoutParams(Ui.dp(this,26),Ui.dp(this,27));mp.rightMargin=Ui.dp(this,8);footer.addView(mark,mp);footer.addView(Daybook.text(this,"VonoTation",18,Daybook.ink(this),true),new LinearLayout.LayoutParams(0,-2,1));Daybook.SettingsIcon gear=new Daybook.SettingsIcon(this);gear.setBackground(Daybook.ripple(this,Daybook.surface(this),14));gear.setContentDescription("Settings");gear.setTooltipText("Settings");gear.setOnClickListener(v->{Daybook.feedback(v);Notes.stop();Translate.stop();settingsVisible=true;panel="";render();Daybook.motion(body);});footer.addView(gear,new LinearLayout.LayoutParams(Ui.dp(this,44),Ui.dp(this,44)));}
         detail=!settingsVisible && Notes.opened();
@@ -135,7 +143,8 @@ public final class MainActivity extends Activity {
         Calls.show(this,deckPages[1],deckDocks[1],this::render);
         Translate.show(this,deckPages[2],deckDocks[2],this::render);
         historyHost=deckPages[3];history();historyHost=null;
-        if(deckPages.length>4){Notes.thoughtsMode();Notes.show(this,deckPages[4],this::render);}
+        if(Store.quickThoughts(this)){Notes.thoughtsMode();Notes.show(this,deckPages[4],this::render);}
+        refreshClipboard();
         for(int i=0;i<3;i++)if(deckDocks[i]!=null)deckDocks[i].setVisibility(i==part?View.VISIBLE:View.GONE);
         if(deck!=null && deck.front!=part){deck.front=part;deck.place(false);}
         for(int i=0;i<deckScrolls.length;i++){int stay=held[i];ScrollView page=deckScrolls[i];page.post(()->page.scrollTo(0,stay));}
@@ -146,7 +155,7 @@ public final class MainActivity extends Activity {
     private void backToSettings(){rememberDictionaryDraft();String focus=origin;panel="";settingsVisible=true;render();Daybook.motion(body);View row=settingRows.get(focus);if(row!=null)row.post(row::requestFocusFromTouch);}
     private void openPanel(String key){origin=key;panel=key;settingsVisible=true;render();Daybook.motion(body);}
     private void parts() {
-        String[] titles=Store.quickThoughts(this)?new String[]{"Voice notes","Call","Translate","Dictation","Thoughts"}:new String[]{"Voice notes","Call","Translate","Dictation"};
+        String[] titles=Store.quickThoughts(this)?new String[]{"Voice notes","Call","Translate","Dictation","Thoughts","Clipboard"}:new String[]{"Voice notes","Call","Translate","Dictation","Clipboard"};
         int count=titles.length;if(part>=count)part=0;
         deckPages=new LinearLayout[count];
         deckScrolls=new ScrollView[count];
@@ -174,7 +183,8 @@ public final class MainActivity extends Activity {
         Calls.show(this,deckPages[1],deckDocks[1],this::render);
         Translate.show(this,deckPages[2],deckDocks[2],this::render);
         historyHost=deckPages[3];history();historyHost=null;
-        if(deckPages.length>4){Notes.thoughtsMode();Notes.show(this,deckPages[4],this::render);}
+        if(Store.quickThoughts(this)){Notes.thoughtsMode();Notes.show(this,deckPages[4],this::render);}
+        refreshClipboard();
         strip.setClipChildren(false);
         deck=new CardDeck(this);
         deck.front=part;deck.two=wide;deck.setClipChildren(false);
@@ -183,7 +193,7 @@ public final class MainActivity extends Activity {
             lp.leftMargin=Ui.dp(this,10);lp.rightMargin=Ui.dp(this,10);lp.topMargin=Ui.dp(this,wide?28:64);lp.bottomMargin=Ui.dp(this,36);
             deck.addView(cards[i],lp);
         }
-        deck.listener=(from,to)->{part=to;Haptics.fire(this,Haptics.POP);chime(from,to);deck.postDelayed(()->Haptics.fire(this,Haptics.RELEASE),170);for(int i=0;i<3;i++)if(deckDocks[i]!=null)deckDocks[i].setVisibility(i==to?View.VISIBLE:View.GONE);};
+        deck.listener=(from,to)->{part=to;if(to==clipboardIndex())refreshClipboard();Haptics.fire(this,Haptics.POP);chime(from,to);deck.postDelayed(()->Haptics.fire(this,Haptics.RELEASE),170);for(int i=0;i<3;i++)if(deckDocks[i]!=null)deckDocks[i].setVisibility(i==to?View.VISIBLE:View.GONE);};
         android.widget.FrameLayout stage=new android.widget.FrameLayout(this);
         stage.setClipChildren(false);
         stage.addView(deck,new android.widget.FrameLayout.LayoutParams(-1,-1));
@@ -200,7 +210,7 @@ public final class MainActivity extends Activity {
         deck.post(()->deck.place(false));
     }
     private void chime(int from,int to){
-        float[] note={196f,262f,330f,392f,466f};
+        float[] note={196f,262f,330f,392f,466f,523f};
         int rate=22050,count=(int)(rate*0.18f);
         byte[] pcm=new byte[count*2];
         for(int i=0;i<count;i++){
@@ -320,7 +330,7 @@ public final class MainActivity extends Activity {
         if(thoughts!=null){
             toggle(thoughts,"Quick thoughts","Keep an idle edge dot and a Thoughts card. Turning off hides both; saved thoughts stay on this phone.","quick_thoughts",false,()->{
                 deckReady=false;
-                if(Store.quickThoughts(this)){Notes.back();part=4;}
+                if(Store.quickThoughts(this)){Notes.back();part=4;deckPages=null;}
                 else{if(Notes.thoughtOpened(this))Notes.back();if(part==4)part=0;}
                 render();
             });
@@ -330,7 +340,7 @@ public final class MainActivity extends Activity {
                 Ui.space(thoughts,10);
                 thoughts.addView(Daybook.button(this,"Open Thoughts",true,v->{
                     if(!Store.quickThoughts(this)){render();return;}
-                    Notes.back();settingsVisible=false;panel="";part=4;deckReady=false;render();
+                    Notes.back();settingsVisible=false;panel="";part=4;deckReady=false;deckPages=null;render();
                 }),new LinearLayout.LayoutParams(-1,Ui.dp(this,48)));
             }
             Ui.space(thoughts,10);

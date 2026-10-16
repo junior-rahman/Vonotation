@@ -1,5 +1,13 @@
 # Floating Daybook feedback component fixture
 
+`ThoughtIconTest` additionally renders the production folded-note artwork and verifies that it differs from both existing dictation states and clipboard artwork. It checks the simplified mark at its actual 12dp size, transparent corners, and the existing 48dp control target with 30dp artwork. Run it separately without changing animator settings:
+
+```bash
+adb -s emulator-5580 shell am instrument -w app.voiceflow.floating.fixture/app.voiceflow.ThoughtIconTest
+```
+
+The Android-free `ThoughtTouchTest` covers gesture transitions, single drag-threshold feedback events, hold/tap separation and cancellation. Thought controls dispatch direct `Haptics.fire` calls, which honor the app's haptic preference; native `View` haptics are disabled to avoid an automatic second pulse on a long click. Neither the pure suite nor bitmap checks prove a physical motor response.
+
 This fixture renders the actual native `FloatingIcon` and `Glass` components and runs their animation and shared `Daybook.feedback` code. It covers warm light/dark surfaces, distinct keyboard badges, the coral flow artwork, native button role, optional haptic API dispatch, stable target geometry, and interrupted press/state animations.
 
 It first validates the actual global animator scale, then opens production `MainActivity` with synthetic offline state, empty history, recaps/bubble/haptics disabled and automatic backup Off. A focused, attached, laid-out native window initializes the process's Android animator configuration. The fixture waits up to 15 seconds for both that window and the requested public `ValueAnimator.areAnimatorsEnabled()` state. It never sets animator state, uses reflection/hidden APIs, or relaxes the requested mode assertion.

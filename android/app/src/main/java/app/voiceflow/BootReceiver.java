@@ -17,6 +17,7 @@ public final class BootReceiver extends BroadcastReceiver {
         if (!Intent.ACTION_BOOT_COMPLETED.equals(action) && !Intent.ACTION_MY_PACKAGE_REPLACED.equals(action)) return;
         final PendingResult pending = goAsync();
         final Context app = context.getApplicationContext();
+        ClipboardExpiryJob.schedule(app);
         // Give Android a few seconds to bind the service before deciding it didn't start (receiver limit is 10 s).
         new Handler(Looper.getMainLooper()).postDelayed(() -> {
             try {

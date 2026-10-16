@@ -45,12 +45,14 @@ mkdir -p "$fixture_dir/classes" "$fixture_dir/dex"
     -I "$android_jar" -o "$fixture_dir/resources.apk" --min-sdk-version 26 --target-sdk-version 35
 "${compiler[@]}" -source 8 -target 8 -encoding UTF-8 \
     -classpath "$android_jar:$app_classes" -d "$fixture_dir/classes" \
-    "$project_dir/tests/fixtures/FloatingFeedbackTest.java"
+    "$project_dir/tests/fixtures/FloatingFeedbackTest.java" \
+    "$project_dir/tests/fixtures/ThoughtIconTest.java"
 
 # The compiler output must contain only this instrumentation and its inner classes.
 while IFS= read -r -d '' generated; do
     case "${generated#"$fixture_dir/classes/"}" in
-        app/voiceflow/FloatingFeedbackTest.class|app/voiceflow/FloatingFeedbackTest\$*.class) ;;
+        app/voiceflow/FloatingFeedbackTest.class|app/voiceflow/FloatingFeedbackTest\$*.class|\
+        app/voiceflow/ThoughtIconTest.class|app/voiceflow/ThoughtIconTest\$*.class) ;;
         *) echo "Unexpected class in fixture output: $generated" >&2; exit 1 ;;
     esac
 done < <(find "$fixture_dir/classes" -type f -name '*.class' -print0)

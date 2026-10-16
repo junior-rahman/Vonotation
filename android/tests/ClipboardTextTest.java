@@ -18,16 +18,16 @@ public final class ClipboardTextTest {
         String emoji="😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀";
         String preview=ClipboardText.preview(emoji);check(preview.codePointCount(0,preview.length())==37);check(preview.endsWith("…"));
         StringBuilder longBuilder=new StringBuilder("  long copy\n");for(int i=0;i<10000;i++)longBuilder.append('x');longBuilder.append("\n  ");String longCopy=longBuilder.toString();
-        check(ClipboardText.usable(longCopy));check(!ClipboardText.storable(longCopy));check(ClipboardText.preview(longCopy).length()<100);
+        check(ClipboardText.usable(longCopy));check(ClipboardText.storable(longCopy));check(ClipboardText.preview(longCopy).length()<100);
         String[] runtime=ClipboardText.withCurrent(longCopy,items);check(runtime.length==20);equal(longCopy,runtime[0]);equal("item 0",runtime[1]);
-        String[] persisted=ClipboardText.prepend(longCopy,new String[]{"saved"});check(persisted.length==1);equal("saved",persisted[0]);
+        String[] persisted=ClipboardText.prepend(longCopy,new String[]{"saved"});check(persisted.length==2);equal(longCopy,persisted[0]);equal("saved",persisted[1]);
         ClipboardText.Selection longSelection=new ClipboardText.Selection("start [replace] end",7,14);
         equal("start ["+longCopy+"] end",longSelection.take("start [replace] end",7,14,longCopy));check(longSelection.cursor(longCopy)==7+longCopy.length());
         check(ClipboardText.withCurrent("saved",new String[]{"saved","older"}).length==2);
         EditorInsertion.Snapshot snap=new EditorInsertion.Snapshot("A","B","C",1,2);
         check(ClipboardText.same(snap,new EditorInsertion.Snapshot("A","B","C",1,2)));
         check(!ClipboardText.same(snap,new EditorInsertion.Snapshot("A","B","C",2,1)));
-        System.out.println("PASS: exact whitespace, bounded deduplicated history, single-use selection replacement, changed text/cursor rejection, Unicode preview and full long-copy runtime insertion");
+        System.out.println("PASS: exact whitespace, bounded deduplicated history, single-use selection replacement, changed text/cursor rejection, Unicode preview and full long-copy retention eligibility and insertion");
     }
     private static void check(boolean good){if(!good)throw new AssertionError();}
     private static void equal(String expected,String actual){if(!expected.equals(actual))throw new AssertionError("Expected ["+expected+"] got ["+actual+"]");}

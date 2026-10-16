@@ -20,6 +20,8 @@ final class FloatingIcon extends View {
         if(kind.equals("micKeyboardVisible") || kind.equals("micKeyboardHidden")){
             // Round5: one thin-bar waveform V; with the keyboard up the bars settle onto a key-row baseline (no badge).
             drawWaveV(canvas,kind.equals("micKeyboardVisible"));
+        }else if(kind.equals("thought") || kind.equals("thoughtDot")){
+            drawThought(canvas,kind.equals("thoughtDot"));
         }else if(kind.equals("delete")){
             paint.setStrokeWidth(2f);android.graphics.Path p=new android.graphics.Path();p.moveTo(18,15);p.lineTo(35.5f,15);p.quadTo(38,15,38,17.5f);p.lineTo(38,30.5f);p.quadTo(38,33,35.5f,33);p.lineTo(18,33);p.lineTo(10,24);p.close();canvas.drawPath(p,paint);
             canvas.drawLine(23,20,31,28,paint);canvas.drawLine(31,20,23,28,paint);
@@ -47,6 +49,25 @@ final class FloatingIcon extends View {
             canvas.drawRoundRect(x,top,x+2.4f,bottom,1.2f,1.2f,paint);}
         if(keyboard)canvas.drawRoundRect(10,36,38,38,1,1,paint);
         paint.setStyle(Paint.Style.STROKE);
+    }
+    /** A folded source note, deliberately separate from the established dictation waveform. */
+    private void drawThought(Canvas canvas,boolean compact){
+        paint.setStrokeWidth(compact?3f:2.3f);
+        android.graphics.Path page=new android.graphics.Path();
+        if(compact){
+            // The idle mark is only 12dp: a larger, simpler silhouette retains its folded corner.
+            page.moveTo(14,7);page.lineTo(28,7);page.lineTo(37,16);page.lineTo(37,38);
+            page.quadTo(37,41,34,41);page.lineTo(14,41);page.quadTo(11,41,11,38);
+            page.lineTo(11,10);page.quadTo(11,7,14,7);page.close();canvas.drawPath(page,paint);
+            android.graphics.Path fold=new android.graphics.Path();fold.moveTo(28,7);fold.lineTo(28,16);fold.lineTo(37,16);canvas.drawPath(fold,paint);
+            canvas.drawLine(19,27,29,27,paint);
+        }else{
+            page.moveTo(15,10);page.lineTo(28,10);page.lineTo(36,18);page.lineTo(36,35);
+            page.quadTo(36,38,33,38);page.lineTo(15,38);page.quadTo(12,38,12,35);
+            page.lineTo(12,13);page.quadTo(12,10,15,10);page.close();canvas.drawPath(page,paint);
+            android.graphics.Path fold=new android.graphics.Path();fold.moveTo(28,10);fold.lineTo(28,16);fold.quadTo(28,18,30,18);fold.lineTo(36,18);canvas.drawPath(fold,paint);
+            canvas.drawLine(18,24,30,24,paint);canvas.drawLine(18,29,30,29,paint);canvas.drawLine(18,34,25,34,paint);
+        }
     }
     private void drawFlowMark(Canvas canvas){
         canvas.save();canvas.translate(1,3);canvas.scale(1.15f,1.15f);canvas.rotate(13,15,15);paint.setStyle(Paint.Style.FILL);

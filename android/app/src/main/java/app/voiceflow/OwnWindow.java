@@ -3,6 +3,11 @@ package app.voiceflow;
 /** Android-free: is a window-state event from one of VonoTation's own screens (not the bubble overlay)? */
 final class OwnWindow {
     private OwnWindow() {}
+    static boolean afterEvent(boolean previous,String ownPackage,CharSequence eventPackage,CharSequence className,boolean inputMethodOrSystem){
+        if(isOwnScreen(ownPackage,eventPackage,className))return true;
+        if(eventPackage==null || ownPackage.contentEquals(eventPackage) || inputMethodOrSystem)return previous;
+        return false;
+    }
     static boolean isOwnScreen(String ownPackage, CharSequence eventPackage, CharSequence className) {
         if (eventPackage == null || !ownPackage.contentEquals(eventPackage)) return false;
         String name = className == null ? "" : className.toString();

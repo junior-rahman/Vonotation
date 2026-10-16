@@ -15,7 +15,7 @@ import android.view.WindowManager;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.widget.FrameLayout;
 
-/** The existing coral control, reduced to a dot while optional thought capture is idle. */
+/** An optional thought control, with its own note mark inside the existing coral surface. */
 final class QuickThoughtOverlay {
     private final Context context;
     private final WindowManager manager;
@@ -40,19 +40,21 @@ final class QuickThoughtOverlay {
         host=new FrameLayout(context);host.setClipChildren(false);host.setContentDescription("Quick thoughts: tap to record, hold to open thoughts, drag to move");host.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);host.setClickable(true);
         View face;
         if(compact){
-            face=new View(context);face.setBackground(FlowAccessibility.solidFace(context,Ui.dp(context,6)));face.setAlpha(.35f);
+            face=new FloatingIcon(context,"thoughtDot",Color.WHITE);face.setBackground(FlowAccessibility.solidFace(context,Ui.dp(context,6)));face.setAlpha(.35f);
             host.addView(face,new FrameLayout.LayoutParams(Ui.dp(context,12),Ui.dp(context,12),Gravity.CENTER));
         }else{
-            FloatingIcon.Control mic=new FloatingIcon.Control(context,"micKeyboardHidden",Color.WHITE,Ui.dp(context,30));mic.setBackground(FlowAccessibility.solidFace(context,Ui.dp(context,12)));mic.setAlpha(.65f);face=mic;
+            FloatingIcon.Control note=new FloatingIcon.Control(context,"thought",Color.WHITE,Ui.dp(context,30));note.setBackground(FlowAccessibility.solidFace(context,Ui.dp(context,12)));note.setAlpha(.65f);face=note;
             host.addView(face,new FrameLayout.LayoutParams(size,size,Gravity.CENTER));
         }
         // One semantic click target: a tiny visual dot still has a 48dp hit area.
         face.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         host.setOnClickListener(v->open());
-        host.setHapticFeedbackEnabled(Store.bool(context,"haptic_feedback",true));
+        // performLongClick supplies an automatic View haptic. Disable it so our preference-aware
+        // direct vibrator path provides exactly one pulse for physical and accessibility actions.
+        host.setHapticFeedbackEnabled(false);
         host.setOnLongClickListener(v->{
             if(!mayCapture.getAsBoolean())return false;
-            lastInteraction=SystemClock.elapsedRealtime();hide();openThoughts.run();return true;
+            lastInteraction=SystemClock.elapsedRealtime();Haptics.fire(context,Haptics.POP);hide();openThoughts.run();return true;
         });
         host.setAccessibilityDelegate(new View.AccessibilityDelegate(){
             @Override public void onInitializeAccessibilityNodeInfo(View view,AccessibilityNodeInfo info){super.onInitializeAccessibilityNodeInfo(view,info);info.addAction(new AccessibilityNodeInfo.AccessibilityAction(AccessibilityNodeInfo.ACTION_LONG_CLICK,"Open Quick thoughts"));}
@@ -95,29 +97,28 @@ final class QuickThoughtOverlay {
     }
     private void attachDrag(){
         host.setOnTouchListener(new View.OnTouchListener(){
-            float downX,downY;int startX,startY;boolean down,moved,held,cancelled;
+            float downX,downY;int startX,startY;
+            final ThoughtTouch touch=new ThoughtTouch();
             final int slop=ViewConfiguration.get(context).getScaledTouchSlop();
-            final Runnable hold=()->{if(down && !moved && !cancelled && host!=null && host.isAttachedToWindow()){held=true;host.performLongClick();}};
+            final Runnable hold=()->{if(host!=null && host.isAttachedToWindow() && touch.hold())host.performLongClick();};
             public boolean onTouch(View view,MotionEvent event){
                 if(layout==null || host!=view)return true;
                 int action=event.getActionMasked();
                 if(action==MotionEvent.ACTION_DOWN){
-                    downX=event.getRawX();downY=event.getRawY();startX=layout.x;startY=layout.y;down=true;moved=false;held=false;cancelled=false;interacting=true;view.setPressed(true);
+                    downX=event.getRawX();downY=event.getRawY();startX=layout.x;startY=layout.y;touch.begin();interacting=true;view.setPressed(true);
                     handler.removeCallbacks(refresh);pendingHold=hold;handler.postDelayed(hold,ViewConfiguration.getLongPressTimeout());return true;
                 }
-                if(!down)return true;
-                if(action==MotionEvent.ACTION_POINTER_DOWN || action==MotionEvent.ACTION_POINTER_UP){cancelled=true;handler.removeCallbacks(hold);view.setPressed(false);return true;}
+                if(action==MotionEvent.ACTION_POINTER_DOWN || action==MotionEvent.ACTION_POINTER_UP){touch.cancel();handler.removeCallbacks(hold);view.setPressed(false);return true;}
                 if(action==MotionEvent.ACTION_MOVE){
-                    if(held || cancelled)return true;
                     float dx=event.getRawX()-downX,dy=event.getRawY()-downY;
-                    if(!moved && dx*dx+dy*dy>slop*slop){moved=true;handler.removeCallbacks(hold);view.setPressed(false);}
-                    if(moved){DisplayMetrics metrics=new DisplayMetrics();manager.getDefaultDisplay().getRealMetrics(metrics);layout.x=startX+Math.round(dx);layout.y=startY+Math.round(dy);clamp(metrics);try{manager.updateViewLayout(host,layout);}catch(RuntimeException ignored){}}
+                    if(touch.move(dx,dy,slop)){handler.removeCallbacks(hold);view.setPressed(false);if(mayCapture.getAsBoolean())Haptics.fire(context,Haptics.PRESS);}
+                    if(touch.dragging()){DisplayMetrics metrics=new DisplayMetrics();manager.getDefaultDisplay().getRealMetrics(metrics);layout.x=startX+Math.round(dx);layout.y=startY+Math.round(dy);clamp(metrics);try{manager.updateViewLayout(host,layout);}catch(RuntimeException ignored){}}
                     return true;
                 }
                 if(action==MotionEvent.ACTION_UP || action==MotionEvent.ACTION_CANCEL){
-                    down=false;interacting=false;handler.removeCallbacks(hold);pendingHold=null;view.setPressed(false);
-                    if(action==MotionEvent.ACTION_UP && !cancelled && moved){lastInteraction=SystemClock.elapsedRealtime();Store.prefs(context).edit().putInt("rail_anchor_x",layout.x+layout.width/2).putInt("rail_anchor_y",layout.y+layout.height/2).apply();}
-                    else if(action==MotionEvent.ACTION_UP && !cancelled && !held){view.performClick();return true;}
+                    int result=touch.finish(action==MotionEvent.ACTION_CANCEL);interacting=false;handler.removeCallbacks(hold);pendingHold=null;view.setPressed(false);
+                    if(result==ThoughtTouch.DRAG_END){lastInteraction=SystemClock.elapsedRealtime();Store.prefs(context).edit().putInt("rail_anchor_x",layout.x+layout.width/2).putInt("rail_anchor_y",layout.y+layout.height/2).apply();}
+                    else if(result==ThoughtTouch.TAP){view.performClick();return true;}
                     handler.post(refresh);return true;
                 }
                 return true;

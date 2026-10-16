@@ -34,7 +34,7 @@ public final class CaptureActivity extends Activity implements Dictation.Listene
         thought="thought".equals(destination);
         // Mode is fixed when opened. A later focus change never routes a thought into an input.
         if(thought && !Store.quickThoughts(this)){finish();return;}
-        Window window=getWindow(); window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON); window.setGravity(Gravity.BOTTOM); window.setDimAmount(.22f); window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE | WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN);
+        Window window=getWindow(); window.setGravity(Gravity.BOTTOM); window.setDimAmount(.22f); window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE | WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN);
         LinearLayout root=Ui.column(this); root.setPadding(Ui.dp(this,24),Ui.dp(this,24),Ui.dp(this,24),Ui.dp(this,24)); root.setBackground(Ui.glass(this,28,Glass.LIGHT));
         LinearLayout top=Ui.row(this); top.addView(Ui.text(this,"VonoTation",20,Ui.INK,true),new LinearLayout.LayoutParams(0,-2,1)); timer=Ui.text(this,"00:00",13,Ui.MUTED,false); top.addView(timer); root.addView(top); Ui.space(root,22);
         status=Ui.text(this,"Ready when you are",25,Ui.INK,true); root.addView(status); Ui.space(root,8); subtitle=Ui.text(this,Ui.languageName(this)+" · "+(Store.engine(this).equals("cloud")?"Cloud speech":"Android speech"),13,Ui.MUTED,false); root.addView(subtitle);if(thought){status.setText("Capture a thought");subtitle.setText("Quick thoughts · Saved automatically");}

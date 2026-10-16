@@ -11,6 +11,13 @@ public final class OwnWindowTest {
         check(!OwnWindow.isOwnScreen(own, "app.voiceflow", "android.widget.LinearLayout"), "bubble overlay is not a screen");
         check(!OwnWindow.isOwnScreen(own, "com.android.quicksearchbox", "com.android.quicksearchbox.SearchActivity"), "other app");
         check(!OwnWindow.isOwnScreen(own, null, null), "null event");
-        System.out.println("PASS: 6 own-window checks.");
+        check(OwnWindow.afterEvent(false,own,own,"app.voiceflow.MainActivity",false),"own activity becomes foreground");
+        check(OwnWindow.afterEvent(true,own,own,"android.widget.LinearLayout",false),"bubble event preserves foreground own activity guard");
+        check(OwnWindow.afterEvent(true,own,"com.android.inputmethod","InputMethod",true),"IME event preserves own activity guard");
+        check(OwnWindow.afterEvent(true,own,"com.android.systemui","StatusBar",true),"system overlay preserves own activity guard");
+        check(OwnWindow.afterEvent(true,own,null,null,false),"missing package cannot prove departure");
+        check(!OwnWindow.afterEvent(true,own,"com.browser","BrowserActivity",false),"another application clears own activity guard");
+        check(!OwnWindow.afterEvent(false,own,own,"android.widget.LinearLayout",false),"bubble alone cannot claim foreground activity");
+        System.out.println("PASS: 13 own-window checks.");
     }
 }

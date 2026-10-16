@@ -1,0 +1,17 @@
+VonoTation 0.1.16-preview / versionCode 88 / app.voiceflow
+Prepared 2026-10-16T05:05:52+00:00
+
+Android :app:assemblePreview: passed (recorded build log).
+Android full :app:lintPreview: passed (recorded build log; warnings may remain).
+Pure Java suites: all 37 passed (recorded test log).
+APK manifest identity and existing preview signing certificate: verified.
+Signer certificate SHA256: 5dca2219fbe89fb885b24c904fd4c57d3b58930922d21d455fc10d7a35f7568a
+Source inventory SHA256: cb5b721be353e4bb4a08c27ff62d022a1f71f5bb5eb893b14ba9faa36ffd613a
+
+Phone/device testing: not performed. Samsung/Niagara, browser and custom input detection, dictation across app/field changes, microphone capture, capture-only screen-awake behavior, manual screen locking, clipboard access/expiry, haptic feedback, provider summaries, background retries, installer return, Google account consent and live backup/restore still need device testing. Google OAuth registration for the current signing certificate is not verified. JVM tests cover synthetic logic only.
+
+This is a reliability release. Its reviewed change scope is recorded in RELEASE_NOTES-0.1.16-preview.txt and its exact source delta from 0.1.15-preview is recorded in CHANGES-FROM-0.1.15-preview.patch. The tests above validate the local build and synthetic regression logic; they do not establish microphone, provider, accessibility, call or installer behavior on Android hardware.
+
+Device regression focus: an input-started session remains dictation through app switches, keyboard changes and temporary input loss until explicitly finished. Losing original editor authority permanently suspends insertion for that capture, including on return; normal Finish uses clipboard recovery and history respecting Save history, while private capture remains in memory for explicit Copy only. Verify recording-only screen-awake renewal, explicit screen locking, browser/custom-editor detection, distinct Quick thoughts icon and haptic feedback, and concise thought summaries alongside the unchanged full transcript. Verify the separate Daybook Clipboard card, full-text 30-day retention without early count/character eviction, immediate expiry hiding and background cleanup, and the retained compact pill/tray without automatic popups. Clipboard access depends on Android focus/default-IME permission; unavailable past copies cannot be recovered, sensitive/password/system-private copies are excluded, and clipboard history is not included in Drive backups. Check interruption recovery and installer/capture exclusion as well. Verify the final release notes for which fixes are included. The broader color and aesthetics refresh is deferred.
+
+Private signing keys, API keys, recordings, machine configuration and build caches are excluded. The Gradle wrapper JAR is intentionally included. Historical documents describe older versions; app/build.gradle identifies this source version.

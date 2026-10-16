@@ -41,7 +41,7 @@ fi
 
 # Use current regression sources. Production classes are classpath-only.
 sources=(ControlSetup EditorActivity FakeSpeech KeyboardStateTest AuthFieldTest \
-    InputRecoveryTest ComposeDeleteTest CurrentCursorDeleteTest InputSnapshotTest ThoughtSummaryRequestTest ApiRequestTest RecoveryTest)
+    InputRecoveryTest ComposeDeleteTest CurrentCursorDeleteTest InputSnapshotTest ThoughtSummaryRequestTest ApiRequestTest RecoveryTest RecordingAwakeNativeTest CloudPersistenceTest)
 source_files=()
 for source in "${sources[@]}"; do source_files+=("$project_dir/tests/fixtures/$source.java"); done
 rm -rf "$fixture_dir/classes" "$fixture_dir/dex"
@@ -58,6 +58,8 @@ while IFS= read -r -d '' generated; do
     case "$relative" in
         app/voiceflow/ControlSetup.class|app/voiceflow/ApiRequestTest.class|app/voiceflow/ApiRequestTest\$*.class|\
         app/voiceflow/RecoveryTest.class|app/voiceflow/RecoveryTest\$*.class|\
+        app/voiceflow/RecordingAwakeNativeTest.class|app/voiceflow/RecordingAwakeNativeTest\$*.class|\
+        app/voiceflow/CloudPersistenceTest.class|app/voiceflow/CloudPersistenceTest\$*.class|\
         app/voiceflow/InputSnapshotTest.class|app/voiceflow/InputSnapshotTest\$*.class|\
         app/voiceflow/ThoughtSummaryRequestTest.class|app/voiceflow/ThoughtSummaryRequestTest\$*.class|\
         app/voiceflow/fixture/EditorActivity.class|app/voiceflow/fixture/EditorActivity\$*.class|\

@@ -1,0 +1,28 @@
+VonoTation 0.1.16-preview
+Android package: app.voiceflow
+Version code: 88
+
+Dictation and Quick thoughts reliability
+- An input-started dictation session keeps recording across app switches, keyboard visibility changes and temporary loss of its input until Finish or Cancel. Its original dictation mode is retained throughout; leaving an input does not turn the session into a thought.
+- Text inserts only while the original input session remains verified. Losing that editor's authority permanently suspends insertion for the rest of the capture, including after returning to the field. Normal Finish keeps the full dictation in clipboard recovery and adds history only when Save history is enabled. Private capture stays in memory for explicit Copy only.
+- A renewable, capture-only screen-awake policy prevents ordinary display timeout while recording. Capture completion releases it, and an explicit user screen lock is respected.
+- Browser and custom-editor recognition combines accessibility input evidence with native keyboard metadata. Ambiguous field transitions avoid incorrectly starting Quick thoughts while an editor is active.
+- Quick thoughts has a distinct thought symbol and touch haptic feedback. The established dictation icon is preserved.
+- Thought summaries focus on the main ideas, decisions and next steps, removing filler and avoiding a verbatim copy of the transcript. Full transcript remains the source record, separate from the summary and hidden Source audio.
+
+Clipboard
+- A separate Clipboard card uses the existing Daybook daily timeline, expandable previews, selectable full text, Copy and Delete actions.
+- Ordinary copied text that Android makes available is retained locally for 30 days. Opening a copy does not extend its expiry; display limits do not evict unexpired entries or truncate their full text. Expired copies are hidden immediately and cleaned up in the background.
+- The floating latest-copy pill and compact scrolling tray are retained. The in-app card pages longer histories without loading every full copy at once.
+- Android permits clipboard reads while VonoTation has focus or is the selected keyboard. Copies unavailable under those rules cannot be recovered retroactively. No automatic clipboard popups are opened. Sensitive, password and system-private copies are excluded, and clipboard history is not included in Drive text backups.
+
+The current interface is retained with the requested Quick thoughts symbol and matching Clipboard card. The broader color and aesthetics refresh follows the reliability work. Existing offline thought recording, source-audio retention, daily timelines and short-thought safeguards remain in place.
+
+Verification
+Release preparation records the final Android assembly, full lint, JVM regression suites, APK identity/signing and source-exclusion checks in verification/v0.1.16-preview/VERIFICATION.txt. The publication workflow validates artifact hashes, sizes and manifest identity. Public APK and source downloads are verified before the update feed advances.
+
+Phone/device testing: not performed.
+
+Actual browser/custom-field detection, switching between apps while recording, permanent insertion suspension, clipboard recovery, private explicit-copy handling, clipboard access/expiry, display timeout, manual screen locking, microphone finalization, haptic feedback, provider summaries, call behavior, background retry scheduling and installer handoff remain unverified on Android hardware. Google Drive OAuth registration for the current signing certificate, account consent and live backup/restore remain unverified. Source review and JVM checks do not establish device or provider behavior.
+
+Install through Settings > Update and confirm Android's installer. Private signing keys, API keys, recordings, caches and machine configuration are excluded from the source archive. Retained thought source recordings stay on this phone; transcription sends audio to the configured Notes provider when connected.

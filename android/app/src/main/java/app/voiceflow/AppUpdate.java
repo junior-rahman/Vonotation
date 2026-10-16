@@ -123,7 +123,7 @@ final class AppUpdate {
             catch(Exception error){fail(app,problem(error,"The update couldn't be prepared. Tap Update to retry."),true);}
         });
     }
-    private static boolean audioBusy(){return Dictation.isWorking()||VoiceTake.updateBusy()||Translate.going()||LineWire.updateBusy()||Notes.updateBusy();}
+    private static boolean audioBusy(){return Dictation.isWorking()||(FlowAccessibility.instance!=null&&FlowAccessibility.instance.isRecording())||(FlowKeyboard.instance!=null&&FlowKeyboard.instance.isRecording())||VoiceTake.updateBusy()||Translate.going()||LineWire.updateBusy()||Notes.updateBusy();}
     private static boolean audioBusyOnMain(Context context) throws Exception {
         if(Looper.myLooper()==context.getMainLooper())return audioBusy();
         FutureTask<Boolean> check=new FutureTask<>(AppUpdate::audioBusy);main(context).post(check);return check.get(5,TimeUnit.SECONDS);

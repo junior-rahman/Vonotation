@@ -1,0 +1,50 @@
+{
+  "versionName": "0.1.16-preview",
+  "versionCode": 88,
+  "androidAssembly": "passed",
+  "fullLint": {
+    "errors": 0,
+    "warnings": 121
+  },
+  "pureSuites": 37,
+  "cryptoRoundTrips": "300/10,000 thoughts plus 100 dictations; passed",
+  "nativeFixtures": "compiled and same-signer verified; not executed",
+  "artifacts": [
+    {
+      "name": "app-preview.apk",
+      "size": 6206674,
+      "sha256": "4512b02df1edff7722cd030e73330c7d80cf98209437bb86f2ae2c6b991b6d90",
+      "signerSha256": "5dca2219fbe89fb885b24c904fd4c57d3b58930922d21d455fc10d7a35f7568a",
+      "deviceExecution": null
+    },
+    {
+      "name": "VoiceFlow-backup-fixture.apk",
+      "size": 49579,
+      "sha256": "c5b99aa44ca5c1735f627a38873643f994bcbbfac7dd14f803aaec2498986e64",
+      "signerSha256": "5dca2219fbe89fb885b24c904fd4c57d3b58930922d21d455fc10d7a35f7568a",
+      "deviceExecution": "not performed"
+    },
+    {
+      "name": "VoiceFlow-input-regressions-fixture.apk",
+      "size": 74155,
+      "sha256": "da8190d341ef55a2ee54ab7db1dc2f7c93ecd86cf1ceea3e962c366b91f6b1fe",
+      "signerSha256": "5dca2219fbe89fb885b24c904fd4c57d3b58930922d21d455fc10d7a35f7568a",
+      "deviceExecution": "not performed"
+    },
+    {
+      "name": "VoiceFlow-floating-feedback-fixture.apk",
+      "size": 20907,
+      "sha256": "644484df27b23ed4254b55d915fbd0bc46ecd12a830aebab1067bed2b013300e",
+      "signerSha256": "5dca2219fbe89fb885b24c904fd4c57d3b58930922d21d455fc10d7a35f7568a",
+      "deviceExecution": "not performed"
+    },
+    {
+      "name": "VonoTation-clipboard-fixture.apk",
+      "size": 12715,
+      "sha256": "c0082ab6807b6d0b37f5a37541097447300ece4dbea1994847473a7bd84b469b",
+      "signerSha256": "5dca2219fbe89fb885b24c904fd4c57d3b58930922d21d455fc10d7a35f7568a",
+      "deviceExecution": "not performed"
+    }
+  ],
+  "phoneDeviceTesting": "not performed"
+}

@@ -3,8 +3,6 @@ package app.voiceflow;
 import android.Manifest;
 import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
-import android.content.BroadcastReceiver;
 import android.content.pm.PackageManager;
 import android.media.MediaRecorder;
 import android.os.Build;
@@ -46,24 +44,25 @@ final class Dictation {
     private volatile boolean closed;
     private boolean active, stopping, processing, countedWorking,cloudRecording;
     private CaptureGate.Lease captureLease;
+    private final RecordingAwake awake;
     private String committed="", partial="";
-    private int silenceCount;
-    private boolean screenReceiverRegistered;
-    private final BroadcastReceiver screenReceiver=new BroadcastReceiver(){public void onReceive(Context c,Intent intent){if(Intent.ACTION_SCREEN_OFF.equals(intent.getAction()))stop();}};
     Dictation(Context c,Listener listener) { this(c,listener,false); }
     Dictation(Context c,Listener listener,boolean sensitive) { this(c,listener,sensitive,false); }
-    Dictation(Context c,Listener listener,boolean sensitive,boolean thought) { context=c; this.listener=listener;this.sensitive=sensitive;this.thought=thought; }
+    Dictation(Context c,Listener listener,boolean sensitive,boolean thought) { context=c; this.listener=listener;this.sensitive=sensitive;this.thought=thought;awake=new RecordingAwake(c); }
     boolean isFinishing(){return stopping || processing;}
+    boolean isCapturing(){return active&&!stopping&&!processing&&!closed;}
     void start() {
         if(active || closed) return;
+        if(isWorking()){listener.error("Finish your current dictation first.");return;}
+        if(VoiceTake.updateBusy()||Translate.going()||LineWire.updateBusy()){listener.error("Finish the other recording first.");return;}
         if(context.checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED) { listener.error("Allow microphone access first."); return; }
         // Restore and a new recording must not cross between its busy check and
         // applying preferences. Keep UI and recorder work outside this gate.
         synchronized(Store.class){if(active || closed)return;captureLease=CaptureBarrier.begin(context);if(captureLease==null){listener.error("Finish or cancel the app update before recording.");return;}active=true;markWorking(true);}
+        awake.start();
         cloudRecording=Store.engine(context).equals("cloud");listener.state(cloudRecording?"Starting microphone…":"Listening…");
-        IntentFilter filter=new IntentFilter(Intent.ACTION_SCREEN_OFF);
-        if(Build.VERSION.SDK_INT>=33)context.registerReceiver(screenReceiver,filter,Context.RECEIVER_NOT_EXPORTED);else context.registerReceiver(screenReceiver,filter);screenReceiverRegistered=true;
-        handler.postDelayed(()->{ if(active && !processing) stop(); },5*60*1000);
+        // Input focus, app visibility, silence and screen timeout do not finish a take.
+        // Its originating UI owns Finish/Cancel; hardware/permission failures still recover normally.
         if(cloudRecording) startRecorder(); else startSpeech();
     }
     private void startRecorder() {
@@ -103,7 +102,7 @@ final class Dictation {
             recognizer=offline ? SpeechRecognizer.createOnDeviceSpeechRecognizer(context) : SpeechRecognizer.createSpeechRecognizer(context);
             recognizer.setRecognitionListener(new RecognitionListener() {
                 public void onReadyForSpeech(Bundle p) { if(!closed) listener.state("Listening…"); }
-                public void onBeginningOfSpeech() { silenceCount=0; }
+                public void onBeginningOfSpeech() {}
                 public void onRmsChanged(float rms) { if(!closed) listener.level((rms+2)/12f); }
                 public void onBufferReceived(byte[] b) {}
                 public void onEndOfSpeech() { if(stopping && !closed) listener.state("Finishing…"); }
@@ -114,8 +113,8 @@ final class Dictation {
                         // A recognizer can emit useful partial words and then no final
                         // result. Retain that segment before starting another session.
                         if(!partial.trim().isEmpty()){committed=join(committed,partial);partial="";listener.partial(committed);}
-                        if(++silenceCount>=3) { String captured=join(committed,partial);if(!captured.trim().isEmpty()) complete(captured); else fail("I didn’t hear any speech. Tap Record to try again."); }
-                        else handler.postDelayed(()->listen(),250);
+                        // A pause is a new recognizer segment, never the end of dictation.
+                        handler.postDelayed(()->listen(),350);
                     } else {
                         String captured=join(committed,partial);
                         if(!captured.trim().isEmpty()) { if(recognizer!=null) { recognizer.destroy(); recognizer=null; } deliver(captured,sensitive?captured:Store.clean(context,captured),speechError(error)+" Your captured words were kept."); }
@@ -144,7 +143,7 @@ final class Dictation {
         try { recognizer.startListening(intent); } catch(Exception e) { fail("The speech engine is busy. Try again."); }
     }
     void stop() {
-        if(!active || stopping || processing) return; stopping=true;releaseScreenReceiver();
+        if(!active || stopping || processing) return; stopping=true;awake.close();
         if(cloudRecording) {
             processing=true;handler.removeCallbacks(amplitude);listener.state("Saving recording…");
             // An early Finish waits behind setup on the same worker, so it can
@@ -222,9 +221,9 @@ final class Dictation {
             executor.execute(()->{ try { String text=request.transform(clean,cleanup,romanize); handler.post(()->deliver(raw,text,"")); } catch(Exception e) { handler.post(()->deliver(raw,clean,"Text processing failed. Your original words are safe. "+safe(e))); } });
         } else deliver(raw,clean,"");
     }
-    private void deliver(String raw,String text,String warning) { if(closed) return; active=false; processing=false;releaseScreenReceiver();handler.removeCallbacksAndMessages(null);try{listener.result(raw,text,warning);}finally{markWorking(false);} }
+    private void deliver(String raw,String text,String warning) { if(closed) return; active=false; processing=false;awake.close();handler.removeCallbacksAndMessages(null);try{listener.result(raw,text,warning);}finally{markWorking(false);} }
     private void fail(String message) {
-        if(closed) return; active=false; processing=false;releaseScreenReceiver();handler.removeCallbacksAndMessages(null);
+        if(closed) return; active=false; processing=false;awake.close();handler.removeCallbacksAndMessages(null);
         if(recognizer!=null) { recognizer.destroy(); recognizer=null; }
         try{listener.error(message==null ? "Dictation failed. Please try again." : message);}finally{markWorking(false);}
     }
@@ -242,7 +241,6 @@ final class Dictation {
             default: return "Speech recognition failed ("+code+"). Try another speech mode in Settings.";
         }
     }
-    private void releaseScreenReceiver(){if(screenReceiverRegistered){context.unregisterReceiver(screenReceiver);screenReceiverRegistered=false;}}
     private void markWorking(boolean value){
         boolean changed=false;
         synchronized(Dictation.class){if(countedWorking!=value){countedWorking=value;workingSessions+=value?1:-1;changed=true;}}
@@ -276,7 +274,7 @@ final class Dictation {
         if(id>0)Notes.formatThought(app,id);
         else android.widget.Toast.makeText(app,"Could not save your quick thought. Check available phone storage.",android.widget.Toast.LENGTH_LONG).show();
     }
-    void close() { if(closed)return;closed=true;active=false;releaseScreenReceiver();handler.removeCallbacksAndMessages(null);if(recognizer!=null){recognizer.cancel();recognizer.destroy();recognizer=null;}CloudApi request=api;if(request!=null)request.cancel();
+    void close() { if(closed)return;closed=true;active=false;awake.close();handler.removeCallbacksAndMessages(null);if(recognizer!=null){recognizer.cancel();recognizer.destroy();recognizer=null;}CloudApi request=api;if(request!=null)request.cancel();
         // Never drop queued setup/stop/cleanup. A native call may still be in
         // progress; its worker must release the microphone and delete the file.
         executor.execute(()->{cleanRecorder();markWorking(false);});executor.shutdown();

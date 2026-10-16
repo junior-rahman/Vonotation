@@ -55,6 +55,8 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
     private boolean busy,finishing,insertionLost;
     /** Frozen at microphone start; later input focus cannot redirect a thought into a field. */
     private boolean thoughtSession;
+    private InputCapturePolicy.Session captureOrigin;
+    private boolean ambiguousInputFocus;
     private volatile ThoughtListener thoughtCapture;
     private long startedAt;
     private String lastPartial="";
@@ -150,6 +152,8 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
     @Override public android.accessibilityservice.InputMethod onCreateInputMethod(){editor=new AccessibilityEditor(this);return editor;}
     void editorChanged(){handler.removeCallbacks(refresh);handler.postDelayed(refresh,70);}
     boolean isRecording(){return busy;}
+    /** Clipboard observers must never query accessibility nodes in the main-thread callback. */
+    static boolean clipboardSensitiveContext(){FlowAccessibility owner=instance;return Build.VERSION.SDK_INT>=33 && owner!=null && owner.editor!=null && owner.editor.clipboardSensitiveContext();}
     static boolean thoughtCaptureActive(long id){FlowAccessibility service=instance;return service!=null && service.thoughtCapture!=null && service.thoughtCapture.id==id;}
     @Override public void onAccessibilityEvent(AccessibilityEvent event) {
         // Observe focus/field metadata only. Read field text only during user-started dictation.
@@ -171,15 +175,17 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
                 if(homeFinderWindow!=-1){homeFinderWindow=-1;homeMisses=0;}
             }
             handler.removeCallbacks(detectHomeInput);handler.postDelayed(detectHomeInput,300);
-            ownAppActive=OwnWindow.isOwnScreen(getPackageName(),event.getPackageName(),event.getClassName());
+            // Overlay/IME window events do not mean our foreground Activity disappeared.
+            ownAppActive=OwnWindow.afterEvent(ownAppActive,getPackageName(),pkg,event.getClassName(),pkg!=null && isImePackage(pkg.toString()));
+            if(busy && !thoughtSession && target!=null && target.packageName!=null && pkg!=null && !target.packageName.contentEquals(pkg) && !getPackageName().contentEquals(pkg) && !isImePackage(pkg.toString()))loseInsertion();
         }
-        if(busy && thoughtSession){handler.removeCallbacks(refresh);handler.post(refresh);return;}
+        if(busy && (thoughtSession || ownAppActive)){handler.removeCallbacks(refresh);handler.post(refresh);return;}
         // This service shares a process with VonoTation's own screens. Querying our own window from here waits on
         // the main thread it is running on (5 s per query, which caused input ANRs while typing in Settings), and
         // the bubble never serves VonoTation's own fields unless the VonoTation keyboard is active.
         if(ownAppActive && !keyboardMode() && !busy){handler.removeCallbacks(refresh);handler.post(()->{removeBubble();hideThought();});return;}
         if(type==AccessibilityEvent.TYPE_VIEW_FOCUSED && isHomePackage(event.getPackageName())){handler.removeCallbacks(detectHomeInput);handler.postDelayed(detectHomeInput,200);}
-        if(type==AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED)return;
+        if(type==AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED){if(!recording()){handler.removeCallbacks(refresh);handler.postDelayed(refresh,180);}return;}
         boolean inputInteraction=false;
         if(type==AccessibilityEvent.TYPE_VIEW_CLICKED || type==AccessibilityEvent.TYPE_VIEW_FOCUSED || type==AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED || type==AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED){
             AccessibilityNodeInfo source=event.getSource();
@@ -243,13 +249,14 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
         if(b.top<0 || b.left<-2 || b.right>screen.widthPixels+2)return false;
         return b.bottom<screen.heightPixels*0.55f;
     }
-    private static boolean looksLikeInput(AccessibilityNodeInfo n){if(n.isEditable())return true;CharSequence c=n.getClassName();String k=c==null?"":c.toString();return k.endsWith("EditText")||k.endsWith("AutoCompleteTextView")||k.endsWith("SearchView$SearchAutoComplete");}
+    private static boolean looksLikeInput(AccessibilityNodeInfo n){if(n.isEditable() || n.getInputType()!=android.text.InputType.TYPE_NULL)return true;for(AccessibilityNodeInfo.AccessibilityAction action:n.getActionList())if(action.getId()==AccessibilityNodeInfo.ACTION_SET_TEXT)return true;CharSequence c=n.getClassName();String k=c==null?"":c.toString();return k.endsWith("EditText")||k.endsWith("AutoCompleteTextView")||k.endsWith("SearchView$SearchAutoComplete");}
     private AccessibilityNodeInfo findOpenSearch(AccessibilityNodeInfo n,int depth){
         if(depth>25)return null;
         for(int i=0;i<n.getChildCount();i++){AccessibilityNodeInfo c=n.getChild(i);if(c==null)continue;if(openSearchBar(c))return c;AccessibilityNodeInfo f=findOpenSearch(c,depth+1);c.recycle();if(f!=null)return f;}
         return null;
     }
     private boolean homeScreenActive(){
+        if(ownAppActive)return false;
         for(AccessibilityWindowInfo window:getWindows())if(window.getType()==AccessibilityWindowInfo.TYPE_APPLICATION && (window.isFocused() || window.isActive())){
             AccessibilityNodeInfo root=window.getRoot();if(root!=null){boolean home=isHomePackage(root.getPackageName());root.recycle();if(home)return true;}
         }
@@ -261,6 +268,7 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
     }
     /** True when the launcher is the front app, even if the keyboard window is focused. */
     private boolean launcherInFront(){
+        if(ownAppActive)return false;
         boolean launcher=false,other=false;
         for(AccessibilityWindowInfo window:getWindows()){
             if(window.getType()!=AccessibilityWindowInfo.TYPE_APPLICATION)continue;
@@ -273,7 +281,7 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
         }
         return launcher&&!other;
     }
-    @Override public void onInterrupt() { cancelRecording(); }
+    @Override public void onInterrupt() { updateBubble(); }
     @Override public void onSharedPreferenceChanged(SharedPreferences prefs,String key) {
         if(key.equals("notes") && thoughtCapture!=null && Notes.thoughtDeleted(this,thoughtCapture.id)){thoughtCapture.cancel();return;}
         if(key.equals("typing_visible")){boolean requested=prefs.getBoolean(key,false);if(typingRequested!=requested){typingRequested=requested;automaticTypingSuppressedKey="";keyboardIndicatorPendingUntil=0;displayedState=-1;updateBubble();}return;}
@@ -285,26 +293,57 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
     /** IME windows can be active; search the focused application window first. */
     private AccessibilityNodeInfo focusedField(){return focusedField(false);}
     private AccessibilityNodeInfo focusedField(boolean typingOnly) {
+        if(ownAppActive)return null;
+        ambiguousInputFocus=false;
         List<AccessibilityWindowInfo> windows=getWindows();
         for(AccessibilityWindowInfo window:windows) {
             if(window.getType()!=AccessibilityWindowInfo.TYPE_APPLICATION || (!window.isFocused() && !window.isActive())) continue;
             AccessibilityNodeInfo root=window.getRoot();
-            AccessibilityNodeInfo focus=root==null?null:root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT);
+            AccessibilityNodeInfo focus=findInput(root,typingOnly);
             if(root!=null) root.recycle();
             if(typingOnly?typingField(focus):eligible(focus)) return focus;
             if(focus!=null) focus.recycle();
         }
         AccessibilityNodeInfo root=getRootInActiveWindow();
-        AccessibilityNodeInfo focus=root==null?null:root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT);
+        AccessibilityNodeInfo focus=findInput(root,typingOnly);
         if(root!=null) root.recycle();
         if(typingOnly?typingField(focus):eligible(focus)) return focus;
         if(focus!=null) focus.recycle(); return null;
     }
-    private boolean eligible(AccessibilityNodeInfo node) {
-        return node!=null && node.isEditable() && node.isFocused() && node.isEnabled() && node.isVisibleToUser() && (!isHomePackage(node.getPackageName()) || homeInputOpen(node)) && (keyboardMode() || !getPackageName().contentEquals(node.getPackageName()==null?"":node.getPackageName()));
+    private AccessibilityNodeInfo findInput(AccessibilityNodeInfo root,boolean typingOnly){
+        if(root==null)return null;
+        AccessibilityNodeInfo focused=root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT);
+        if(typingOnly?typingField(focused):eligible(focused))return focused;
+        if(focused!=null){
+            ambiguousInputFocus|=looksLikeInput(focused);
+            AccessibilityNodeInfo descendant=findFocusedInput(focused,typingOnly,0,new int[]{80});
+            focused.recycle();if(descendant!=null)return descendant;
+        }
+        return findFocusedInput(root,typingOnly,0,new int[]{180});
     }
-    private boolean typingField(AccessibilityNodeInfo node){return node!=null && node.isEditable() && node.isFocused() && node.isEnabled() && node.isVisibleToUser() && (node.isPassword() || FlowKeyboard.requiresTyping(node.getInputType())) && (!isHomePackage(node.getPackageName()) || homeInputOpen(node));}
-    boolean focusedInputIsSensitive(){if(ownAppActive)return FlowKeyboard.instance==null || !FlowKeyboard.instance.hasActiveEditor() || FlowKeyboard.isPassword(FlowKeyboard.instance.getCurrentInputEditorInfo());AccessibilityNodeInfo field=focusedField();if(field==null)return false;try{return field.isPassword() || FlowKeyboard.isPasswordType(field.getInputType());}finally{field.recycle();}}
+    private AccessibilityNodeInfo findFocusedInput(AccessibilityNodeInfo node,boolean typingOnly,int depth,int[] budget){
+        if(node==null || depth>18 || --budget[0]<0)return null;
+        if(typingOnly?typingField(node):eligible(node))return AccessibilityNodeInfo.obtain(node);
+        if(!node.isVisibleToUser())return null;
+        for(int i=0;i<node.getChildCount() && budget[0]>0;i++){
+            AccessibilityNodeInfo child=node.getChild(i);if(child==null)continue;
+            AccessibilityNodeInfo found=findFocusedInput(child,typingOnly,depth+1,budget);child.recycle();if(found!=null)return found;
+        }
+        return null;
+    }
+    private InputCapturePolicy.Evidence inputEvidence(boolean accessibleInput){
+        boolean nativeInput=Build.VERSION.SDK_INT>=33 && editor!=null && editor.hasActiveEditor();
+        boolean keyboardInput=FlowKeyboard.instance!=null && FlowKeyboard.instance.hasActiveEditor();
+        boolean visibleKeyboard=typingKeyboardVisible();
+        // A launcher's hidden Finder can leave stale editor metadata on Home.
+        if(!accessibleInput && homeFinderWindow<0 && launcherInFront() && !visibleKeyboard)return InputCapturePolicy.Evidence.NONE;
+        return InputCapturePolicy.evidence(accessibleInput,nativeInput || keyboardInput,visibleKeyboard,ambiguousInputFocus);
+    }
+    private boolean eligible(AccessibilityNodeInfo node) {
+        return node!=null && looksLikeInput(node) && node.isFocused() && node.isEnabled() && node.isVisibleToUser() && (!isHomePackage(node.getPackageName()) || homeInputOpen(node)) && (keyboardMode() || !getPackageName().contentEquals(node.getPackageName()==null?"":node.getPackageName()));
+    }
+    private boolean typingField(AccessibilityNodeInfo node){return node!=null && looksLikeInput(node) && node.isFocused() && node.isEnabled() && node.isVisibleToUser() && (node.isPassword() || FlowKeyboard.requiresTyping(node.getInputType())) && (!isHomePackage(node.getPackageName()) || homeInputOpen(node));}
+    boolean focusedInputIsSensitive(){if(ownAppActive)return FlowKeyboard.instance==null || !FlowKeyboard.instance.hasActiveEditor() || FlowKeyboard.isPassword(FlowKeyboard.instance.getCurrentInputEditorInfo());if(Build.VERSION.SDK_INT>=33 && editor!=null && editor.sensitive())return true;AccessibilityNodeInfo field=focusedField();if(field==null)return false;try{return field.isPassword() || FlowKeyboard.isPasswordType(field.getInputType());}finally{field.recycle();}}
     private boolean recording(){return busy || (FlowKeyboard.instance!=null && FlowKeyboard.instance.isRecording());}
     private boolean working(){return busy?finishing:FlowKeyboard.instance!=null && FlowKeyboard.instance.isFinishing();}
     private boolean keyboardMode(){return FlowKeyboard.instance!=null && FlowKeyboard.instance.hasActiveEditor() && !busy;}
@@ -314,28 +353,25 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
         android.app.KeyguardManager lock=(android.app.KeyguardManager)getSystemService(KEYGUARD_SERVICE);
         android.os.PowerManager power=(android.os.PowerManager)getSystemService(POWER_SERVICE);
         boolean locked=lock!=null && lock.isKeyguardLocked(),interactive=power==null || power.isInteractive();
-        if(busy && thoughtSession){
-            // A thought is a voice note. It keeps recording through app/field changes and screen lock;
-            // only Finish (or a system teardown) finalizes it. Never query our own editor tree here.
-            hideThought();
+        if(busy || (FlowKeyboard.instance!=null && FlowKeyboard.instance.isRecording())){
+            observeCaptureDestination();
+            // Capture mode and destination were frozen at Start. Focus loss only suspends insertion.
+            hideThought();if(clipOpening)hideClipTray();
             if(locked || !interactive){removeBubble();return;}
-            int state=finishing?2:1;
-            if(bubble==null || displayedState!=state)buildControls(state,false,false);
-            if(timer!=null && finishing)timer.setText(currentStage());
+            boolean keyboardOwner=!busy && FlowKeyboard.instance!=null && FlowKeyboard.instance.isRecording();
+            int state=(keyboardOwner?20:0)+(working()?2:1);
+            if(bubble==null || displayedState!=state)buildControls(state,keyboardOwner,false);
+            if(timer!=null && working())timer.setText(currentStage());
             positionBubble();handler.removeCallbacks(tick);handler.post(tick);return;
         }
-        if(locked || !interactive){if(busy && dictation!=null && !finishing)dictation.stop();removeBubble();hideThought();return;}
+        if(locked || !interactive){removeBubble();hideThought();return;}
         // The explicit clipboard read briefly owns focus. Preserve the original fan only for this bounded handoff.
         if(clipboardPeekGrace())return;
         if(clipOpening)hideClipTray();
-        if(ownAppActive && !keyboardMode()){
-            // The Thoughts screen is for saved notes, never a recording popup. Do not query our own
-            // main-thread window; finish an external capture and save through its frozen destination.
-            if(busy && dictation!=null && !finishing)dictation.stop();
-            removeBubble();hideThought();return;
-        }
+        if(ownAppActive && !keyboardMode()){removeBubble();hideThought();return;}
         boolean keyboardMode=keyboardMode();
-        AccessibilityNodeInfo field=focusedField();boolean hasField=field!=null;
+        AccessibilityNodeInfo field=focusedField();boolean hasAccessibleField=field!=null;
+        InputCapturePolicy.Evidence evidence=inputEvidence(hasAccessibleField);boolean hasField=evidence!=InputCapturePolicy.Evidence.NONE;
         String currentKey=field==null?"":field.getWindowId()+":"+field.hashCode();
         if(!currentKey.equals(focusedKey) && (hasField || android.os.SystemClock.elapsedRealtime()>keyboardTransitionUntil)){focusedKey=currentKey;automaticTypingSuppressedKey="";}
         boolean launcherField=field!=null && isHomePackage(field.getPackageName());
@@ -348,12 +384,10 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
         // Leave that keyboard alone unless the user uses Niagara's own key.
         if(!launcher && !(busy && thoughtSession)){
             if(temporaryTyping){if(!typingKeyboardVisible())showTypingKeyboard(authField);}
-            else updateTypingKeyboard(hasField && (Store.bubble(this) || keyboardMode) && !CaptureActivity.visible);
+            else if(evidence==InputCapturePolicy.Evidence.INPUT)updateTypingKeyboard((Store.bubble(this) || keyboardMode) && !CaptureActivity.visible);
         }
         if(authField!=null)authField.recycle();
-        boolean hasSessionField=hasField && target!=null && (target.port!=null?target.port.current():sameField(field));if(field!=null)field.recycle();
-        if(busy && !thoughtSession && !finishing && !hasSessionField && dictation!=null)dictation.stop();
-        if(!hasField && FlowKeyboard.instance!=null && FlowKeyboard.instance.isRecording() && !FlowKeyboard.instance.isFinishing())FlowKeyboard.instance.floatingMic();
+        if(field!=null)field.recycle();
         boolean active=recording();
         if(QuickThoughtPolicy.visible(Store.quickThoughts(this),interactive,locked,ownAppActive,CaptureActivity.visible,hasField,active || Dictation.isWorking() || VoiceTake.running() || VoiceTake.updateBusy() || Translate.going() || LineWire.running() || problem!=null)){
             removeBubble();if(thoughtOverlay==null)thoughtOverlay=new QuickThoughtOverlay(this,manager,this::updateBubble,this::thoughtCaptureAllowed,this::beginThought,this::openThoughts);thoughtOverlay.show();return;
@@ -375,7 +409,7 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
         android.app.KeyguardManager lock=(android.app.KeyguardManager)getSystemService(KEYGUARD_SERVICE);
         android.os.PowerManager power=(android.os.PowerManager)getSystemService(POWER_SERVICE);
         if(!Store.quickThoughts(this) || (lock!=null && lock.isKeyguardLocked()) || (power!=null && !power.isInteractive()) || ownAppActive || CaptureActivity.visible || Dictation.isWorking() || recording() || VoiceTake.running() || VoiceTake.updateBusy() || Translate.going() || LineWire.running())return false;
-        AccessibilityNodeInfo field=focusedField();boolean available=field==null;if(field!=null)field.recycle();return available;
+        AccessibilityNodeInfo field=focusedField();InputCapturePolicy.Evidence evidence=inputEvidence(field!=null);if(field!=null)field.recycle();return evidence==InputCapturePolicy.Evidence.NONE;
     }
     private void hideThought(){if(thoughtOverlay!=null)thoughtOverlay.hide();}
     private void openThoughts(){
@@ -444,7 +478,7 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
         if(!keyboardOverride)previousKeyboardMode=getSoftKeyboardController().getShowMode();
         keyboardOverride=getSoftKeyboardController().setShowMode(Build.VERSION.SDK_INT>=29?SHOW_MODE_IGNORE_HARD_KEYBOARD:SHOW_MODE_AUTO);keyboardSuppressed=false;
         if(FlowKeyboard.instance!=null && FlowKeyboard.instance.hasInputSession())FlowKeyboard.instance.showTypingKeyboard();
-        else if(busy && dictation!=null)dictation.stop();
+        else if(busy)return;
         else if(!typingKeyboardVisible()){
             // Clicking Niagara's search field toggles the page shut. Never click a launcher field.
             if(launcherInFront() || homeFinderWindow>=0)return;
@@ -487,7 +521,7 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
         glyph=null;timer=null;dragging=false;displayedState=state;
         boolean active=recording();int d=diameter(),inset=Ui.dp(this,4),gap=Ui.dp(this,8),problemWidth=Ui.dp(this,176),statusWidth=active?Ui.dp(this,80)+gap:(problem!=null?problemWidth+gap:0);
         bubble.setGravity(Gravity.TOP);bubble.setClipChildren(false);bubble.setClipToPadding(false);bubble.setPadding(inset,inset,inset,inset);bubble.setBackground(null);bubble.setElevation(0);
-        bubble.setContentDescription(keyboardMode?"VonoTation floating keyboard":active?(working()?"VonoTation: transcribing":thoughtSession?"VonoTation: recording a quick thought":"VonoTation: recording in the active input"):"VonoTation floating controls");
+        bubble.setContentDescription(keyboardMode?"VonoTation floating keyboard":active?(working()?"VonoTation: transcribing":thoughtSession?"VonoTation: recording a quick thought":"VonoTation: recording dictation"):"VonoTation floating controls");
         if(active){
             LinearLayout status=Ui.column(this);status.setGravity(Gravity.CENTER);status.setBackground(Ui.glass(this,18,Glass.DAYBOOK));status.setPadding(Ui.dp(this,8),0,Ui.dp(this,8),0);status.setElevation(Ui.dp(this,2));
             glyph=new Glyph();glyph.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);glyph.setContentDescription(keyboardMode?"Keyboard recording waveform":"Recording waveform");status.addView(glyph,new LinearLayout.LayoutParams(-1,Math.max(Ui.dp(this,24),bdp(30))));
@@ -498,7 +532,7 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
         if(active){
             boolean processingNow=working();
             View finish=iconControl(processingNow?"cancel":"finish",processingNow?(thoughtSession?"Cancel thought processing. The recording will be discarded.":"Cancel processing. Nothing will be inserted."):keyboardMode?"Finish keyboard dictation":thoughtSession?"Finish and save quick thought":"Finish dictation",true);finish.setTooltipText(processingNow?"Cancel":thoughtSession?"Finish and save thought":"Finish dictation");
-            finish.setOnClickListener(v->{Daybook.feedback(v);if(working()){if(busy)cancelProcessing();else if(FlowKeyboard.instance!=null)FlowKeyboard.instance.cancelDictation();}else if(thoughtSession)finishThought();else if(keyboardMode())FlowKeyboard.instance.floatingMic();else if(dictation!=null)dictation.stop();updateBubble();});rail.addView(finish,new LinearLayout.LayoutParams(d,d));
+            finish.setOnClickListener(v->{Daybook.feedback(v);if(working()){if(busy)cancelProcessing();else if(FlowKeyboard.instance!=null)FlowKeyboard.instance.cancelDictation();}else if(thoughtSession)finishThought();else if(!busy && FlowKeyboard.instance!=null && FlowKeyboard.instance.isRecording())FlowKeyboard.instance.floatingMic();else if(dictation!=null)dictation.stop();updateBubble();});rail.addView(finish,new LinearLayout.LayoutParams(d,d));
         }else{
             if(problem!=null){
                 final DictationProblem shown=problem;
@@ -550,7 +584,7 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
         int anchorX=prefs.getInt("rail_anchor_x",metrics.widthPixels-Ui.dp(this,12)-inset-d/2),anchorY=prefs.getInt("rail_anchor_y",Math.round(metrics.heightPixels*.52f));
         BubblePlacement position=new BubblePlacement(metrics.widthPixels,top,bottom,layout.width,layout.height,d,anchorX+inset,anchorY-inset);layout.x=position.x;layout.y=position.y;
         // Keep the selected editor clear when there is room above its bounds.
-        AccessibilityNodeInfo field=thoughtSession?null:focusedField();if(field!=null){try{Rect input=new Rect();field.getBoundsInScreen(input);Rect bar=new Rect(layout.x,layout.y,layout.x+layout.width,layout.y+layout.height);int above=input.top-layout.height-Ui.dp(this,10);if(Rect.intersects(input,bar) && above>=top)layout.y=above;}finally{field.recycle();}}
+        AccessibilityNodeInfo field=thoughtSession || ownAppActive || recording()?null:focusedField();if(field!=null){try{Rect input=new Rect();field.getBoundsInScreen(input);Rect bar=new Rect(layout.x,layout.y,layout.x+layout.width,layout.y+layout.height);int above=input.top-layout.height-Ui.dp(this,10);if(Rect.intersects(input,bar) && above>=top)layout.y=above;}finally{field.recycle();}}
         if(bubble.isAttachedToWindow() && (oldX!=layout.x || oldY!=layout.y))try{manager.updateViewLayout(bubble,layout);}catch(Exception ignored){}
     }
     private void attachDrag(View view) {
@@ -697,7 +731,7 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
     }
     private EditorInsertion.Port nodeInsertionPort(AccessibilityNodeInfo identity){
         return new EditorInsertion.Port(){
-            private AccessibilityNodeInfo field(){AccessibilityNodeInfo field=focusedField();if(field!=null&&(!field.refresh()||!field.equals(identity))){field.recycle();return null;}return field;}
+            private AccessibilityNodeInfo field(){if(!destinationQueriesAllowed())return null;AccessibilityNodeInfo field=focusedField();if(field!=null&&(!field.refresh()||!field.equals(identity))){field.recycle();return null;}return field;}
             public boolean current(){AccessibilityNodeInfo field=field();try{return field!=null&&!field.isPassword()&&!FlowKeyboard.isPasswordType(field.getInputType());}finally{if(field!=null)field.recycle();}}
             public EditorInsertion.Snapshot read(){AccessibilityNodeInfo field=field();try{return readDeleteNode(field);}finally{if(field!=null)field.recycle();}}
             public boolean replace(int start,int end,int previousLength,String text){
@@ -929,13 +963,18 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
         if(sensitiveField!=null)sensitiveField.recycle();
         EditorInsertion.Port port=Build.VERSION.SDK_INT>=33 && editor!=null?editor.capture():null;
         EditorInsertion.Snapshot snapshot=port==null?null:port.read();
-        AccessibilityNodeInfo focus=snapshot==null?focusedField():null; if(snapshot==null && focus==null) { updateBubble(); return; }
+        AccessibilityNodeInfo focus=focusedField(); if(snapshot==null && focus==null) { showProblem(DictationProblem.of("Tap the input cursor again, then retry dictation.")); return; }
         if(focus!=null && (focus.isPassword() || FlowKeyboard.isPasswordType(focus.getInputType()))){focus.recycle();updateBubble();return;}
         if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED) {
             if(focus!=null)focus.recycle(); showProblem(DictationProblem.before(false,true)); return;
         }
         target=new Target();
-        if(snapshot!=null){target.port=port;target.nativeText=new EditorInsertion(snapshot);}
+        if(snapshot!=null && focus!=null && editor!=null && editor.activePackage()!=null && !editor.activePackage().toString().equals(String.valueOf(focus.getPackageName())))snapshot=null;
+        if(snapshot!=null){
+            target.packageName=String.valueOf(editor.activePackage());target.window=-1;
+            target.port=port;target.nativeText=new EditorInsertion(snapshot);
+            if(focus!=null){target.packageName=String.valueOf(focus.getPackageName());target.window=focus.getWindowId();target.identity=AccessibilityNodeInfo.obtain(focus);focus.recycle();}
+        }
         else{
             EditorInsertion.Snapshot node=readDeleteNode(focus);
             if(node==null){focus.recycle();target=null;showProblem(DictationProblem.of("Tap the cursor where you want to dictate, then retry."));return;}
@@ -949,7 +988,7 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
         if(!thoughtCaptureAllowed()){updateBubble();return;}
         if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){showProblem(DictationProblem.before(false,true));return;}
         long id=Notes.nextThoughtId(this);
-        target=null;thoughtSession=true;thoughtCapture=new ThoughtListener(this,id);
+        target=null;captureOrigin=InputCapturePolicy.start(InputCapturePolicy.Evidence.NONE);thoughtSession=captureOrigin.thought();thoughtCapture=new ThoughtListener(this,id);
         if(Notes.keepThoughtAudio(getApplicationContext(),id,java.util.Collections.emptyList(),0,false)<0){thoughtCapture.detach();thoughtCapture=null;thoughtSession=false;showProblem(DictationProblem.of("Could not save a new thought. Check available phone storage."));return;}
         lastPartial="";pendingRaw="";pendingText="";pendingWarning="";pendingWriteAccepted=false;insertionLost=false;finishing=false;
         handler.removeCallbacks(clearProblem);problem=null;session++;stageLabel="";busy=true;startedAt=android.os.SystemClock.elapsedRealtime();
@@ -962,6 +1001,7 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
         finishing=true;stageLabel="Saving";updateBubble();if(thoughtCapture!=null)VoiceTake.finishThought(thoughtCapture.id);
     }
     private void startTarget(){
+        captureOrigin=InputCapturePolicy.start(InputCapturePolicy.Evidence.INPUT);thoughtSession=captureOrigin.thought();
         lastPartial="";pendingRaw="";pendingText="";pendingWarning="";pendingWriteAccepted=false;insertionLost=false;finishing=false;
         // The recording notice is optional. Notifications may be denied, and startForeground can be refused
         // (Android 12+ background-start rules, Android 14 microphone-type rules, OEM limits). The recorder runs
@@ -993,11 +1033,32 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
         if(target==null || focus==null || target.window!=focus.getWindowId() || !target.packageName.equals(String.valueOf(focus.getPackageName()))) return false;
         return focus.equals(target.identity);
     }
+    private boolean destinationQueriesAllowed(){
+        if(ownAppActive)return false;
+        android.app.KeyguardManager lock=(android.app.KeyguardManager)getSystemService(KEYGUARD_SERVICE);
+        android.os.PowerManager power=(android.os.PowerManager)getSystemService(POWER_SERVICE);
+        return (lock==null || !lock.isKeyguardLocked()) && (power==null || power.isInteractive());
+    }
+    private void loseInsertion(){insertionLost=true;if(captureOrigin!=null)captureOrigin.loseDestination();}
+    /** Losing destination ownership is permanent for this capture; the recorder keeps going. */
+    private void observeCaptureDestination(){
+        if(!busy || thoughtSession || insertionLost || target==null)return;
+        if(!destinationQueriesAllowed()){loseInsertion();return;}
+        if(target.sensitiveTarget!=null){if(!target.sensitiveTarget.current())loseInsertion();}
+        else if(target.port==null || !target.port.current()){loseInsertion();return;}
+        if(target.identity!=null){
+            AccessibilityNodeInfo focused=focusedField();
+            boolean original=focused!=null && target.window==focused.getWindowId() && target.packageName.equals(String.valueOf(focused.getPackageName())) && focused.equals(target.identity);
+            if(focused!=null)focused.recycle();
+            if(!original)loseInsertion();
+        }
+    }
     private boolean insertLive(String words) {
-        if(target==null || target.port==null || insertionLost)return false;
-        if(!target.port.current()){insertionLost=true;return false;}
+        if(target==null || target.port==null || insertionLost || captureOrigin==null || !captureOrigin.insertionAllowed())return false;
+        // A new editor epoch or focus loss cannot reacquire the old capture's insertion authority.
+        observeCaptureDestination();if(insertionLost)return false;
         EditorInsertion.Snapshot snapshot=target.port.read();if(snapshot==null)return false;
-        if(!target.nativeText.compatible(snapshot)){insertionLost=true;return false;}
+        if(!target.nativeText.compatible(snapshot)){loseInsertion();return false;}
         return target.nativeText.write(target.port,words);
     }
     @Override public void state(String status) {
@@ -1020,7 +1081,7 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
         if(busy && target!=null && target.sensitive){
             String value=target.numeric?FlowKeyboard.normalizePin(raw):raw;
             pendingText=value==null?raw:value;
-            AccessibilityNodeInfo field=focusedField();boolean current=sameField(field);if(field!=null)field.recycle();
+            AccessibilityNodeInfo field=!insertionLost && destinationQueriesAllowed()?focusedField():null;boolean current=!insertionLost && sameField(field);if(field!=null)field.recycle();
             boolean requested=current && value!=null && target.sensitiveTarget.commit(value);
             boolean inserted=requested && target.sensitiveTarget.acknowledged();
             if(requested && !inserted && current && attempt<6){handler.postDelayed(()->finishResult(raw,text,warning,attempt+1,owner),150);return;}
@@ -1072,19 +1133,16 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
         endRecording();
         Toast.makeText(this,thought?"Quick thought cancelled.":"Dictation cancelled. Nothing was inserted.",Toast.LENGTH_SHORT).show();
     }
-    private void cancelRecording() {
-        if(busy && thoughtSession)finishThought();else if(busy && dictation!=null)dictation.stop();
-    }
     private void endRecording() {
         if(thoughtCapture!=null){thoughtCapture.detach();thoughtCapture=null;}
         if(thoughtSession && thoughtOverlay!=null)thoughtOverlay.captureFinished();thoughtSession=false;
-        session++;stageLabel="";busy=false; finishing=false;lastPartial="";pendingRaw="";pendingText="";pendingWarning="";pendingWriteAccepted=false;if(target!=null && target.sensitiveTarget!=null)target.sensitiveTarget.release();if(target!=null && target.identity!=null) target.identity.recycle(); target=null; handler.removeCallbacks(tick);
+        captureOrigin=null;session++;stageLabel="";busy=false; finishing=false;lastPartial="";pendingRaw="";pendingText="";pendingWarning="";pendingWriteAccepted=false;if(target!=null && target.sensitiveTarget!=null)target.sensitiveTarget.release();if(target!=null && target.identity!=null) target.identity.recycle(); target=null; handler.removeCallbacks(tick);
         if(dictation!=null) { dictation.close(); dictation=null; }
         RecordingNotice.stop(this,foregroundNotice); foregroundNotice=RecordingNotice.NONE; updateBubble();
     }
     @Override public void onConfigurationChanged(android.content.res.Configuration configuration) { super.onConfigurationChanged(configuration);if(fan!=null){fan.dismissNow();fan=null;}hideClipTray();clearPillPaste();displayedState=-1;updateBubble(); }
     private boolean pendingAcknowledged(){
-        if(target==null || pendingText.isEmpty())return false;
+        if(target==null || insertionLost || pendingText.isEmpty() || !destinationQueriesAllowed())return false;
         try{
             if(target.port!=null)return pendingWriteAccepted && target.port.current() && target.nativeText.matches(target.port.read());
             AccessibilityNodeInfo field=focusedField();if(field==null)return false;
