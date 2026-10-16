@@ -21,6 +21,10 @@ final class DaybookUITests: XCTestCase {
 
     private func openCard(_ id: String) {
         let button = app.buttons[id]
+        // Reset to the leading edge before seeking a card that may be off either side.
+        if !button.isHittable {
+            for _ in 0..<3 { app.scrollViews.firstMatch.swipeRight() }
+        }
         for _ in 0..<6 where !button.isHittable {
             app.scrollViews.firstMatch.swipeLeft()
         }
@@ -139,7 +143,7 @@ final class DaybookUITests: XCTestCase {
         finish.tap()
         XCTAssertTrue(app.buttons["record.toggle"].waitForExistence(timeout: 10))
         XCTAssertEqual(app.staticTexts["page.title"].label, "Dictation")
-        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Add an API key to transcribe")).firstMatch.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Add an API key to transcribe")).firstMatch.waitForExistence(timeout: 5))
         XCTAssertGreaterThanOrEqual(elements(prefix: "note.").count, 2)
     }
 }
