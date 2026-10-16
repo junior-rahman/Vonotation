@@ -171,11 +171,16 @@ class GitHub:
     def download(self, endpoint, destination, size, expected_sha):
         """Never forward an API bearer token to an artifact's signed storage URL."""
         require(integer(size) and size <= MAX_DOWNLOAD and SHA.fullmatch(expected_sha), "Invalid download pin")
+        if re.fullmatch(r"actions/artifacts/[1-9][0-9]*/zip", endpoint):
+            accept = "application/vnd.github+json"
+        else:
+            require(re.fullmatch(r"releases/assets/[1-9][0-9]*", endpoint), "Unexpected pinned download endpoint")
+            accept = "application/octet-stream"
         url = "https://api.github.com/repos/" + REPO + "/" + endpoint
         try:
-            response = self.request(url, authenticated=True, accept="application/octet-stream")
+            response = self.request(url, authenticated=True, accept=accept)
         except urllib.error.HTTPError as error:
-            require(error.code in (301, 302, 303, 307, 308), "Artifact API download failed")
+            require(error.code in (301, 302, 303, 307, 308), "Artifact API download failed with HTTP " + str(error.code))
             location = storage_url(error.headers.get("Location", ""))
             # Every storage request is new and explicitly unauthenticated.
             response = None
@@ -184,7 +189,7 @@ class GitHub:
                     response = self.request(location, authenticated=False, accept="application/octet-stream")
                     break
                 except urllib.error.HTTPError as redirect:
-                    require(redirect.code in (301, 302, 303, 307, 308), "Signed artifact download failed")
+                    require(redirect.code in (301, 302, 303, 307, 308), "Signed artifact download failed with HTTP " + str(redirect.code))
                     location = storage_url(redirect.headers.get("Location", ""))
             require(response is not None, "Too many signed artifact redirects")
         actual, count = hashlib.sha256(), 0
