@@ -29,6 +29,21 @@ TAG = re.compile(r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-preview(?:
 SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*\Z")
 MARKER = "vonotation-release-publisher:v1"
+# These already-published archives carry review text outside VoiceFlow/. Bind
+# compatibility to their exact bytes, not a caller-supplied tag or filename.
+# Current archives keep the strict VoiceFlow/ root policy below.
+LEGACY_SOURCE_EXTRAS = {
+    "12bcd53f7e7cda231bcf38f0ad38d4d8bfc8cf0f9cd6e10bdf2712cad310ce52": {
+        "PREVIEW-README.txt", "Vonotation-Quick-Thoughts-Feature-Plan.txt",
+        "Vonotation-0.1.8-preview.patch", "changed-files.txt", "validation/pure-test-results.txt",
+    },
+    "3cbdec7bd1c53a4a556f63d7d8b89d6fdbe6020cc8e5ae338af7b60d8782a453": {
+        "PREVIEW-README.txt", "Vonotation-0.1.9-preview.patch", "changed-files.txt",
+    },
+    "e6130fa31cf6a3defdd3f021f05a55caffa2e894ddcb76f01e56cc2e4335a399": {
+        "PREVIEW-README.txt", "Vonotation-0.1.10-preview.patch", "changed-files.txt",
+    },
+}
 
 
 class InvalidRelease(Exception):
@@ -142,6 +157,7 @@ def apk_identity(path):
 
 
 def validate_source(path):
+    legacy_extras = LEGACY_SOURCE_EXTRAS.get(sha256_file(path), set())
     forbidden = {".git", ".gradle", ".kotlin", "build", "preview-signing", "baseline", "__pycache__",
                  ".idea", ".venv", "node_modules", "cache", "caches", ".env", "local.properties"}
     suffixes = {".keystore", ".jks", ".p12", ".pfx", ".pem", ".key", ".der", ".apk", ".aab", ".apks",
@@ -155,7 +171,8 @@ def validate_source(path):
             relative = PurePosixPath(item.filename)
             require(not relative.is_absolute() and ".." not in relative.parts and "\\" not in item.filename,
                     "Unsafe source archive member")
-            require(relative.parts and relative.parts[0] == "VoiceFlow", "Unexpected source archive root")
+            require((relative.parts and relative.parts[0] == "VoiceFlow") or item.filename in legacy_extras,
+                    "Unexpected source archive root")
             require(item.filename not in seen, "Duplicate source archive member")
             seen.add(item.filename)
             require(not any(p in forbidden for p in relative.parts), "Private/build-only source archive member: " + item.filename)
