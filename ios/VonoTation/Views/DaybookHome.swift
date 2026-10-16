@@ -134,34 +134,42 @@ struct DaybookHome: View {
     }
 
     private var cardNavigation: some View {
-        ScrollView(.horizontal) {
-            HStack(spacing: 8) {
-                ForEach(pages) { candidate in
-                    Button {
-                        Daybook.feedback(model.settings.haptics)
-                        withAnimation(reduceMotion ? nil : .spring(response: 0.34, dampingFraction: 0.85)) { page = candidate }
-                    } label: {
-                        HStack(spacing: 6) {
-                            if candidate == .thoughts {
-                                ThoughtMark().stroke(style: StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round)).frame(width: 16, height: 17)
-                            } else if candidate == .dictations {
-                                DaybookMark(size: 16, color: page == candidate ? Daybook.actionInk : Daybook.accent)
-                            } else { Image(systemName: candidate.symbol).font(.caption) }
-                            Text(candidate.title).font(.subheadline.weight(page == candidate ? .semibold : .regular))
+        ScrollViewReader { position in
+            ScrollView(.horizontal) {
+                HStack(spacing: 8) {
+                    ForEach(pages) { candidate in
+                        Button {
+                            Daybook.feedback(model.settings.haptics)
+                            withAnimation(reduceMotion ? nil : .spring(response: 0.34, dampingFraction: 0.85)) { page = candidate }
+                        } label: {
+                            HStack(spacing: 6) {
+                                if candidate == .thoughts {
+                                    ThoughtMark().stroke(style: StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round)).frame(width: 16, height: 17)
+                                } else if candidate == .dictations {
+                                    DaybookMark(size: 16, color: page == candidate ? Daybook.actionInk : Daybook.accent)
+                                } else { Image(systemName: candidate.symbol).font(.caption) }
+                                Text(candidate.title).font(.subheadline.weight(page == candidate ? .semibold : .regular))
+                            }
+                            .foregroundStyle(page == candidate ? Daybook.actionInk : Daybook.accent)
+                            .padding(.horizontal, 13).padding(.vertical, 12)
+                            .background(page == candidate ? Daybook.action : Daybook.surface, in: Capsule())
                         }
-                        .foregroundStyle(page == candidate ? Daybook.actionInk : Daybook.accent)
-                        .padding(.horizontal, 13).padding(.vertical, 12)
-                        .background(page == candidate ? Daybook.action : Daybook.surface, in: Capsule())
+                        .buttonStyle(.plain)
+                        .id(candidate)
+                        .accessibilityIdentifier(candidate.navigationID)
+                        .accessibilityAddTraits(page == candidate ? [.isSelected] : [])
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier(candidate.navigationID)
-                    .accessibilityAddTraits(page == candidate ? [.isSelected] : [])
+                }
+                .padding(.horizontal, 20).padding(.top, 10).padding(.bottom, 2)
+            }
+            .scrollIndicators(.hidden)
+            .accessibilityLabel("Daybook cards")
+            .onChange(of: page, initial: true) { _, selected in
+                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.18)) {
+                    position.scrollTo(selected, anchor: .center)
                 }
             }
-            .padding(.horizontal, 20).padding(.top, 10).padding(.bottom, 2)
         }
-        .scrollIndicators(.hidden)
-        .accessibilityLabel("Daybook cards")
     }
 
     private var selectedCard: some View {
