@@ -1,0 +1,57 @@
+name: iOS native verification
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'ios/**'
+      - '.github/workflows/ios-ci.yml'
+  pull_request:
+    paths:
+      - 'ios/**'
+      - '.github/workflows/ios-ci.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-native-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-ios:
+    runs-on: macos-15
+    timeout-minutes: 55
+    defaults:
+      run:
+        working-directory: ios
+    steps:
+      - name: Check out exact source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Native iPhone, iPad, and Apple SDK verification
+        run: bash scripts/run-ios-ci.sh
+      - name: Preserve logs, native results and screenshots
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: VonoTation-iOS-native-evidence-${{ github.sha }}
+          path: |
+            ios/build/ci/*.xcresult
+            ios/build/ci/*.json
+            ios/build/ci/*.txt
+            ios/build/ci/logs
+            ios/build/ci/screenshots
+          if-no-files-found: error
+          retention-days: 30
+      - name: Preserve simulator app after verification
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: VonoTation-iOS-Simulator-${{ github.sha }}
+          path: |
+            ios/build/ci/VonoTation-iOS-Simulator.zip
+            ios/build/ci/VonoTation-iOS-0.1.17-source.zip
+            ios/build/ci/VERIFICATION.json
+          if-no-files-found: error
+          retention-days: 30

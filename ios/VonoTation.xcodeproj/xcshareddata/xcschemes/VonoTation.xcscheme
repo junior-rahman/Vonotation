@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Scheme LastUpgradeVersion="1600" version="1.3">
+  <BuildAction parallelizeBuildables="YES" buildImplicitDependencies="YES"><BuildActionEntries>
+    <BuildActionEntry buildForTesting="YES" buildForRunning="YES" buildForProfiling="YES" buildForArchiving="YES" buildForAnalyzing="YES"><BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="F47CE2AB1232B36A1F02E2F9" BuildableName="VonoTation.app" BlueprintName="VonoTation" ReferencedContainer="container:VonoTation.xcodeproj"/></BuildActionEntry>
+  </BuildActionEntries></BuildAction>
+  <TestAction buildConfiguration="Debug" selectedDebuggerIdentifier="Xcode.DebuggerFoundation.Debugger.LLDB" selectedLauncherIdentifier="Xcode.IDEFoundation.Launcher.LLDB" shouldUseLaunchSchemeArgsEnv="NO">
+    <Testables><TestableReference skipped="NO" parallelizable="NO"><BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="CC3C234C406D04458C822D46" BuildableName="VonoTationTests.xctest" BlueprintName="VonoTationTests" ReferencedContainer="container:VonoTation.xcodeproj"/></TestableReference><TestableReference skipped="NO" parallelizable="NO"><BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="E642E5720C1B8AB7115A16B5" BuildableName="VonoTationUITests.xctest" BlueprintName="VonoTationUITests" ReferencedContainer="container:VonoTation.xcodeproj"/></TestableReference></Testables>
+    <MacroExpansion><BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="F47CE2AB1232B36A1F02E2F9" BuildableName="VonoTation.app" BlueprintName="VonoTation" ReferencedContainer="container:VonoTation.xcodeproj"/></MacroExpansion>
+  </TestAction>
+  <LaunchAction buildConfiguration="Debug" selectedDebuggerIdentifier="Xcode.DebuggerFoundation.Debugger.LLDB" selectedLauncherIdentifier="Xcode.IDEFoundation.Launcher.LLDB" launchStyle="0" useCustomWorkingDirectory="NO" ignoresPersistentStateOnLaunch="NO" debugServiceExtension="internal" allowLocationSimulation="YES"><BuildableProductRunnable runnableDebuggingMode="0"><BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="F47CE2AB1232B36A1F02E2F9" BuildableName="VonoTation.app" BlueprintName="VonoTation" ReferencedContainer="container:VonoTation.xcodeproj"/></BuildableProductRunnable></LaunchAction>
+  <ProfileAction buildConfiguration="Release" shouldUseLaunchSchemeArgsEnv="YES" savedToolIdentifier="" useCustomWorkingDirectory="NO" debugServiceExtension="internal"><BuildableProductRunnable runnableDebuggingMode="0"><BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="F47CE2AB1232B36A1F02E2F9" BuildableName="VonoTation.app" BlueprintName="VonoTation" ReferencedContainer="container:VonoTation.xcodeproj"/></BuildableProductRunnable></ProfileAction>
+  <AnalyzeAction buildConfiguration="Debug"/>
+  <ArchiveAction buildConfiguration="Release" revealArchiveInOrganizer="YES"/>
+</Scheme>

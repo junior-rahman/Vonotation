@@ -1,0 +1,192 @@
+import SwiftUI
+import UniformTypeIdentifiers
+
+struct SettingsView: View {
+    @EnvironmentObject private var model: AppModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var openSection = "cloud"
+    @State private var key = ""
+    @State private var removeKey = false
+    @State private var showBackup = false
+    @State private var recapsConsent = false
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                LinenBackground()
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        settingsCard("Cloud setup", value: model.hasAPIKey ? "Key saved" : "Needs key", key: "cloud") {
+                            Text(model.hasAPIKey ? "A provider key is saved securely in Keychain. Enter a new key to replace it." : "Add your provider key to transcribe, summarize and translate. Offline recordings save first and can be retried later.")
+                                .font(.caption).foregroundStyle(Daybook.muted)
+                            SecureField(model.hasAPIKey ? "•••••••• · replace key" : "Provider API key", text: $key)
+                                .textContentType(.password).textInputAutocapitalization(.never).autocorrectionDisabled()
+                                .daybookField().accessibilityIdentifier("settings.apiKey")
+                            HStack(spacing: 8) {
+                                Button(model.hasAPIKey ? "Replace key" : "Save key") {
+                                    model.saveAPIKey(key.trimmingCharacters(in: .whitespacesAndNewlines)); key = ""
+                                    Daybook.feedback(model.settings.haptics)
+                                }.buttonStyle(DaybookButtonStyle(primary: true)).disabled(key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                                    .accessibilityIdentifier("settings.apiKey.save")
+                                if model.hasAPIKey {
+                                    Button("Remove key", role: .destructive) { removeKey = true }
+                                        .buttonStyle(DaybookButtonStyle()).accessibilityIdentifier("settings.apiKey.remove")
+                                }
+                            }
+                            labeledField("Provider endpoint", text: $model.settings.endpoint, identifier: "settings.endpoint", url: true)
+                        }
+                        settingsCard("Models", value: "Transcription & cleanup", key: "models") {
+                            Text("Use model IDs supported by your provider. English transcription follows the Android version.")
+                                .font(.caption).foregroundStyle(Daybook.muted)
+                            labeledField("Transcription", text: $model.settings.transcriptionModel, identifier: "settings.model.transcription")
+                            labeledField("Dictation cleanup", text: $model.settings.cleanupModel, identifier: "settings.model.cleanup")
+                            labeledField("Notes & thoughts", text: $model.settings.noteModel, identifier: "settings.model.notes")
+                            labeledField("Translation", text: $model.settings.translationModel, identifier: "settings.model.translation")
+                            Toggle("Clean up dictated text", isOn: $model.settings.aiCleanup).accessibilityIdentifier("settings.cleanup")
+                        }
+                        settingsCard("Your Daybook", value: "Capture & feedback", key: "daybook") {
+                            Toggle(isOn: $model.settings.quickThoughts) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Quick Thoughts")
+                                    Text("Shows the Thoughts card and enables the recording shortcut.").font(.caption).foregroundStyle(Daybook.muted)
+                                }
+                            }.accessibilityIdentifier("settings.quickThoughts")
+                            Divider().overlay(Daybook.line)
+                            Toggle("Touch feedback", isOn: $model.settings.haptics).accessibilityIdentifier("settings.haptics")
+                                .onChange(of: model.settings.haptics) { _, enabled in Daybook.feedback(enabled) }
+                            Divider().overlay(Daybook.line)
+                            Toggle("Save dictation history", isOn: $model.settings.saveDictations).accessibilityIdentifier("settings.saveDictations")
+                            Divider().overlay(Daybook.line)
+                            Toggle(isOn: Binding(get: { model.settings.showDailyRecaps }, set: { enabled in
+                                if enabled { recapsConsent = true } else { model.settings.showDailyRecaps = false }
+                            })) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Daily recaps")
+                                    Text("Separate summaries for Dictation and Thoughts.").font(.caption).foregroundStyle(Daybook.muted)
+                                }
+                            }.accessibilityIdentifier("settings.dailyRecaps")
+                        }
+                        DaybookCard {
+                            HStack {
+                                Label("Encrypted backup", systemImage: "lock.shield").font(.headline)
+                                Spacer()
+                                if model.isBackingUp { ProgressView() }
+                            }
+                            Text("Save a password-protected backup in Files, or restore one. Text and settings are included; audio, Clipboard and provider keys stay on this device.")
+                                .font(.caption).foregroundStyle(Daybook.muted)
+                            Button { showBackup = true } label: { Text("Manage backup").frame(maxWidth: .infinity) }
+                                .buttonStyle(DaybookButtonStyle(primary: true)).accessibilityIdentifier("settings.backup")
+                        }
+                        settingsCard("About & installation", value: "iOS preview", key: "about") {
+                            Text("VonoTation for iOS").font(.subheadline.weight(.semibold))
+                            Text(versionText).font(.caption).foregroundStyle(Daybook.muted)
+                            Text("This preview uses native iOS recording, Files and explicit clipboard paste. iOS does not provide Android’s floating control, background clipboard history, or microphone access from a custom keyboard.")
+                                .font(.caption).foregroundStyle(Daybook.muted)
+                            Text("A GitHub download cannot be installed simply by signing in with an Apple ID. A device build must be signed through Xcode or a compatible signing tool using the owner’s Apple developer identity. No Apple account sign-in is needed inside VonoTation.")
+                                .font(.caption).foregroundStyle(Daybook.muted)
+                            Link(destination: URL(string: "https://github.com/junior-rahman/Vonotation")!) {
+                                Label("Source & release instructions", systemImage: "arrow.up.right.square")
+                            }.font(.subheadline).frame(minHeight: 44).accessibilityIdentifier("settings.releaseHelp")
+                        }
+                    }
+                    .padding(20).frame(maxWidth: 680).frame(maxWidth: .infinity)
+                }
+            }
+            .foregroundStyle(Daybook.ink).tint(Daybook.action)
+            .navigationTitle("Settings").navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(Daybook.paper, for: .navigationBar).toolbarBackground(.visible, for: .navigationBar)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { key = ""; dismiss() }.accessibilityIdentifier("settings.done") } }
+            .safeAreaInset(edge: .bottom) { if model.isRecording { ActiveRecordingStrip().padding(.horizontal, 16).background(Daybook.paper) } }
+            .sheet(isPresented: $showBackup) { BackupSettingsView().environmentObject(model) }
+            .confirmationDialog("Remove the saved provider key?", isPresented: $removeKey, titleVisibility: .visible) {
+                Button("Remove key", role: .destructive) { model.saveAPIKey("") }
+                Button("Keep key", role: .cancel) { }
+            }
+            .alert("Turn on daily recaps?", isPresented: $recapsConsent) {
+                Button("Not now", role: .cancel) { }
+                Button("Turn on") { model.settings.showDailyRecaps = true }
+            } message: {
+                Text("Creating a recap sends that day’s saved text to your configured AI provider. Your provider may charge for requests. You choose when to create each recap.")
+            }
+            .alert("VonoTation", isPresented: Binding(get: { model.errorMessage != nil && !showBackup }, set: { if !$0 && !showBackup { model.acknowledgeError() } })) {
+                Button("OK") { model.acknowledgeError() }
+            } message: { Text(model.errorMessage ?? "") }
+        }
+    }
+
+    private var versionText: String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Preview"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"
+        return "Version \(version) (\(build))"
+    }
+
+    private func settingsCard<Content: View>(_ title: String, value: String, key section: String, @ViewBuilder content: () -> Content) -> some View {
+        DaybookCard {
+            Button {
+                Daybook.feedback(model.settings.haptics)
+                openSection = openSection == section ? "" : section
+            } label: {
+                HStack(alignment: .center, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(title).font(.headline).foregroundStyle(Daybook.ink)
+                        Text(value).font(.caption).foregroundStyle(Daybook.muted)
+                    }
+                    Spacer(minLength: 8)
+                    Image(systemName: openSection == section ? "chevron.up" : "chevron.down").font(.caption.weight(.semibold)).foregroundStyle(Daybook.accent)
+                }.frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).contentShape(Rectangle())
+            }.buttonStyle(.plain).accessibilityIdentifier("settings.section.\(section)")
+            if openSection == section {
+                VStack(alignment: .leading, spacing: 14) { content() }.padding(.top, 8)
+            }
+        }
+    }
+
+    private func labeledField(_ title: String, text: Binding<String>, identifier: String, url: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title).font(.caption).foregroundStyle(Daybook.muted)
+            TextField(title, text: text).textInputAutocapitalization(.never).autocorrectionDisabled()
+                .keyboardType(url ? .URL : .asciiCapable).daybookField().accessibilityIdentifier(identifier)
+        }
+    }
+}
+
+private struct DaybookField: ViewModifier {
+    func body(content: Content) -> some View {
+        content.font(.body).padding(12).frame(minHeight: 46)
+            .background(Daybook.surface, in: RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Daybook.line, lineWidth: 1))
+    }
+}
+extension View { func daybookField() -> some View { modifier(DaybookField()) } }
+
+struct ActiveRecordingStrip: View {
+    @EnvironmentObject private var model: AppModel
+    @State private var confirmCancel = false
+    var body: some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "record.circle.fill").foregroundStyle(Daybook.action)
+                Text("Recording \(model.recordingKind?.title ?? "audio")").font(.subheadline.weight(.semibold))
+                Spacer(minLength: 8)
+                Text(clock(model.recordingDuration)).font(.caption.monospacedDigit())
+            }
+            HStack(spacing: 10) {
+                Button("Cancel", role: .destructive) { confirmCancel = true }.buttonStyle(DaybookButtonStyle()).accessibilityIdentifier("record.cancel")
+                Button {
+                    Daybook.feedback(model.settings.haptics, strong: true)
+                    Task { await model.finishRecording() }
+                } label: { Label("Finish", systemImage: "stop.fill").frame(maxWidth: .infinity) }
+                    .buttonStyle(DaybookButtonStyle(primary: true)).accessibilityIdentifier("record.finish")
+            }
+        }
+        .foregroundStyle(Daybook.ink).padding(14).background(Daybook.soft, in: RoundedRectangle(cornerRadius: 17))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("record.active")
+        .accessibilityValue(model.recordingKind?.rawValue ?? "")
+        .confirmationDialog("Discard this recording?", isPresented: $confirmCancel, titleVisibility: .visible) {
+            Button("Discard recording", role: .destructive) { model.cancelRecording() }
+            Button("Keep recording", role: .cancel) { }
+        } message: { Text("Your recording continues until you choose Finish or Discard recording.") }
+    }
+    private func clock(_ seconds: TimeInterval) -> String { String(format: "%d:%02d", Int(seconds) / 60, Int(seconds) % 60) }
+}
