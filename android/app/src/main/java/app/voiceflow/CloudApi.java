@@ -162,6 +162,7 @@ final class CloudApi {
         } finally { conn.disconnect(); current=null; }
     }
     static String transcript(JSONObject reply,boolean sensitive) throws IOException {
+        if(reply==null || !(reply.opt("text") instanceof String))throw new IOException("The speech provider returned an invalid transcript. Your recording has been kept.");
         JSONArray segments=reply.optJSONArray("segments");
         if(segments!=null)for(int i=0;i<segments.length();i++) {
             JSONObject segment=segments.optJSONObject(i);if(segment==null || segment.optString("text","").trim().isEmpty())continue;
@@ -171,7 +172,7 @@ final class CloudApi {
             if(probability< -1.0 || (probability< -0.5 && (silence>0.8 || repetition>2.4)))
                 throw new IOException("The speech model was unsure of this recording. Try again with a clear, complete sentence.");
         }
-        String text=reply.optString("text","");return sensitive?text:text.trim();
+        String text=(String)reply.opt("text");return sensitive?text:text.trim();
     }
     String summarizeDay(HistoryDays.Day day,String model) throws Exception {
         if(Store.engine(context).equals("offline"))throw new IOException("Daily summaries are paused in on-device mode.");

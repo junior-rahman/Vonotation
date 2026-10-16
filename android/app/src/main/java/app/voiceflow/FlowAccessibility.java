@@ -117,7 +117,7 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
         }
         public void failed(String message){
             if(cancelled || Notes.thoughtDeleted(app,id)){cancel();return;}
-            if(!parts.isEmpty())Notes.keepThoughtAudio(app,id,parts,duration(),true);
+            if(!parts.isEmpty())Notes.keepThoughtAudio(app,id,parts,duration(),true,false);
             else Notes.discardThoughtCapture(app,id);
             finish(message);
         }

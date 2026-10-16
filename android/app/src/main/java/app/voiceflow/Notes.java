@@ -648,7 +648,7 @@ final class Notes {
                     JSONObject current=find(app,id);
                     if(current==null||!current.optBoolean("thought")||!current.optBoolean("recording")||current.optLong("revision",1)!=revision||FlowAccessibility.thoughtCaptureActive(id)||VoiceTake.noteRunning()||VoiceTake.updateBusy())return;
                     String before=Store.get(app,"notes","[]");JSONArray notes=new JSONArray(before);
-                    for(int i=0;i<notes.length();i++){JSONObject item=notes.optJSONObject(i);if(item!=null&&item.optLong("id")==id)item.put("recording",false).put("pending",!recovered.isEmpty()&&item.optString("raw").isEmpty()).put("audio",recovered.isEmpty()?"":recovered.get(0).getName()).put("parts",names(recovered)).put("duration",duration>0?duration:item.optLong("duration")).put("source_interrupted",recovered.isEmpty()).put("revision",revision+1);}
+                    for(int i=0;i<notes.length();i++){JSONObject item=notes.optJSONObject(i);if(item!=null&&item.optLong("id")==id)item.put("recording",false).put("pending",!recovered.isEmpty()&&item.optString("raw").isEmpty()).put("audio",recovered.isEmpty()?"":recovered.get(0).getName()).put("parts",names(recovered)).put("duration",duration>0?duration:item.optLong("duration")).put("source_interrupted",recovered.isEmpty()).put("thought_capture_complete",false).put("revision",revision+1);}
                     committed=Store.prefs(app).edit().putString("notes",notes.toString()).commit();if(!committed)Store.prefs(app).edit().putString("notes",before).commit();
                 }
             }catch(Exception ignored){/* Original files remain on this phone for another recovery attempt. */}
@@ -676,10 +676,15 @@ final class Notes {
                 if(note==null || files.isEmpty())throw new java.io.IOException("The recording is missing.");
                 String language=note.optString("lang","auto");
                 String[] detected=new String[]{language};
-                String raw=transcribeFiles(context,files,language,detected);
+                boolean completeSources=!note.optBoolean("thought") || completeThoughtSources(context,note,files);
+                boolean[] completeTranscription=new boolean[]{true};
+                String raw=transcribeFiles(context,files,language,detected,completeTranscription);
+                completeTranscription[0]&=completeSources;
                 if(note.optBoolean("thought")){
                     // Persist the full transcript before optional organization, and never recreate a deleted note.
-                    if(saveThoughtTranscript(context,note,raw,detected[0])){if(!raw.isEmpty())formatThought(context,id);else thoughtToast(context,"I couldn't hear speech in that one. The source audio is still saved.");wrote=true;}
+                    int saved=saveThoughtTranscript(context,note,raw,detected[0],completeTranscription[0]);
+                    if(saved==THOUGHT_TRANSCRIPT_SAVED){if(!raw.isEmpty())formatThought(context,id);else thoughtToast(context,"I couldn't hear speech in that one. The source audio is still saved.");wrote=true;}
+                    else if(saved==THOUGHT_TRANSCRIPT_FILTERED)wrote=true;
                 }
                 else if(raw.isEmpty()){save(context,id,"","",false,language,"",files.get(0).getName(),durations(files),"",false,names(files));toast(context,"I couldn't hear speech in that one. The recording is still saved.");}
                 else {
@@ -694,17 +699,49 @@ final class Notes {
         });
     }
 
-    private static boolean saveThoughtTranscript(Context context,JSONObject captured,String raw,String heard){
+    private static final int THOUGHT_TRANSCRIPT_UNCHANGED=0,THOUGHT_TRANSCRIPT_SAVED=1,THOUGHT_TRANSCRIPT_FILTERED=2;
+    private static int saveThoughtTranscript(Context context,JSONObject captured,String raw,String heard,boolean completeTranscription){
+        if(raw==null)return THOUGHT_TRANSCRIPT_UNCHANGED;
+        // Measuring is local, uses a stable canonical width, and never holds the note-storage lock.
+        // A skipped/uncertain segment is not evidence that the complete source was a short thought.
+        boolean filter=completeTranscription && captured.optBoolean("thought_capture_complete") && !captured.optBoolean("source_interrupted") && captured.optInt("minimum_thought_lines",0)==2
+            && captured.optString("raw").trim().isEmpty() && captured.optString("text").trim().isEmpty()
+            && !ThoughtLength.minimumMet(raw);
         synchronized(Store.class){
             try{
                 long id=captured.optLong("id"),revision=captured.optLong("revision",1);JSONObject current=find(context,id);
-                if(current==null||!current.optBoolean("thought")||current.optBoolean("recording")||!current.optBoolean("pending")||current.optLong("revision",1)!=revision||!current.optString("raw").equals(captured.optString("raw"))||!String.valueOf(current.opt("parts")).equals(String.valueOf(captured.opt("parts"))))return false;
+                if(current==null||!current.optBoolean("thought")||current.optBoolean("recording")||!current.optBoolean("pending")||current.optLong("revision",1)!=revision||!current.optString("raw").equals(captured.optString("raw"))||!current.optString("text").equals(captured.optString("text"))||!current.optString("audio").equals(captured.optString("audio"))||current.optInt("minimum_thought_lines",0)!=captured.optInt("minimum_thought_lines",0)||current.optBoolean("thought_capture_complete")!=captured.optBoolean("thought_capture_complete")||current.optBoolean("source_interrupted")!=captured.optBoolean("source_interrupted")||!String.valueOf(current.opt("parts")).equals(String.valueOf(captured.opt("parts"))))return THOUGHT_TRANSCRIPT_UNCHANGED;
                 String before=Store.get(context,"notes","[]");JSONArray notes=new JSONArray(before);
+                if(filter && completeThoughtSources(context,current,filesOf(context,current))){
+                    JSONArray kept=new JSONArray();for(int i=0;i<notes.length();i++){JSONObject note=notes.optJSONObject(i);if(note!=null&&note.optLong("id")!=id)kept.put(note);}
+                    String previousDeleted=Store.get(context,"thought_deletions","[]");List<File> source=filesOf(context,current);
+                    // Deletion and its tombstone commit together before any source file is removed.
+                    if(!Store.prefs(context).edit().putString("notes",kept.toString()).putString("thought_deletions",deletedThoughts(context,id).toString()).commit()){
+                        Store.prefs(context).edit().putString("notes",before).putString("thought_deletions",previousDeleted).commit();return THOUGHT_TRANSCRIPT_UNCHANGED;
+                    }
+                    DailySummaryCache.invalidateEntry(context,"thought",id);
+                    tick.post(()->{if(playing==id)stopPlayback();});
+                    for(File audio:source)if(audio.isFile())audio.delete();
+                    return THOUGHT_TRANSCRIPT_FILTERED;
+                }
                 for(int i=0;i<notes.length();i++){JSONObject note=notes.optJSONObject(i);if(note!=null&&note.optLong("id")==id)note.put("raw",raw).put("text",raw.trim()).put("title",QuickThoughtPolicy.title(raw,"Quick thought")).put("summary",QuickThoughtPolicy.summary(raw)).put("summary_version",QuickThoughtPolicy.SUMMARY_VERSION).put("heard",heard==null?"":heard).put("pending",false).put("revision",revision+1);}
-                if(Store.prefs(context).edit().putString("notes",notes.toString()).commit())return true;
-                Store.prefs(context).edit().putString("notes",before).commit();return false;
-            }catch(Exception unavailable){return false;}
+                if(Store.prefs(context).edit().putString("notes",notes.toString()).commit())return THOUGHT_TRANSCRIPT_SAVED;
+                Store.prefs(context).edit().putString("notes",before).commit();return THOUGHT_TRANSCRIPT_UNCHANGED;
+            }catch(Exception unavailable){return THOUGHT_TRANSCRIPT_UNCHANGED;}
         }
+    }
+    /** Destructive filtering requires every declared immutable segment, in the exact transcribed order. */
+    private static boolean completeThoughtSources(Context context,JSONObject note,List<File> used){
+        try{
+            JSONArray declared=note.optJSONArray("parts");if(declared==null || declared.length()==0 || used==null || used.size()!=declared.length())return false;
+            File folder=dir(context).getCanonicalFile();java.util.HashSet<String> unique=new java.util.HashSet<>();
+            for(int i=0;i<declared.length();i++){
+                String name=declared.optString(i);if(name.isEmpty() || !unique.add(name) || !name.equals(used.get(i).getName()))return false;
+                File expected=new File(folder,name).getCanonicalFile(),actual=used.get(i).getCanonicalFile();
+                if(!folder.equals(expected.getParentFile()) || !actual.equals(expected) || !actual.isFile() || actual.length()==0)return false;
+            }
+            return true;
+        }catch(Exception unavailable){return false;}
     }
 
     private static void remember(Context context,long id,List<File> files,String lang,boolean pending) {
@@ -717,6 +754,10 @@ final class Notes {
     }
 
     private static String transcribeFiles(Context context,List<File> files,String language,String[] detected) throws Exception {
+        return transcribeFiles(context,files,language,detected,null);
+    }
+    private static String transcribeFiles(Context context,List<File> files,String language,String[] detected,boolean[] completeTranscription) throws Exception {
+        if(completeTranscription!=null&&completeTranscription.length>0)completeTranscription[0]=true;
         StringBuilder raw=new StringBuilder();
         String lang=language!=null && language.equals("auto")?null:language;
         for(File file:files){
@@ -726,12 +767,14 @@ final class Notes {
                     String[] again=new String[]{""};
                     String retry=new CloudApi(context).transcribe(file,true,null,"bn",again,"notes_transcribe_model");
                     if(retry!=null && !LanguagePolicy.wrongScript("bn",retry)){piece=retry;if(detected!=null && detected.length>0)detected[0]="bn";}
+                    if((retry==null || retry.trim().isEmpty() || LanguagePolicy.wrongScript("bn",retry)) && completeTranscription!=null && completeTranscription.length>0)completeTranscription[0]=false;
                 }
                 piece=piece==null?"":piece.trim();
                 if(piece.isEmpty())continue;
                 if(raw.length()>0)raw.append('\n');
                 raw.append(piece);
             } catch(Exception error) {
+                if(completeTranscription!=null&&completeTranscription.length>0)completeTranscription[0]=false;
                 String message=error.getMessage()==null?"":error.getMessage();
                 if(message.contains("unsure") || message.contains("No speech"))continue;
                 throw error;
@@ -923,6 +966,10 @@ final class Notes {
 
     /** Finalized source segments are committed before transcription; repeating a callback updates one note. */
     static long keepThoughtAudio(Context context,long requestedId,List<File> sources,long duration,boolean complete){
+        return keepThoughtAudio(context,requestedId,sources,duration,complete,complete);
+    }
+    /** Failed/interrupted capture can save its sealed subset without becoming eligible for a length discard. */
+    static long keepThoughtAudio(Context context,long requestedId,List<File> sources,long duration,boolean complete,boolean captureComplete){
         long saved=-1;List<File> copied=new ArrayList<>();
         synchronized(Store.class){
             if(requestedId<=0||thoughtDeleted(context,requestedId))return -1;
@@ -932,10 +979,16 @@ final class Notes {
                 if(old!=null&&!old.optBoolean("recording")&&!old.optBoolean("pending")&&!old.optString("raw").isEmpty())return requestedId;
                 List<File> files=adoptThoughtFiles(context,requestedId,sources,copied);
                 if(complete&&files.isEmpty())return -1;
-                if(old!=null&&old.optBoolean("recording")==!complete&&old.optBoolean("pending")==complete&&String.valueOf(old.opt("parts")).equals(names(files).toString())&&old.optLong("duration")>=Math.max(0,duration))return requestedId;
+                boolean verifiedCaptureComplete=complete&&captureComplete&&sources!=null&&!sources.isEmpty()&&files.size()==sources.size();
+                if(verifiedCaptureComplete&&old!=null){
+                    java.util.HashSet<String> keptNames=new java.util.HashSet<>();for(File file:files)keptNames.add(file.getName());
+                    JSONArray priorParts=old.optJSONArray("parts");if(priorParts!=null)for(int i=0;i<priorParts.length();i++)if(!keptNames.contains(priorParts.optString(i)))verifiedCaptureComplete=false;
+                }
+                if(old!=null&&old.optBoolean("recording")==!complete&&old.optBoolean("pending")==complete&&old.optBoolean("thought_capture_complete")==verifiedCaptureComplete&&String.valueOf(old.opt("parts")).equals(names(files).toString())&&old.optLong("duration")>=Math.max(0,duration))return requestedId;
                 JSONObject note=old==null?new JSONObject().put("id",requestedId).put("created",requestedId).put("thought",true).put("raw","").put("text","").put("title","Quick thought").put("summary","").put("lang","auto").put("heard",""):new JSONObject(old.toString());
+                if(old==null&&!complete)note.put("minimum_thought_lines",2);
                 note.put("audio",files.isEmpty()?"":files.get(0).getName()).put("parts",names(files)).put("duration",Math.max(Math.max(0,duration),durations(files)))
-                    .put("recording",!complete).put("pending",complete).put("revision",old==null?1:old.optLong("revision",1)+1);
+                    .put("recording",!complete).put("pending",complete).put("thought_capture_complete",verifiedCaptureComplete).put("revision",old==null?1:old.optLong("revision",1)+1);
                 JSONArray next=new JSONArray().put(note);appendRetained(next,previous,requestedId);
                 if(!Store.prefs(context).edit().putString("notes",next.toString()).commit()){Store.prefs(context).edit().putString("notes",previous.toString()).commit();for(File file:copied)file.delete();return -1;}
                 saved=requestedId;

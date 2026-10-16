@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "tag": "v0.1.14-preview",
+  "versionName": "0.1.14-preview",
+  "versionCode": 86,
+  "package": "app.voiceflow",
+  "prerelease": true,
+  "notes": "release-notes/v0.1.14-preview.txt",
+  "apk": {
+    "path": "downloads/v0.1.14-preview/VonoTation-0.1.14-preview.apk",
+    "sha256": "fcc87013d0620a9f63e4b4feeea14602e7f5194c51635c2f23a812b71ef8e741",
+    "size": 6171750
+  },
+  "source": {
+    "path": "downloads/v0.1.14-preview/Vonotation-0.1.14-preview-source.zip",
+    "sha256": "d1d0b97b5561c6ebc25da641c59679994ec5145709aa6bb167bfb07e43d521a7",
+    "size": 889780
+  }
+}
