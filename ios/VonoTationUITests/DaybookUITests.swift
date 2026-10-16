@@ -131,10 +131,26 @@ final class DaybookUITests: XCTestCase {
         app.staticTexts["page.title"].tap()
         XCTAssertTrue(finish.exists, "An outside tap must not finish recording.")
         app.buttons["record.cancel"].tap()
-        app.buttons["Keep recording"].tap()
+        let discard = app.buttons["Discard recording"]
+        XCTAssertTrue(discard.waitForExistence(timeout: 5))
+        let keepRecording = app.buttons["Keep recording"]
+        if keepRecording.exists {
+            keepRecording.tap()
+        } else {
+            // Regular-size iPad confirmation popovers omit cancel-role actions.
+            // The native dismiss region is outside the destructive popover.
+            XCTAssertTrue(app.popovers.firstMatch.exists)
+            let dismissRegion = app.otherElements["PopoverDismissRegion"]
+            XCTAssertTrue(dismissRegion.exists)
+            dismissRegion.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.05)).tap()
+        }
+        let dismissed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: discard)
+        XCTAssertEqual(XCTWaiter.wait(for: [dismissed], timeout: 5), .completed)
         XCTAssertTrue(finish.exists)
+        XCTAssertEqual(app.otherElements["record.active"].value as? String, "dictation")
         app.buttons["record.cancel"].tap()
-        app.buttons["Discard recording"].tap()
+        XCTAssertTrue(discard.waitForExistence(timeout: 5))
+        discard.tap()
         XCTAssertFalse(finish.waitForExistence(timeout: 2))
     }
 
