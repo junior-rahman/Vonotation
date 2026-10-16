@@ -17,14 +17,25 @@ adb shell am instrument -w app.voiceflow.backup.fixture/app.voiceflow.BackupCred
 adb shell am instrument -w app.voiceflow.backup.fixture/app.voiceflow.BackupArchiveTest
 adb shell am instrument -w app.voiceflow.backup.fixture/app.voiceflow.BackupHistoryDeletionTest
 adb shell am instrument -w app.voiceflow.backup.fixture/app.voiceflow.BackupRestoreBusyTest
+adb shell am instrument -w app.voiceflow.backup.fixture/app.voiceflow.BackupGenerationPickerTest
 adb shell am instrument -w app.voiceflow.backup.fixture/app.voiceflow.ThoughtStorageTest
 adb shell am instrument -w app.voiceflow.backup.fixture/app.voiceflow.ThoughtDailySummaryCacheTest
 adb shell am instrument -w app.voiceflow.backup.fixture/app.voiceflow.ThoughtMinimumLengthTest
 ```
 
-`BackupCredentialPolicyTest` uses a separate preferences file, synthetic credential envelopes and a temporary draft. It checks that snapshots exclude secrets, legacy schema 1 keys are discarded, provider/model/endpoint settings remain portable, same-endpoint device credentials remain, changed endpoints (including changed paths) and invalid local endpoints clear device credentials, a fresh phone never imports an archived key, and failed preference commits roll back data and credentials together. Its commit failure is injected after the first write, then the rollback is allowed to complete; it is not a physical storage failure test.
+`BackupCredentialPolicyTest` uses a separate preferences file, synthetic credential envelopes and a temporary draft. It checks that snapshots exclude secrets, legacy schema 1 keys are discarded, all Dictation/Notes/Translation model settings remain portable, thoughts and recap settings change the portable fingerprint while local credentials do not, same-endpoint device credentials remain, changed endpoints (including changed paths) and invalid local endpoints clear device credentials, a fresh phone never imports an archived key, and failed preference commits roll back data and credentials together. Its commit failure is injected after the first write, then the rollback is allowed to complete; it is not a physical storage failure test.
 
-`BackupArchiveTest` checks AES-GCM archive authenticity, independent randomness, Unicode, bounded strict schema validation and malformed archive rejection. Its synthetic legacy key fixture confirms old encrypted archives can still be decoded while credentials are stripped before restore.
+`BackupArchiveTest` checks AES-GCM archive authenticity, independent randomness, Unicode, bounded strict schema validation and malformed archive rejection. It exercises an encrypted schema round-trip with 300 thoughts plus 100 dictations, validates the 10,000-thought limit, checks all model settings and backward-compatible defaults, and tests portable freshness after summary, draft and switch edits. Its synthetic legacy key fixture confirms old encrypted archives can still be decoded while credentials are stripped before restore.
+
+`BackupGenerationPickerTest` opens the production native restore picker with five synthetic generations, checks all five appear in its adapter and selects the fifth. It does not authorize Google or invoke backup transport. This is a native list/callback check; it does not claim a physical touch or corrupted Drive archive test.
+
+The production encryption and parser bounds can also be checked on the JVM:
+
+```sh
+ANDROID_SDK_ROOT=/path/to/android-sdk bash tests/run-backup-archive-jvm.sh /tmp/backup-archive-tests
+```
+
+This executes real archive encryption/decryption for 300 and 10,000 thoughts with 100 dictations, applies the same read/write allocation guard, and checks Unicode, tamper rejection and pre-write UTF-8/complexity bounds. Android SDK JSON types provide compile-time linkage only; this JVM suite does not execute Android's schema parser. `BackupJsonBoundsTest` also runs in the ordinary pure Java suite.
 
 `BackupHistoryDeletionTest` checks deletion and Clear history against newly created encrypted archives, including removal of matching raw/clean drafts, preservation of unrelated unsaved drafts and absent-entry behavior.
 

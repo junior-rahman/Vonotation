@@ -14,6 +14,9 @@ public final class LanguagePolicyTest {
         check(LanguagePolicy.instructions(true,true,"jewel=Juel").contains("already been applied"));
         check(LanguagePolicy.instructions(true,false,"").contains("Preserve profanity"));
         check(!LanguagePolicy.instructions(true,false,"").contains("Banglish"));
-        System.out.println("PASS: 12 language-policy checks.");
+        check(!LanguagePolicy.wrongScript("auto","مرحبا كيف حالك اليوم"));
+        check(!LanguagePolicy.wrongScript("auto","اردو ایک زبان ہے"));
+        check(LanguagePolicy.wrongScript("bn","مرحبا كيف حالك اليوم"));
+        System.out.println("PASS: 15 language-policy checks.");
     }
 }

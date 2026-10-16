@@ -1,0 +1,25 @@
+VonoTation 0.1.15-preview
+Android package: app.voiceflow
+Version code: 87
+
+Reliability fixes
+- Interrupted recording finalization keeps surviving source audio and remains incomplete, so the short-thought rule cannot discard a partial capture. Capture ownership keeps unrelated sessions separate.
+- Turning Call Notes off and ending calls clean up the owned recording and restore audio routing. Translation cannot start call recording when Call Notes is off. Unexpected wireless stream endings preserve recorded segments and enter recovery rather than silently finishing the call.
+- Asynchronous note transcription and organization check that the note still exists and has not changed before saving. Incomplete transcription keeps retry available; a failing queued note does not block other pending notes.
+- Failed or empty Again/Language requests preserve the existing transcript and summary. Auto transcription keeps genuine Arabic in its detected language. Playback resumes from pause and seeking crosses source segments; retention removes unreachable audio only after metadata is saved.
+- Text backups use matching bounded encode/decode rules for larger thought collections, validate the generated archive before remote commit, and include the selected Notes and Translate models. Backup freshness includes thought and setting changes.
+- Cursor-aware delete, paste and dictation handle missing selection information and delayed editor acknowledgements safely. Clipboard changes avoid querying the app's own inaccessible window, and stale clipboard helpers close cleanly.
+- In-app installation and new recording starts share an exclusive gate through Android's installer confirmation. The existing installed signing identity is retained.
+- Call connection recovery uses sustained health and alert cooldowns to reduce repeated connection notifications. Older Android compatibility and full-lint errors are corrected.
+- Daily dictation recaps restart safely when their source changes. Update publishing follows the repository's new account name while preserving its verified repository and signing identity.
+
+The current interface is retained for this bugfix release. The broader color and aesthetics refresh follows the reliability work. Quick thoughts keeps the existing daily timeline, summaries, full transcript and hidden Source audio playback. Offline recordings remain local until transcription can run; text backups exclude recordings.
+
+Verification
+Release preparation records the final Android assembly, full lint, JVM regression suites, APK identity/signing and source-exclusion checks in verification/v0.1.15-preview/VERIFICATION.txt. The publication workflow validates artifact hashes, sizes and manifest identity. Public APK and source downloads are verified before the update feed advances.
+
+Phone/device testing: not performed.
+
+Actual cursor and selection behavior, microphone finalization, call teardown/recovery, notification timing, provider replies, background retry scheduling and installer handoff remain unverified on Android hardware. Google Drive OAuth registration for the current signing certificate, account consent and live backup/restore remain unverified. Source review and JVM checks do not establish device or provider behavior.
+
+Install through Settings > Update and confirm Android's installer. Private signing keys, API keys, recordings, caches and machine configuration are excluded from the source archive. Retained source recordings stay on this phone; transcription sends audio to the configured Notes provider when connected.

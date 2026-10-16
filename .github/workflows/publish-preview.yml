@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   publish:
-    if: github.repository == 'JuelHossain/Vonotation' && github.ref == 'refs/heads/main'
+    if: github.repository_id == '1416658953' && github.repository == 'junior-rahman/Vonotation' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

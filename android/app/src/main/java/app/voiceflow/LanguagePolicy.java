@@ -60,8 +60,6 @@ final class LanguagePolicy {
         if("ne".equals(code))return h.startsWith("ne")||h.contains("nepali");
         return false;
     }
-    /** Arabic letters with no Bengali. Whisper does this to Bangla when the language is left open. */
-    static boolean arabicMisread(String text){return text!=null && has(text,0x0600,0x06ff) && !has(text,0x0980,0x09ff) && !has(text,0x0900,0x097f);}
     static String scriptRule(String name) {
         if(name==null)return "";
         if(name.contains("বাংলা") || name.equalsIgnoreCase("bengali") || name.equalsIgnoreCase("bangla"))return "Write Bengali in Bengali letters only. Example: How are you? → তুমি কেমন আছো? Never use Arabic, Urdu, or Latin letters for Bengali words.";

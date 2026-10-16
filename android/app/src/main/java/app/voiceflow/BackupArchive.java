@@ -36,10 +36,9 @@ final class BackupArchive {
     static JSONObject decode(byte[] bytes,char[] password) throws Exception {
         byte[] plain=decodeUtf8(bytes,password);
         try {
-            String json=StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT).onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(plain)).toString();
-            checkJsonShape(json);
+            String json=checkedJson(plain);
             return new JSONObject(json);
-        } catch(org.json.JSONException | java.nio.charset.CharacterCodingException error) {
+        } catch(org.json.JSONException error) {
             throw new IOException("The backup data is not readable.");
         } finally { Arrays.fill(plain,(byte)0); }
     }
@@ -48,6 +47,7 @@ final class BackupArchive {
     static byte[] encodeUtf8(byte[] plain,char[] password) throws Exception {
         checkPassword(password);
         if(plain==null || plain.length>MAX_BYTES-HEADER_BYTES-TAG_BYTES) throw new IOException("The backup is too large.");
+        checkedJson(plain); // Never write an archive our own parser bounds would refuse.
         byte[] salt=new byte[16],iv=new byte[12];RANDOM.nextBytes(salt);RANDOM.nextBytes(iv);
         byte[] header=ByteBuffer.allocate(HEADER_BYTES).put(MAGIC).putInt(VERSION).putInt(ITERATIONS).put(salt).put(iv).putInt(plain.length+TAG_BYTES).array();
         byte[] key=derive(password,salt);
@@ -79,18 +79,11 @@ final class BackupArchive {
         try { return SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).getEncoded(); }
         finally { spec.clearPassword(); }
     }
-    private static void checkJsonShape(String json) throws IOException {
-        // A valid schema has only a few levels and at most 100 small entry objects.
-        // Bound parser recursion/allocation before parsing a password-authenticated imported file.
-        int depth=0,separators=0;boolean quoted=false,escaped=false;
-        for(int i=0;i<json.length();i++) {
-            char value=json.charAt(i);
-            if(quoted){if(escaped)escaped=false;else if(value=='\\')escaped=true;else if(value=='"')quoted=false;continue;}
-            if(value=='"')quoted=true;
-            else if(value=='{' || value=='['){if(++depth>16)throw new IOException("The backup data is too complex.");}
-            else if(value=='}' || value==']')depth--;
-            else if(value==',' && ++separators>2048)throw new IOException("The backup contains too many data fields.");
-        }
+    private static String checkedJson(byte[] plain) throws IOException {
+        try {
+            String json=StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT).onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(plain)).toString();
+            BackupJsonBounds.check(json);return json;
+        } catch(java.nio.charset.CharacterCodingException invalid) {throw new IOException("The backup data is not readable.");}
     }
     private BackupArchive(){}
 }

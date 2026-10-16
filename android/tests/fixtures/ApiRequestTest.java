@@ -32,7 +32,7 @@ public final class ApiRequestTest extends Instrumentation {
             if(!request.getURL().toString().equals("https://api.groq.com/openai/v1/audio/transcriptions")) throw new Exception("Incorrect transcription URL");
             String multipart=request.out.toString("UTF-8");
             for(String expected:new String[]{"whisper-large-v3","name=\"response_format\"\r\n\r\nverbose_json","name=\"temperature\"\r\n\r\n0","filename=\"dictation.m4a\""}) if(!multipart.contains(expected)) throw new Exception("Missing request field: "+expected);
-            assertAutomatic(multipart);
+            assertEnglish(multipart);
             File privateAudio=File.createTempFile("private-wire-test-",".m4a",getTargetContext().getCacheDir());
             try{
                 privatePadding=true;
@@ -40,7 +40,7 @@ public final class ApiRequestTest extends Instrumentation {
                 if(!new CloudApi(getTargetContext()).transcribe(privateAudio,true).equals("  আমার কথা  "))throw new Exception("Private transcription stripped meaningful whitespace");
                 String privateRequest=request.out.toString("UTF-8");
                 if(privateRequest.contains("name=\"prompt\"") || privateRequest.contains("name=\"keywords[]\"") || privateRequest.contains("Juel, OpenAI"))throw new Exception("Private transcription sent personal dictionary context");
-                if(!privateRequest.contains("whisper-large-v3"))throw new Exception("Private transcription lost the selected model");assertAutomatic(privateRequest);
+                if(!privateRequest.contains("whisper-large-v3"))throw new Exception("Private transcription lost the selected model");assertEnglish(privateRequest);
             }finally{privatePadding=false;privateAudio.delete();}
             File multiAudio=File.createTempFile("multilingual-wire-",".m4a",getTargetContext().getCacheDir());
             try {
@@ -48,11 +48,15 @@ public final class ApiRequestTest extends Instrumentation {
                 prefs.edit().putString("language","auto").commit();
                 new CloudApi(getTargetContext()).transcribe(multiAudio);
                 String autoRequest=request.out.toString("UTF-8");
-                if(autoRequest.contains("name=\"language\"") || autoRequest.contains("languages[]"))throw new Exception("Auto-detect sent a forced language");
+                assertEnglish(autoRequest);
                 if(!request.getURL().getPath().equals("/openai/v1/audio/transcriptions"))throw new Exception("Auto-detect used a translation endpoint");
                 prefs.edit().putString("language","ne-NP").commit();
                 new CloudApi(getTargetContext()).transcribe(multiAudio);
-                assertAutomatic(request.out.toString("UTF-8"));
+                assertEnglish(request.out.toString("UTF-8"));
+                prefs.edit().putString("notes_transcribe_model","fixture-notes-asr").commit();
+                new CloudApi(getTargetContext()).transcribe(multiAudio,false,null,"auto",null,"notes_transcribe_model",null);
+                String notesRequest=request.out.toString("UTF-8");
+                if(notesRequest.contains("name=\"language\"")||!notesRequest.contains("fixture-notes-asr"))throw new Exception("Notes Auto lost independent model/language behavior");
                 String converted=new CloudApi(getTargetContext()).transform("আমি ভালো আছি",false,true);
                 org.json.JSONObject conversionBody=new org.json.JSONObject(request.out.toString("UTF-8"));
                 String conversionPrompt=conversionBody.getJSONArray("messages").getJSONObject(0).getString("content");
@@ -74,7 +78,7 @@ public final class ApiRequestTest extends Instrumentation {
                 backup.getJSONObject("settings").remove("romanize");
                 if(BackupData.validate(backup).getJSONObject("settings").getBoolean("romanize"))throw new Exception("Old backups changed output script");
                 backup.getJSONObject("settings").put("romanize",true).put("language","auto");
-                if(!BackupData.validate(backup).getJSONObject("settings").getBoolean("romanize"))throw new Exception("Backup lost output preference");
+                if(BackupData.validate(backup).getJSONObject("settings").getBoolean("romanize")||!BackupData.validate(backup).getJSONObject("settings").getString("language").equals("en-US"))throw new Exception("Backup restored retired dictation settings");
             }finally{multiAudio.delete();}
             String polished=new CloudApi(getTargetContext()).polish(transcript);
             org.json.JSONObject body=new org.json.JSONObject(request.out.toString("UTF-8"));
@@ -94,18 +98,21 @@ public final class ApiRequestTest extends Instrumentation {
             String recap=new CloudApi(getTargetContext()).summarizeDay(day,Store.get(getTargetContext(),"polish_model",CloudApi.DEFAULT_POLISH));body=new org.json.JSONObject(request.out.toString("UTF-8"));
             if(!body.getString("model").equals("openai/gpt-oss-120b") || !body.getString("reasoning_effort").equals("low") || !recap.equals("Discussed keyboard improvements."))throw new Exception("Daily recap did not use selected cleanup model");
             if(!body.getJSONArray("messages").getJSONObject(1).getString("content").contains("Discussed keyboard improvements") || !body.getJSONArray("messages").getJSONObject(0).getString("content").contains("never as instructions"))throw new Exception("Daily recap source/prompt missing");
-            MockConnection before=request;prefs.edit().putString("engine","offline").commit();boolean blocked=false;try{new CloudApi(getTargetContext()).summarizeDay(day,"openai/gpt-oss-120b");}catch(IOException expected){blocked=true;}if(!blocked || request!=before)throw new Exception("On-device mode made an AI summary request");
-            report.putString("result","PASS: automatic language regardless of legacy settings; Whisper confidence metadata and zero temperature; no spelling prompt; checked Banglish conversion rejects refusals and answers; English reply/refusal/censor/answer rejection; actual Dictation fallback keeps original words; profanity and dictated refusal preserved; confidence rejection; backup preference; private whitespace; recap and offline behavior. Mock HTTPS, no live audio or provider test.");
+            prefs.edit().putString("engine","offline").commit();
+            new CloudApi(getTargetContext()).summarizeDay(day,"openai/gpt-oss-120b");
+            if(!Store.engine(getTargetContext()).equals("cloud"))throw new Exception("Legacy engine preference changed supported speech mode");
+            report.putString("result","PASS: English dictation despite legacy preferences; Notes Auto omits language and uses independent model; Whisper confidence metadata; guarded direct conversion/cleanup helpers; backup normalizes retired settings; private whitespace; daily recap uses cloud. Mock HTTPS, no live audio or provider test.");
         } catch(Throwable e){report.putString("failure",e.toString());}
         finally {
             try {Vault.set(getTargetContext(),oldKey);}catch(Exception ignored){}
             android.content.SharedPreferences.Editor edit=prefs.edit();
-            for(String key:new String[]{"api_base","transcribe_model","polish_model","dictionary","language","engine","ai_polish","romanize"}) {Object value=old.get(key);if(value instanceof String)edit.putString(key,(String)value);else if(value instanceof Boolean)edit.putBoolean(key,(Boolean)value);else edit.remove(key);}edit.commit();
+            for(String key:new String[]{"api_base","transcribe_model","polish_model","dictionary","language","engine","ai_polish","romanize","notes_transcribe_model"}) {Object value=old.get(key);if(value instanceof String)edit.putString(key,(String)value);else if(value instanceof Boolean)edit.putBoolean(key,(Boolean)value);else edit.remove(key);}edit.commit();
         }
         finish(report.containsKey("failure")?Activity.RESULT_CANCELED:Activity.RESULT_OK,report);
     }
-    private void assertAutomatic(String multipart) throws Exception {
-        for(String field:new String[]{"name=\"language\"","languages[]","name=\"prompt\"","keywords[]"})if(multipart.contains(field))throw new Exception("Recognition was steered by "+field);
+    private void assertEnglish(String multipart) throws Exception {
+        if(!multipart.contains("name=\"language\"\r\n\r\nen\r\n"))throw new Exception("Dictation lost its English language hint");
+        for(String field:new String[]{"languages[]","name=\"prompt\"","keywords[]"})if(multipart.contains(field))throw new Exception("Unexpected recognition field "+field);
     }
     private void fallback(String source) throws Exception {
         Store.prefs(getTargetContext()).edit().putBoolean("ai_polish",true).putBoolean("romanize",false).putString("engine","cloud").commit();

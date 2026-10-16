@@ -17,6 +17,8 @@ public final class LiveInsertionTest {
         equal("Keep longer words ending",selected.render("longer words"));
         LiveInsertion bengali=new LiveInsertion("আমি আছি",4,4);
         equal("আমি ভালো আছি",bengali.render("ভালো"));
+        check(!bengali.matches("আমি আছি",-1,-1));
+        for(int[] cursor:new int[][]{{-1,-1},{0,-1},{100,100}}){boolean refused=false;try{new LiveInsertion("Before after",cursor[0],cursor[1]);}catch(IllegalArgumentException required){refused=true;}check(refused);}
         System.out.println("PASS: live revisions, selected-text replacement, Bengali spacing, and manual-edit/cursor guards");
     }
 }

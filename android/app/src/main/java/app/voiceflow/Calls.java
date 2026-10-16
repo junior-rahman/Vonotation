@@ -61,6 +61,8 @@ final class Calls {
         if(on && !paired){
             Ui.space(card,10);
             android.widget.TextView setupLine=Daybook.text(activity,setup?"Hide earpiece setup":"Earpiece setup",14,Daybook.accent(activity),true);
+            setupLine.setMinHeight(Ui.dp(activity,48));
+            setupLine.setGravity(android.view.Gravity.CENTER_VERTICAL);
             setupLine.setOnClickListener(v->{Daybook.feedback(v);setup=!setup;refresh.run();});
             card.addView(setupLine);
             if(setup){

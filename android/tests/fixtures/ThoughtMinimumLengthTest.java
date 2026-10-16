@@ -57,7 +57,7 @@ public final class ThoughtMinimumLengthTest extends Instrumentation {
             context=isolatedContext(getTargetContext());
             require(Vault.get(context).isEmpty(),"Fixture must not have a provider key.");
             oldRetryAction=field("thoughtRetryAction").get(null);oldRetryPrefs=field("thoughtRetryPrefs").get(null);hooksCaptured=true;
-            saveTranscript=Notes.class.getDeclaredMethod("saveThoughtTranscript",Context.class,JSONObject.class,String.class,String.class,boolean.class);
+            saveTranscript=Notes.class.getDeclaredMethod("saveThoughtTranscript",Context.class,JSONObject.class,Class.forName("app.voiceflow.Notes$Transcription"));
             saveTranscript.setAccessible(true);
             layoutBoundaries();
             completedShortAndLateCallback();
@@ -160,6 +160,7 @@ public final class ThoughtMinimumLengthTest extends Instrumentation {
             Capture capture=capture(context,true,true,1);
             require(commit(context,capture.snapshot,partial,false)!=FILTERED,"Error-derived/uncertain partial ASR triggered the minimum filter.");
             retained(capture,"Uncertain partial transcript lost its source.");
+            require(find(capture.id).optBoolean("pending")&&find(capture.id).optBoolean("partial_transcript"),"Uncertain partial ASR lost its retry state.");
         }
     }
 
@@ -212,7 +213,7 @@ public final class ThoughtMinimumLengthTest extends Instrumentation {
         return new Capture(id,sources,new JSONObject(snapshot.toString()));
     }
     private int commit(Context app,JSONObject captured,String raw,boolean complete)throws Exception{
-        try{return ((Integer)saveTranscript.invoke(null,app,captured,raw,"en",complete)).intValue();}
+        try{Class<?> type=Class.forName("app.voiceflow.Notes$Transcription");java.lang.reflect.Constructor<?> constructor=type.getDeclaredConstructor();constructor.setAccessible(true);Object result=constructor.newInstance();for(String name:new String[]{"raw","heard","complete"}){Field field=type.getDeclaredField(name);field.setAccessible(true);field.set(result,name.equals("raw")?raw:name.equals("heard")?"en":Boolean.valueOf(complete));}return ((Integer)saveTranscript.invoke(null,app,captured,result)).intValue();}
         catch(InvocationTargetException failure){Throwable cause=failure.getCause();if(cause instanceof Exception)throw (Exception)cause;throw new AssertionError(cause);}
     }
     private JSONObject find(long id)throws Exception{JSONArray notes=new JSONArray(Store.get(context,"notes","[]"));for(int i=0;i<notes.length();i++){JSONObject note=notes.optJSONObject(i);if(note!=null&&note.optLong("id")==id)return note;}return null;}

@@ -1,0 +1,17 @@
+VonoTation 0.1.15-preview / versionCode 87 / app.voiceflow
+Prepared 2026-10-16T04:17:18+00:00
+
+Android :app:assemblePreview: passed (recorded build log).
+Android full :app:lintPreview: passed (recorded build log; warnings may remain).
+Pure Java suites: all 33 passed (recorded test log).
+APK manifest identity and existing preview signing certificate: verified.
+Signer certificate SHA256: 5dca2219fbe89fb885b24c904fd4c57d3b58930922d21d455fc10d7a35f7568a
+Source inventory SHA256: 61e39f77f393b4e874ed870678c67335c755b91a99202604000d4ab092c2b49b
+
+Phone/device testing: not performed. Samsung/Niagara, actual cursor/selection deletion, microphone capture, provider responses, background retry timing, notification behavior, installer return, Google account consent and live backup/restore still need device testing. Google OAuth registration for the current signing certificate is not verified. JVM tests cover synthetic logic only.
+
+This is a reliability release. Its reviewed change scope is recorded in RELEASE_NOTES-0.1.15-preview.txt and its exact source delta from 0.1.14-preview is recorded in CHANGES-FROM-0.1.14-preview.patch. The tests above validate the local build and synthetic regression logic; they do not establish microphone, provider, accessibility, call or installer behavior on Android hardware.
+
+Device regression focus: successful versus interrupted recording finalization, Call Notes disable/hangup and reconnect cleanup, edited/deleted note protection, incomplete transcription retries, larger encrypted text-backup round-trips, middle-of-text cursor edits and delayed acknowledgements, clipboard window lifecycle and installation while capture starts or stops. Verify the final release notes for which fixes are included. The broader color and aesthetics refresh is deferred.
+
+Private signing keys, API keys, recordings, machine configuration and build caches are excluded. The Gradle wrapper JAR is intentionally included. Historical documents describe older versions; app/build.gradle identifies this source version.

@@ -43,20 +43,19 @@ final class DriveBackup {
     }
     /** Fingerprint of the data a backup captures, to tell whether newer local changes exist. */
     static String dataFingerprint(Context context) {
-        SharedPreferences prefs = Store.prefs(context);
-        String value = prefs.getString("history", "[]") + "\u0000" + prefs.getString("dictionary", "");
-        try {
-            byte[] digest = java.security.MessageDigest.getInstance("SHA-256").digest(value.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-            StringBuilder hex = new StringBuilder(); for (int i = 0; i < 8; i++) hex.append(String.format(java.util.Locale.ROOT, "%02x", digest[i])); return hex.toString();
-        } catch (Exception unavailable) { return Integer.toHexString(value.hashCode()); }
+        try { return BackupData.fingerprint(BackupData.snapshot(context)); }
+        catch (Exception unavailable) { return ""; }
     }
     /** Non-empty when the last saved backup holds an older snapshot than the phone's current data. */
     static String snapshotNote(Context context) {
         long at = Store.prefs(context).getLong("backup_snapshot_at", 0);
         String saved = text(context, "backup_snapshot_fingerprint");
-        if (at == 0 || saved.isEmpty() || saved.equals(dataFingerprint(context))) return "";
+        if (at == 0 || saved.isEmpty()) return "";
+        String current=dataFingerprint(context);
+        if(current.isEmpty())return "This phone’s current backup data could not be checked. Your saved backup is unchanged.";
+        if(saved.equals(current))return "";
         return "The saved backup is a snapshot from " + DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(new Date(at))
-                + ". Newer dictations or dictionary changes are not in it yet.";
+                + ". Newer dictations, Quick Thoughts or settings are not in it yet.";
     }
     private static final String BUSY = "A backup or restore is already running. Please wait.";
     private static final String[] CONFIG_KEYS = {
@@ -285,14 +284,21 @@ final class DriveBackup {
                     throw new ConfigurationException("Could not save the refreshed Google Drive connection.");
                 schedule(app);
             }
-            final long snapshotAt = System.currentTimeMillis();
-            final String snapshotFingerprint = dataFingerprint(app);
-            byte[] encrypted = BackupArchive.encode(BackupData.snapshot(app), password);
+            final JSONObject snapshot = BackupData.snapshot(app);
+            final long snapshotAt = snapshot.getLong("created_at");
+            final String snapshotFingerprint = BackupData.fingerprint(snapshot);
+            byte[] encrypted = BackupArchive.encode(snapshot, password);
+            // Exercise the same decryption and schema validation as restore before
+            // any upload, then again on downloaded bytes before remote commit.
+            if(!snapshotFingerprint.equals(BackupData.fingerprint(decode(encrypted,password))))
+                throw new IOException("The new backup could not be verified. Your previous backup has been kept.");
             checkCancelled(cancelEpoch);
             uploaded = client.upload(encrypted); // A pending, immutable generation.
             checkCancelled(cancelEpoch);
             byte[] remote = client.download(uploaded);
             if (!Arrays.equals(encrypted, remote)) throw new IOException("Drive could not verify the new backup. Your previous backup has been kept.");
+            if(!snapshotFingerprint.equals(BackupData.fingerprint(decode(remote,password))))
+                throw new IOException("Drive could not verify the new backup data. Your previous backup has been kept.");
             checkCancelled(cancelEpoch);
             commitAttempted = true;
             DriveCloudClient.BackupFile acknowledged = client.commit(uploaded.id);

@@ -41,7 +41,7 @@ import java.util.concurrent.TimeUnit;
 
 /** User-started, verified APK update. Android always owns the final installation confirmation. */
 final class AppUpdate {
-    private static final String FEED="https://raw.githubusercontent.com/JuelHossain/Vonotation/main/latest.json";
+    private static final String FEED="https://raw.githubusercontent.com/junior-rahman/Vonotation/main/latest.json";
     static final String EXTRA_TOKEN="update_token",EXTRA_SESSION="update_session";
     private static final String IDLE="idle",CHECKING="checking",DOWNLOADING="downloading",VERIFYING="verifying",READY="ready",PERMISSION="permission",INSTALLING="installing",CONFIRM="confirm",ERROR="error";
     private static final ExecutorService WORK=Executors.newSingleThreadExecutor();
@@ -132,6 +132,13 @@ final class AppUpdate {
     private static Activity currentActivity(){Activity a=foreground==null?null:foreground.get();return a==null||a.isFinishing()||a.isDestroyed()?null:a;}
     private static PackageInstaller.SessionInfo ownedSession(Context context){int id=prefs(context).getInt("session",-1);return id<0?null:context.getPackageManager().getPackageInstaller().getSessionInfo(id);}
     private static boolean activeSession(Context context){PackageInstaller.SessionInfo info=ownedSession(context);return info!=null&&info.isActive();}
+    /** A committed session survives our process, including while Android shows confirmation. */
+    static boolean installPending(Context context){
+        SharedPreferences p=prefs(context);String phase=p.getString("phase",IDLE);
+        if(!INSTALLING.equals(phase)&&!CONFIRM.equals(phase))return false;
+        if(p.getInt("session",-1)<0)return false;
+        try{return ownedSession(context)!=null;}catch(RuntimeException unavailable){return true;}
+    }
     private static boolean installerInFlight(Context context){
         PackageInstaller.SessionInfo info=ownedSession(context);long started=prefs(context).getLong("install_started",0);
         return UpdatePolicy.sessionMustWait(info!=null,info!=null&&info.isActive(),started,System.currentTimeMillis());
@@ -153,7 +160,8 @@ final class AppUpdate {
     }
     private static void launchConfirmation(Activity activity){
         if(confirmation==null)return;
-        if(audioBusy()){state(activity,CONFIRM,"Continue installation","Finish recording or processing your audio before installing the update.");return;}
+        if(!CaptureBarrier.reserveInstall()){state(activity,CONFIRM,"Continue installation","Finish recording or processing your audio before installing the update.");return;}
+        if(audioBusy()){CaptureBarrier.releaseInstall();state(activity,CONFIRM,"Continue installation","Finish recording or processing your audio before installing the update.");return;}
         state(activity,CONFIRM,"Continue installation","Complete Android's installation screen. You can return here to continue.");
         try{activity.startActivity(new Intent(confirmation));confirmationLaunched=true;}
         catch(RuntimeException blocked){confirmationLaunched=false;state(activity,CONFIRM,"Continue installation","Tap Continue installation while VonoTation is open to confirm the update.");}
@@ -161,6 +169,12 @@ final class AppUpdate {
     }
 
     private static void install(Context context,Release release) throws Exception {
+        if(!CaptureBarrier.reserveInstall())throw new Deferred();
+        boolean committed=false;
+        try{prepareInstall(context,release);committed=true;}
+        finally{if(!committed)CaptureBarrier.releaseInstall();}
+    }
+    private static void prepareInstall(Context context,Release release) throws Exception {
         if(!canInstall(context))throw new Problem("Installation permission changed. Tap Update to allow it again.");
         if(audioBusyOnMain(context))throw new Deferred();
         PackageInstaller installer=context.getPackageManager().getPackageInstaller();
@@ -255,6 +269,7 @@ final class AppUpdate {
     private static void clearSession(Context context){
         int id=prefs(context).getInt("session",-1);if(id>=0)try{PackageInstaller.SessionInfo info=ownedSession(context);if(info==null||!info.isActive()||!info.isSealed())context.getPackageManager().getPackageInstaller().abandonSession(id);}catch(RuntimeException ignored){}
         prefs(context).edit().remove("session").remove("token").remove("install_started").commit();confirmation=null;confirmationLaunched=false;
+        CaptureBarrier.releaseInstall();
     }
     private static void fail(Context context,String message,boolean discard){busy=false;clearSession(context);if(discard)clearPrepared(context);else partial(context).delete();state(context,ERROR,"Update",message);}
     private static String problem(Exception error,String fallback){return error instanceof Problem||error instanceof IllegalArgumentException?error.getMessage():fallback;}

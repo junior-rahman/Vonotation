@@ -45,6 +45,7 @@ final class Dictation {
     private volatile CloudApi api;
     private volatile boolean closed;
     private boolean active, stopping, processing, countedWorking,cloudRecording;
+    private CaptureGate.Lease captureLease;
     private String committed="", partial="";
     private int silenceCount;
     private boolean screenReceiverRegistered;
@@ -58,7 +59,7 @@ final class Dictation {
         if(context.checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED) { listener.error("Allow microphone access first."); return; }
         // Restore and a new recording must not cross between its busy check and
         // applying preferences. Keep UI and recorder work outside this gate.
-        synchronized(Store.class){if(active || closed)return;active=true;markWorking(true);}
+        synchronized(Store.class){if(active || closed)return;captureLease=CaptureBarrier.begin(context);if(captureLease==null){listener.error("Finish or cancel the app update before recording.");return;}active=true;markWorking(true);}
         cloudRecording=Store.engine(context).equals("cloud");listener.state(cloudRecording?"Starting microphone…":"Listening…");
         IntentFilter filter=new IntentFilter(Intent.ACTION_SCREEN_OFF);
         if(Build.VERSION.SDK_INT>=33)context.registerReceiver(screenReceiver,filter,Context.RECEIVER_NOT_EXPORTED);else context.registerReceiver(screenReceiver,filter);screenReceiverRegistered=true;
@@ -186,7 +187,7 @@ final class Dictation {
      */
     void retry(File audio){
         if(active || closed || audio==null)return;
-        synchronized(Store.class){if(active || closed)return;active=true;markWorking(true);}
+        synchronized(Store.class){if(active || closed)return;captureLease=CaptureBarrier.begin(context);if(captureLease==null){listener.error("Finish or cancel the app update before retrying.");return;}active=true;markWorking(true);}
         cloudRecording=true;stopping=true;processing=true;listener.state("Uploading audio…");
         executor.execute(()->{
             String result=null,message=null;
@@ -245,6 +246,7 @@ final class Dictation {
     private void markWorking(boolean value){
         boolean changed=false;
         synchronized(Dictation.class){if(countedWorking!=value){countedWorking=value;workingSessions+=value?1:-1;changed=true;}}
+        if(!value){CaptureGate.Lease lease=captureLease;captureLease=null;if(lease!=null)lease.close();}
         // Async so the callback runs after recorder/store locks are released, including cancel/close.
         if(changed)handler.post(()->{if(FlowAccessibility.instance!=null)FlowAccessibility.instance.updateBubble();});
     }

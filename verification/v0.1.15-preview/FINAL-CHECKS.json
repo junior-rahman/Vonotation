@@ -1,0 +1,33 @@
+{
+  "version": "0.1.15-preview",
+  "versionCode": 87,
+  "androidAssembly": "passed",
+  "fullLint": {
+    "errors": 0,
+    "warnings": 119
+  },
+  "pureJvmSuites": 33,
+  "backupCrypto": "actual production crypto round-trips passed with 300 and 10000 thoughts plus 100 dictations; schema/native runtime not executed",
+  "fixtures": "compiled and signed; not executed",
+  "deviceTesting": "not performed",
+  "apks": [
+    {
+      "name": "app-preview.apk",
+      "size": 6186026,
+      "sha256": "2c9efb767596be93d5556a425176c94d2a78c1f3839b671a22bf945f263c04b8",
+      "signerSha256": "5dca2219fbe89fb885b24c904fd4c57d3b58930922d21d455fc10d7a35f7568a"
+    },
+    {
+      "name": "VoiceFlow-backup-fixture.apk",
+      "size": 49579,
+      "sha256": "14222d26b04c8f09c2e33eee67fc7035418557b82c6633831ac8645fbf937998",
+      "signerSha256": "5dca2219fbe89fb885b24c904fd4c57d3b58930922d21d455fc10d7a35f7568a"
+    },
+    {
+      "name": "VoiceFlow-input-regressions-fixture.apk",
+      "size": 65963,
+      "sha256": "78cac41f59230518f214f03de1e5ac7db34a28fcfef3a33849339d0078c4c5fc",
+      "signerSha256": "5dca2219fbe89fb885b24c904fd4c57d3b58930922d21d455fc10d7a35f7568a"
+    }
+  ]
+}

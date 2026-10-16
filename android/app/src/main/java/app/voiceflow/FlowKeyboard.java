@@ -188,7 +188,7 @@ public final class FlowKeyboard extends InputMethodService implements Dictation.
         }
         boolean inserted=insertion!=null && insertion.write(port,text);pendingWriteAccepted|=inserted;
         if(inserted)inserted=insertion.matches(port.read());
-        if(!inserted && sameTarget() && attempt<6){handler.postDelayed(()->finishResult(raw,text,warning,attempt+1,owner),150);return;}
+        if(!inserted && sameTarget() && attempt<14){handler.postDelayed(()->finishResult(raw,text,warning,attempt+1,owner),150);return;}
         Recovery.keep(this,raw,text,android.os.SystemClock.elapsedRealtime()-startedAt,inserted);endRecording();
         if(!inserted)setStatus("Copied and kept");
         else{setStatus("Inserted");if(!warning.isEmpty())Toast.makeText(this,warning,Toast.LENGTH_LONG).show();}

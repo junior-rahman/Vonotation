@@ -86,7 +86,6 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
         String packageName;
         int window;
         AccessibilityNodeInfo identity;
-        LiveInsertion text;
         EditorInsertion nativeText;
         EditorInsertion.Port port;
         AccessibilityEditor.SensitiveTarget sensitiveTarget;
@@ -109,15 +108,20 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
             if(cancelled || Notes.thoughtDeleted(app,id)){cancel();return;}
             Notes.keepThoughtAudio(app,id,parts,duration(),false);
         }
-        public void finishedAll(java.util.List<java.io.File> ready){
+        public void finishedAll(java.util.List<java.io.File> ready){finishedAll(ready,true);}
+        public void finishedAll(java.util.List<java.io.File> ready,boolean captureComplete){
             parts=new java.util.ArrayList<>(ready);
             if(cancelled || Notes.thoughtDeleted(app,id)){cancel();return;}
-            long saved=Notes.keepThoughtAudio(app,id,parts,duration(),true);
-            finish(saved>0?null:"Could not save your quick thought. The source recording is still on this phone.");
+            long saved=Notes.keepThoughtAudio(app,id,parts,duration(),true,captureComplete);
+            if(saved>0&&!captureComplete)Notes.markThoughtInterrupted(app,id);
+            finish(saved>0?(captureComplete?null:"Recording interrupted. Surviving source audio is saved."):"Could not save your quick thought. The source recording is still on this phone.");
         }
         public void failed(String message){
             if(cancelled || Notes.thoughtDeleted(app,id)){cancel();return;}
-            if(!parts.isEmpty())Notes.keepThoughtAudio(app,id,parts,duration(),true,false);
+            if(!parts.isEmpty()){
+                if(Notes.keepThoughtAudio(app,id,parts,duration(),true,false)>0)Notes.markThoughtInterrupted(app,id);
+                message="Recording interrupted. Surviving source audio is saved.";
+            }
             else Notes.discardThoughtCapture(app,id);
             finish(message);
         }
@@ -300,7 +304,7 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
         return node!=null && node.isEditable() && node.isFocused() && node.isEnabled() && node.isVisibleToUser() && (!isHomePackage(node.getPackageName()) || homeInputOpen(node)) && (keyboardMode() || !getPackageName().contentEquals(node.getPackageName()==null?"":node.getPackageName()));
     }
     private boolean typingField(AccessibilityNodeInfo node){return node!=null && node.isEditable() && node.isFocused() && node.isEnabled() && node.isVisibleToUser() && (node.isPassword() || FlowKeyboard.requiresTyping(node.getInputType())) && (!isHomePackage(node.getPackageName()) || homeInputOpen(node));}
-    boolean focusedInputIsSensitive(){AccessibilityNodeInfo field=focusedField();if(field==null)return false;try{return field.isPassword() || FlowKeyboard.isPasswordType(field.getInputType());}finally{field.recycle();}}
+    boolean focusedInputIsSensitive(){if(ownAppActive)return FlowKeyboard.instance==null || !FlowKeyboard.instance.hasActiveEditor() || FlowKeyboard.isPassword(FlowKeyboard.instance.getCurrentInputEditorInfo());AccessibilityNodeInfo field=focusedField();if(field==null)return false;try{return field.isPassword() || FlowKeyboard.isPasswordType(field.getInputType());}finally{field.recycle();}}
     private boolean recording(){return busy || (FlowKeyboard.instance!=null && FlowKeyboard.instance.isRecording());}
     private boolean working(){return busy?finishing:FlowKeyboard.instance!=null && FlowKeyboard.instance.isFinishing();}
     private boolean keyboardMode(){return FlowKeyboard.instance!=null && FlowKeyboard.instance.hasActiveEditor() && !busy;}
@@ -584,7 +588,8 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
         {AccessibilityNodeInfo ff=focusedField();fanPackage=ff==null||ff.getPackageName()==null?"":ff.getPackageName().toString();if(ff!=null)ff.recycle();}
         if(fan!=null&&fan.isOpen())return;
         int[] loc=new int[2];mic.getLocationOnScreen(loc);float cx=loc[0]+mic.getWidth()/2f,cy=loc[1]+mic.getHeight()/2f;
-        fan=new ArcFan(this,manager,new ArcFan.Actions(){
+        final ArcFan[] created=new ArcFan[1];
+        fan=created[0]=new ArcFan(this,manager,new ArcFan.Actions(){
             public void beginDelete(){beginDeleteGesture();}
             public void endDelete(){endDeleteGesture();}
             public boolean deleteWord(){return deleteWordBeforeCaret();}
@@ -594,7 +599,7 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
             public void cancelClipboardPaste(){clearPillPaste();}
             public void pasteClipboard(String value){pasteAtCaret(value);}
             public void openKeyboard(){openTypingKeyboardOnce();}
-            public void closed(){endDeleteGesture();hideClipTray();fan=null;}
+            public void closed(){if(fan!=created[0])return;endDeleteGesture();hideClipTray();fan=null;}
         });
         ClipList.capture(this);fan.clipboardPreview(focusedInputIsSensitive()?null:ClipList.latest());
         fan.open(cx,cy,caretLine(),imeHeight());
@@ -676,37 +681,52 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
     }
     /** Fresh offsets only. No unknown-cursor/end-of-text fallback. */
     private EditorInsertion.Snapshot readDeleteNode(AccessibilityNodeInfo field){
-        if(field==null || !field.refresh() || (Build.VERSION.SDK_INT>=26 && field.isShowingHintText()))return null;
-        CharSequence value=field.getText();if(value==null)return null;String text=value.toString();
+        if(field==null || !field.refresh())return null;
+        CharSequence value=Build.VERSION.SDK_INT>=26&&field.isShowingHintText()?"":field.getText();String text=value==null?"":value.toString();
         int a=field.getTextSelectionStart(),b=field.getTextSelectionEnd();if(a<0 || b<0 || a>text.length() || b>text.length())return null;
         int lo=Math.min(a,b),hi=Math.max(a,b);return new EditorInsertion.Snapshot(text.substring(0,lo),text.substring(lo,hi),text.substring(hi),a,b);
     }
-    private static boolean supportsDeleteAction(AccessibilityNodeInfo field,int wanted){for(AccessibilityNodeInfo.AccessibilityAction action:field.getActionList())if(action.getId()==wanted)return true;return false;}
     private static Bundle selectionArgs(int a,int b){Bundle args=new Bundle();args.putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT,a);args.putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT,b);return args;}
+    private NodeRewrite.Port nodeRewritePort(AccessibilityNodeInfo field){
+        return new NodeRewrite.Port(){
+            public boolean current(){return field!=null&&field.refresh()&&field.isEditable()&&field.isFocused()&&field.isEnabled()&&field.isVisibleToUser()&&!field.isPassword()&&!FlowKeyboard.isPasswordType(field.getInputType());}
+            public EditorInsertion.Snapshot read(){return current()?readDeleteNode(field):null;}
+            public boolean select(int start,int end){return current()&&field.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION,selectionArgs(start,end));}
+            public boolean text(String value){if(!current())return false;Bundle args=new Bundle();args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,value);return field.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,args);}
+        };
+    }
+    private EditorInsertion.Port nodeInsertionPort(AccessibilityNodeInfo identity){
+        return new EditorInsertion.Port(){
+            private AccessibilityNodeInfo field(){AccessibilityNodeInfo field=focusedField();if(field!=null&&(!field.refresh()||!field.equals(identity))){field.recycle();return null;}return field;}
+            public boolean current(){AccessibilityNodeInfo field=field();try{return field!=null&&!field.isPassword()&&!FlowKeyboard.isPasswordType(field.getInputType());}finally{if(field!=null)field.recycle();}}
+            public EditorInsertion.Snapshot read(){AccessibilityNodeInfo field=field();try{return readDeleteNode(field);}finally{if(field!=null)field.recycle();}}
+            public boolean replace(int start,int end,int previousLength,String text){
+                AccessibilityNodeInfo field=field();try{
+                    EditorInsertion.Snapshot source=readDeleteNode(field);if(!NodeRewrite.full(source))return false;
+                    String full=source.before+source.selected+source.after;
+                    if(start<0||end<start||end>full.length())return false;
+                    return NodeRewrite.dispatch(nodeRewritePort(field),source,full.substring(0,start)+text+full.substring(end),start+text.length());
+                }finally{if(field!=null)field.recycle();}
+            }
+        };
+    }
     /** Older/custom editors: use a verified full range and preserve its cursor, without trusting action advertisements. */
     private CursorDeletion.Port nodeDeletionPort(){
         return new CursorDeletion.Port(){
-            boolean canRestore;
             public boolean current(){return deleteFieldCurrent();}
             public EditorInsertion.Snapshot read(){if(!current())return null;AccessibilityNodeInfo field=focusedField();try{return readDeleteNode(field);}finally{if(field!=null)field.recycle();}}
             public boolean canDelete(CursorDeletion.Plan plan){
                 if(!plan.absolute()||!current())return false;AccessibilityNodeInfo field=focusedField();
                 try{
                     if(field==null||!CursorDeletion.same(plan.source,readDeleteNode(field)))return false;
-                    canRestore=supportsDeleteAction(field,AccessibilityNodeInfo.ACTION_SET_SELECTION);
-                    if(!canRestore&&!plan.source.after.isEmpty())canRestore=field.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION,selectionArgs(plan.source.start,plan.source.end));
-                    return canRestore||plan.source.after.isEmpty();
+                    return NodeRewrite.preflight(nodeRewritePort(field),plan.source,!plan.source.after.isEmpty());
                 }finally{if(field!=null)field.recycle();}
             }
             public boolean delete(CursorDeletion.Plan plan){
                 if(!current())return false;AccessibilityNodeInfo field=focusedField();
                 try{
                     if(field==null || !plan.absolute() || !CursorDeletion.same(plan.source,readDeleteNode(field)))return false;
-                    String next=plan.remainingBefore+plan.source.after;Bundle args=new Bundle();args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,next);
-                    if(!field.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,args))return false;
-                    // ACTION_SET_TEXT commonly moves the cursor; explicitly restore this edit's boundary.
-                    if(canRestore)field.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION,selectionArgs(plan.start,plan.start));
-                    return true; // Dispatch only; the session waits for the actual text AND caret acknowledgement.
+                    return NodeRewrite.dispatch(nodeRewritePort(field),plan.source,plan.remainingBefore+plan.source.after,plan.start);
                 }finally{if(field!=null)field.recycle();}
             }
         };
@@ -764,6 +784,8 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
     }
 
     private void refreshClipboardField(){
+        if((fan==null||!fan.isOpen())&&clipTray==null&&!clipOpening)return;
+        if(ownAppActive){if(fan!=null)fan.clipboardPreview(null);hideClipTray();clearPillPaste();return;}
         boolean sensitive=focusedInputIsSensitive();
         if(fan!=null)fan.clipboardPreview(sensitive?null:ClipList.latest());
         if(sensitive || (clipTray!=null && (clipTrayImeHeight!=imeHeight() || clipTarget==null || !clipTarget.currentField())))hideClipTray();
@@ -775,37 +797,31 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
     /** A popup never follows focus into a different field or silently moves the user's cursor. */
     private final class ClipPasteTarget {
         AccessibilityNodeInfo identity;EditorInsertion.Port port;EditorInsertion.Snapshot snapshot;
-        ClipboardText.Selection selection;boolean consumed;
-        void release(){if(identity!=null){identity.recycle();identity=null;}}
+        ClipboardText.Selection selection;boolean consumed,releaseRequested;
+        ClipboardPaste paste;
+        void release(){if(paste!=null){releaseRequested=true;return;}if(identity!=null){identity.recycle();identity=null;}}
         boolean currentField(){
+            if(ownAppActive)return false;
             if(identity==null)return port!=null&&port.current();
             AccessibilityNodeInfo active=focusedField();try{return active!=null&&active.refresh()&&active.equals(identity);}catch(RuntimeException unavailable){return false;}finally{if(active!=null)active.recycle();}
         }
         boolean paste(String exact){
-            if(consumed || !ClipboardText.usable(exact) || focusedInputIsSensitive())return false;
-            AccessibilityNodeInfo active=focusedField();
-            try{
-                if(identity!=null && (active==null || !active.refresh() || !active.equals(identity)))return false;
-                // Recheck the refreshed object immediately before mutation, including a field-type change.
-                if(active!=null && (!active.isEditable()||!active.isFocused()||!active.isEnabled()||!active.isVisibleToUser()||active.isPassword()||FlowKeyboard.isPasswordType(active.getInputType())))return false;
-                if(port!=null && port.current()){
-                    if(!ClipboardText.same(snapshot,port.read()))return false;
-                    // Exact clipboard insertion deliberately bypasses dictation punctuation/spacing cleanup.
-                    consumed=true;return port.replace(snapshot.start<0?-1:Math.min(snapshot.start,snapshot.end),snapshot.end<0?-1:Math.max(snapshot.start,snapshot.end),0,exact);
-                }
-                if(active==null || selection==null || !active.refresh()||!active.isEditable()||!active.isFocused()||!active.isEnabled()||!active.isVisibleToUser()||active.isPassword()||FlowKeyboard.isPasswordType(active.getInputType())||(identity!=null&&!active.equals(identity)))return false;
-                CharSequence value=Build.VERSION.SDK_INT>=26&&active.isShowingHintText()?"":active.getText();
-                String text=value==null?"":value.toString();
-                String next=selection.take(text,active.getTextSelectionStart(),active.getTextSelectionEnd(),exact);
-                if(next==null)return false;
-                consumed=true;Bundle args=new Bundle();args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,next);
-                if(!active.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,args))return false;
-                int cursor=selection.cursor(exact);Bundle caret=new Bundle();caret.putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT,cursor);caret.putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT,cursor);active.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION,caret);return true;
-            }catch(RuntimeException unavailable){return false;}finally{if(active!=null)active.recycle();}
+            if(consumed||!ClipboardText.usable(exact)||ownAppActive||focusedInputIsSensitive()||!currentField()||port==null||snapshot==null)return false;
+            consumed=true;paste=new ClipboardPaste(port,snapshot,exact);
+            if(!paste.dispatch()){paste=null;return false;}
+            checkPaste();return true;
+        }
+        private void checkPaste(){
+            if(paste==null)return;
+            int result=paste.check();
+            if(result==ClipboardPaste.PENDING){handler.postDelayed(this::checkPaste,100);return;}
+            paste=null;
+            if(result==ClipboardPaste.FAILED)Toast.makeText(FlowAccessibility.this,"This input did not confirm the paste. Check the field before trying again.",Toast.LENGTH_LONG).show();
+            if(releaseRequested)release();
         }
     }
     private ClipPasteTarget captureClipTarget(){
-        if(focusedInputIsSensitive())return null;
+        if(ownAppActive||focusedInputIsSensitive())return null;
         ClipPasteTarget result=new ClipPasteTarget();AccessibilityNodeInfo active=focusedField();
         try{
             if(active!=null && active.refresh()){
@@ -814,8 +830,12 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
                 CharSequence value=Build.VERSION.SDK_INT>=26&&active.isShowingHintText()?"":active.getText();
                 result.selection=new ClipboardText.Selection(value==null?"":value.toString(),active.getTextSelectionStart(),active.getTextSelectionEnd());
             }
-            if(Build.VERSION.SDK_INT>=33&&editor!=null){result.port=editor.capture();result.snapshot=result.port==null?null:result.port.read();}
-            if((result.selection==null || !result.selection.valid()) && result.snapshot==null){result.release();return null;}
+            if(Build.VERSION.SDK_INT>=33&&editor!=null){result.port=editor.capture();result.snapshot=result.port==null?null:result.port.read();if(result.snapshot==null)result.port=null;}
+            if(result.snapshot==null){
+                if(result.identity==null||result.selection==null||!result.selection.valid()){result.release();return null;}
+                result.port=nodeInsertionPort(result.identity);result.snapshot=result.port.read();
+                if(result.snapshot==null){result.release();return null;}
+            }
             return result;
         }catch(RuntimeException unavailable){result.release();return null;}finally{if(active!=null)active.recycle();}
     }
@@ -916,7 +936,12 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
         }
         target=new Target();
         if(snapshot!=null){target.port=port;target.nativeText=new EditorInsertion(snapshot);}
-        else{target.packageName=String.valueOf(focus.getPackageName());target.window=focus.getWindowId();target.identity=AccessibilityNodeInfo.obtain(focus);target.text=new LiveInsertion(focus.getText()==null?"":focus.getText().toString(),focus.getTextSelectionStart(),focus.getTextSelectionEnd());focus.recycle();}
+        else{
+            EditorInsertion.Snapshot node=readDeleteNode(focus);
+            if(node==null){focus.recycle();target=null;showProblem(DictationProblem.of("Tap the cursor where you want to dictate, then retry."));return;}
+            target.packageName=String.valueOf(focus.getPackageName());target.window=focus.getWindowId();target.identity=AccessibilityNodeInfo.obtain(focus);focus.recycle();
+            target.port=nodeInsertionPort(target.identity);target.nativeText=new EditorInsertion(node);
+        }
         startTarget();
     }
     /** Existing floating controls with the voice-note recorder; captured audio is always saved locally first. */
@@ -930,11 +955,11 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
         handler.removeCallbacks(clearProblem);problem=null;session++;stageLabel="";busy=true;startedAt=android.os.SystemClock.elapsedRealtime();
         if(fan!=null){fan.dismissNow();fan=null;}
         foregroundNotice=RecordingNotice.start(this,41,"Recording a quick thought. Tap Finish to save it.",new Intent(this,FlowAccessibility.class).setAction("app.voiceflow.STOP"));
-        updateBubble();VoiceTake.beginNote(this,thoughtCapture,Notes.sourceDirectory(this),id);handler.post(tick);
+        updateBubble();VoiceTake.beginThought(this,thoughtCapture,Notes.sourceDirectory(this),id);handler.post(tick);
     }
     private void finishThought(){
         if(!busy || !thoughtSession || finishing)return;
-        finishing=true;stageLabel="Saving";updateBubble();VoiceTake.finish();
+        finishing=true;stageLabel="Saving";updateBubble();if(thoughtCapture!=null)VoiceTake.finishThought(thoughtCapture.id);
     }
     private void startTarget(){
         lastPartial="";pendingRaw="";pendingText="";pendingWarning="";pendingWriteAccepted=false;insertionLost=false;finishing=false;
@@ -951,7 +976,7 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
         String action=intent==null?null:intent.getAction();
         if("app.voiceflow.STOP".equals(action)){if(thoughtSession)finishThought();else if(dictation!=null)dictation.stop();}
         if("app.voiceflow.NOTE_ON".equals(action) && !busy) foregroundNotice=RecordingNotice.start(this,42,"Recording a note. Tap Finish when you're done.",new Intent(this,FlowAccessibility.class).setAction("app.voiceflow.NOTE_OFF"));
-        if("app.voiceflow.NOTE_OFF".equals(action)){VoiceTake.finish();if(!busy)RecordingNotice.stop(this,foregroundNotice);}
+        if("app.voiceflow.NOTE_OFF".equals(action)){Notes.finishRecording();if(!busy)RecordingNotice.stop(this,foregroundNotice);}
         stopSelf(id); return START_NOT_STICKY;
     }
     private final Runnable tick=new Runnable() {
@@ -969,28 +994,11 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
         return focus.equals(target.identity);
     }
     private boolean insertLive(String words) {
-        if(target==null || insertionLost) return false;
-        if(target.port!=null){
-            if(!target.port.current()){insertionLost=true;return false;}
-            EditorInsertion.Snapshot snapshot=target.port.read();if(snapshot==null)return false;
-            if(!target.nativeText.matches(snapshot)){insertionLost=true;return false;}
-            return target.nativeText.write(target.port,words);
-        }
-        AccessibilityNodeInfo focus=focusedField();
-        try {
-            if(focus==null || !focus.refresh())return false;
-            if(!sameField(focus) || focus.isPassword() || FlowKeyboard.isPasswordType(focus.getInputType())) { insertionLost=true; return false; }
-            String current=focus.getText()==null?"":focus.getText().toString();
-            if(!target.text.matches(current,focus.getTextSelectionStart(),focus.getTextSelectionEnd())) { insertionLost=true; return false; }
-            String result=target.text.render(words); int cursor=target.text.cursor(words);
-            if(!result.equals(current)) {
-                Bundle args=new Bundle(); args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,result);
-                if(!focus.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,args)) { insertionLost=true; return false; }
-            }
-            Bundle selection=new Bundle(); selection.putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT,cursor); selection.putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT,cursor);
-            boolean placed=focus.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION,selection); target.text.accept(words);
-            if(!placed) insertionLost=true; return true;
-        } finally { if(focus!=null) focus.recycle(); }
+        if(target==null || target.port==null || insertionLost)return false;
+        if(!target.port.current()){insertionLost=true;return false;}
+        EditorInsertion.Snapshot snapshot=target.port.read();if(snapshot==null)return false;
+        if(!target.nativeText.compatible(snapshot)){insertionLost=true;return false;}
+        return target.nativeText.write(target.port,words);
     }
     @Override public void state(String status) {
         if(!busy || thoughtSession) return; finishing=dictation!=null && dictation.isFinishing(); updateBubble();
@@ -1021,7 +1029,7 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
         }
         boolean inserted=insertLive(text);pendingWriteAccepted|=inserted;
         if(inserted && target!=null && target.port!=null)inserted=target.nativeText.matches(target.port.read());
-        if(!inserted && !insertionLost && attempt<6){handler.postDelayed(()->finishResult(raw,text,warning,attempt+1,owner),150);return;}
+        if(!inserted && !insertionLost && attempt<14){handler.postDelayed(()->finishResult(raw,text,warning,attempt+1,owner),150);return;}
         Recovery.keep(this,raw,text,android.os.SystemClock.elapsedRealtime()-startedAt,inserted);endRecording();
         if(!warning.isEmpty())Toast.makeText(this,warning,Toast.LENGTH_LONG).show();
     }
@@ -1074,17 +1082,17 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
         if(dictation!=null) { dictation.close(); dictation=null; }
         RecordingNotice.stop(this,foregroundNotice); foregroundNotice=RecordingNotice.NONE; updateBubble();
     }
-    @Override public void onConfigurationChanged(android.content.res.Configuration configuration) { super.onConfigurationChanged(configuration);displayedState=-1;updateBubble(); }
+    @Override public void onConfigurationChanged(android.content.res.Configuration configuration) { super.onConfigurationChanged(configuration);if(fan!=null){fan.dismissNow();fan=null;}hideClipTray();clearPillPaste();displayedState=-1;updateBubble(); }
     private boolean pendingAcknowledged(){
         if(target==null || pendingText.isEmpty())return false;
         try{
             if(target.port!=null)return pendingWriteAccepted && target.port.current() && target.nativeText.matches(target.port.read());
             AccessibilityNodeInfo field=focusedField();if(field==null)return false;
-            try{if(!sameField(field))return false;if(target.sensitiveTarget!=null)return target.sensitiveTarget.acknowledged();if(field.isPassword() || FlowKeyboard.isPasswordType(field.getInputType()))return false;int cursor=target.text.cursor(pendingText);return target.text.render(pendingText).contentEquals(field.getText()==null?"":field.getText()) && field.getTextSelectionStart()==cursor && field.getTextSelectionEnd()==cursor;}finally{field.recycle();}
+            try{if(!sameField(field))return false;if(target.sensitiveTarget!=null)return target.sensitiveTarget.acknowledged();return false;}finally{field.recycle();}
         }catch(RuntimeException unavailable){return false;}
     }
     @Override public void onDestroy() {
-        if(thoughtCapture!=null){thoughtCapture.detach();thoughtCapture=null;VoiceTake.finish();thoughtSession=false;busy=false;}
+        if(thoughtCapture!=null){long id=thoughtCapture.id;thoughtCapture.detach();thoughtCapture=null;VoiceTake.finishThought(id);thoughtSession=false;busy=false;}
         releaseTypingKeyboard();Store.prefs(this).unregisterOnSharedPreferenceChangeListener(this);if(dictation!=null){if(!pendingRaw.isEmpty()){
             Recovery.keep(this,pendingRaw,pendingText,android.os.SystemClock.elapsedRealtime()-startedAt,pendingAcknowledged(),target!=null && target.sensitive);
             if(!pendingWarning.isEmpty())Toast.makeText(this,pendingWarning,Toast.LENGTH_LONG).show();dictation.close();

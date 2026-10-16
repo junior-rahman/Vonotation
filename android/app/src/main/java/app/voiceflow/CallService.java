@@ -18,6 +18,7 @@ public final class CallService extends Service {
     static final String DONE="app.voiceflow.CALL_DONE";
 
     static void begin(Context context) {
+        if(!CallWatch.on(context) || CaptureBarrier.installPending(context))return;
         Intent intent=new Intent(context,CallService.class).setAction(START);
         if(Build.VERSION.SDK_INT>=26)context.startForegroundService(intent);
         else context.startService(intent);
@@ -33,10 +34,11 @@ public final class CallService extends Service {
     @Override public int onStartCommand(Intent intent,int flags,int id) {
         String action=intent==null?START:intent.getAction();
         if(DONE.equals(action)){stopForeground(STOP_FOREGROUND_REMOVE);stopSelf();return START_NOT_STICKY;}
-        if(STOP.equals(action)){VoiceTake.finish();return START_NOT_STICKY;}
+        if(STOP.equals(action)){VoiceTake.finishCall(VoiceTake.callId());stopForeground(STOP_FOREGROUND_REMOVE);stopSelf();return START_NOT_STICKY;}
+        if(!CallWatch.on(this) || CaptureBarrier.installPending(this)){stopSelf();return START_NOT_STICKY;}
         notice();
-        if(!VoiceTake.noteRunning())Notes.beginCall(this);
-        return START_STICKY;
+        if(!VoiceTake.running())Notes.beginCall(this);
+        return START_NOT_STICKY;
     }
 
     private void notice() {

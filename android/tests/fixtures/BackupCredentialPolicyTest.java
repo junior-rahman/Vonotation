@@ -31,6 +31,8 @@ public final class BackupCredentialPolicyTest extends Instrumentation {
                     .putString("api_secret",LOCAL_KEY).putString("api_iv",LOCAL_IV)
                     .putString("drive_email","fixture@example.invalid")
                     .putString("backup_password_wrapped","fixture-password-secret")
+                    .putString("notes_transcribe_model","fixture-notes-transcript").putString("notes_polish_model","fixture-notes-summary")
+                    .putString("translate_transcribe_model","fixture-translation-transcript").putString("translate_model","fixture-translation")
                     .putString("dictionary","local=Local").commit();
             MainActivity.currentDraft="fixture portable draft";
             JSONObject snapshot=BackupData.snapshot(context);
@@ -42,6 +44,18 @@ public final class BackupCredentialPolicyTest extends Instrumentation {
             require(snapshot.getJSONObject("settings").getString("api_base").equals(CloudApi.DEFAULT_BASE),
                     "Provider endpoint was not exported");
             require(snapshot.getString("draft").equals("fixture portable draft"),"Draft was not retained");
+            require(snapshot.getJSONObject("settings").getString("notes_transcribe_model").equals("fixture-notes-transcript")
+                    && snapshot.getJSONObject("settings").getString("notes_polish_model").equals("fixture-notes-summary")
+                    && snapshot.getJSONObject("settings").getString("translate_transcribe_model").equals("fixture-translation-transcript")
+                    && snapshot.getJSONObject("settings").getString("translate_model").equals("fixture-translation"),"Notes and Translation model settings were not exported");
+            String fingerprint=DriveBackup.dataFingerprint(context);
+            isolated.edit().putString("api_secret","changed-local-secret").commit();
+            require(fingerprint.equals(DriveBackup.dataFingerprint(context)),"A local credential affected backup freshness");
+            isolated.edit().putString("api_secret",LOCAL_KEY).putString("notes",new JSONArray().put(new JSONObject().put("id",1).put("created",1).put("thought",true).put("raw","A saved thought").put("text","A saved thought").put("title","Thought").put("summary","Saved summary").put("duration",1000).put("lang","en")).toString()).commit();
+            String withThought=DriveBackup.dataFingerprint(context);
+            require(!fingerprint.equals(withThought),"A new Quick Thought did not make the saved snapshot stale");
+            isolated.edit().putBoolean("daily_recaps_opt_in",true).commit();
+            require(!withThought.equals(DriveBackup.dataFingerprint(context)),"Daily recap consent did not make the saved snapshot stale");
 
             JSONObject legacy=archive(CloudApi.DEFAULT_BASE).put("api_key","fixture-legacy-archive-key");
             JSONObject checked=BackupData.validate(legacy);
@@ -112,6 +126,10 @@ public final class BackupCredentialPolicyTest extends Instrumentation {
         require(isolated.getString("api_base","").equals(base)
                 && isolated.getString("transcribe_model","").equals("fixture-transcript-model")
                 && isolated.getString("polish_model","").equals("fixture-cleanup-model")
+                && isolated.getString("notes_transcribe_model","").equals("fixture-notes-transcript")
+                && isolated.getString("notes_polish_model","").equals("fixture-notes-summary")
+                && isolated.getString("translate_transcribe_model","").equals("fixture-translation-transcript")
+                && isolated.getString("translate_model","").equals("fixture-translation")
                 && isolated.getString("engine","").equals("cloud"),"Provider/model/endpoint settings were not restored");
         require(isolated.getString("dictionary","").equals("archived=Archived") && Store.history(context).length()==1,
                 "Dictionary/history were not restored");
@@ -120,6 +138,8 @@ public final class BackupCredentialPolicyTest extends Instrumentation {
         return new JSONObject().put("format","voiceflow-backup").put("schema",1).put("created_at",1700000000000L)
                 .put("settings",new JSONObject().put("api_base",base).put("engine","cloud")
                         .put("transcribe_model","fixture-transcript-model").put("polish_model","fixture-cleanup-model")
+                        .put("notes_transcribe_model","fixture-notes-transcript").put("notes_polish_model","fixture-notes-summary")
+                        .put("translate_transcribe_model","fixture-translation-transcript").put("translate_model","fixture-translation")
                         .put("dictionary","archived=Archived"))
                 .put("history",new JSONArray().put(new JSONObject().put("id",1700000000000L).put("text","Fixture words")
                         .put("raw","Fixture words").put("duration",1000L).put("words",2)))

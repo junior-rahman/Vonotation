@@ -2,6 +2,7 @@ package app.voiceflow;
 
 import android.graphics.Paint;
 import android.graphics.Typeface;
+import android.graphics.text.LineBreaker;
 import android.text.Layout;
 import android.text.StaticLayout;
 import android.text.TextPaint;
@@ -21,7 +22,7 @@ final class ThoughtLength {
         paint.setTypeface(Typeface.create("sans-serif",Typeface.NORMAL));paint.setTextSize(TEXT_SIZE);
         return StaticLayout.Builder.obtain(text,0,text.length(),paint,WIDTH)
             .setAlignment(Layout.Alignment.ALIGN_NORMAL).setIncludePad(false)
-            .setBreakStrategy(Layout.BREAK_STRATEGY_SIMPLE).setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NONE)
+            .setBreakStrategy(LineBreaker.BREAK_STRATEGY_SIMPLE).setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NONE)
             .build().getLineCount();
     }
     private ThoughtLength(){}

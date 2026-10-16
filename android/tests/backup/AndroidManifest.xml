@@ -4,8 +4,10 @@
     <instrumentation android:name="app.voiceflow.BackupArchiveTest" android:targetPackage="app.voiceflow" android:functionalTest="true" />
     <instrumentation android:name="app.voiceflow.BackupHistoryDeletionTest" android:targetPackage="app.voiceflow" android:functionalTest="true" />
     <instrumentation android:name="app.voiceflow.BackupRestoreBusyTest" android:targetPackage="app.voiceflow" android:functionalTest="true" />
+    <instrumentation android:name="app.voiceflow.BackupGenerationPickerTest" android:targetPackage="app.voiceflow" android:functionalTest="true" />
     <instrumentation android:name="app.voiceflow.ThoughtStorageTest" android:targetPackage="app.voiceflow" android:functionalTest="true" />
     <instrumentation android:name="app.voiceflow.ThoughtDailySummaryCacheTest" android:targetPackage="app.voiceflow" android:functionalTest="true" />
     <instrumentation android:name="app.voiceflow.ThoughtMinimumLengthTest" android:targetPackage="app.voiceflow" android:functionalTest="true" />
+    <instrumentation android:name="app.voiceflow.NotesReliabilityTest" android:targetPackage="app.voiceflow" android:functionalTest="true" />
     <application android:label="VoiceFlow isolated backup checks" />
 </manifest>

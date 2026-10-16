@@ -22,7 +22,8 @@ import tempfile
 from urllib.parse import quote
 import zipfile
 
-REPOSITORY = "JuelHossain/Vonotation"
+REPOSITORY = "junior-rahman/Vonotation"
+REPOSITORY_ID = "1416658953"
 PACKAGE = "app.voiceflow"
 TAG = re.compile(r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-preview(?:\.[1-9][0-9]*)?\Z")
 SHA256 = re.compile(r"[0-9a-f]{64}\Z")
@@ -141,17 +142,28 @@ def apk_identity(path):
 
 
 def validate_source(path):
-    forbidden = {".git", ".gradle", "build", "preview-signing", ".env", "local.properties"}
+    forbidden = {".git", ".gradle", ".kotlin", "build", "preview-signing", "baseline", "__pycache__",
+                 ".idea", ".venv", "node_modules", "cache", "caches", ".env", "local.properties"}
+    suffixes = {".keystore", ".jks", ".p12", ".pfx", ".pem", ".key", ".der", ".apk", ".aab", ".apks",
+                ".zip", ".7z", ".tar", ".gz", ".tgz", ".class", ".dex", ".so", ".aar", ".jar", ".pyc",
+                ".pyo", ".log", ".hprof", ".tmp", ".bak", ".lock", ".db", ".sqlite", ".sqlite3",
+                ".m4a", ".wav", ".mp3", ".ogg", ".aac", ".opus", ".mp4"}
     with zipfile.ZipFile(path) as archive:
         require(len(archive.infolist()) <= 100000, "Source archive is unexpectedly large")
+        seen = set()
         for item in archive.infolist():
             relative = PurePosixPath(item.filename)
             require(not relative.is_absolute() and ".." not in relative.parts and "\\" not in item.filename,
                     "Unsafe source archive member")
+            require(relative.parts and relative.parts[0] == "VoiceFlow", "Unexpected source archive root")
+            require(item.filename not in seen, "Duplicate source archive member")
+            seen.add(item.filename)
             require(not any(p in forbidden for p in relative.parts), "Private/build-only source archive member: " + item.filename)
+            require(not relative.name.startswith(".env."), "Private environment file found in source archive")
             require(not stat.S_ISLNK(item.external_attr >> 16), "Source archive symlink is not accepted")
-            require(relative.suffix.lower() not in {".keystore", ".jks", ".p12", ".pfx", ".pem"},
-                    "Signing or private key file found in source archive")
+            require(relative.as_posix() == "VoiceFlow/gradle/wrapper/gradle-wrapper.jar" or
+                    relative.suffix.lower() not in suffixes,
+                    "Private, recording or compiled file found in source archive: " + item.filename)
         require(archive.testzip() is None, "Corrupt source archive")
 
 
@@ -331,6 +343,7 @@ def main():
         print("Offline validation passed; no network requests or changes made.")
         return
     require(os.environ.get("GITHUB_ACTIONS") == "true" and os.environ.get("GITHUB_REPOSITORY") == REPOSITORY and
+            os.environ.get("GITHUB_REPOSITORY_ID") == REPOSITORY_ID and
             os.environ.get("GITHUB_REF") == "refs/heads/main" and
             re.fullmatch(r"[0-9a-f]{40}", os.environ.get("GITHUB_SHA", "")),
             "Publishing is allowed only in this repository's main-branch GitHub Actions workflow")

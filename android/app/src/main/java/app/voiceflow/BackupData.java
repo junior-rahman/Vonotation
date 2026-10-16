@@ -18,8 +18,8 @@ import org.json.JSONObject;
 final class BackupData {
     private static final String FORMAT="voiceflow-backup";
     private static final int SCHEMA=1;
-    private static final String[] STRING_KEYS={"engine","language","transcribe_model","polish_model","dictionary","api_base","bubble_size","backup_frequency"};
-    private static final String[] STRING_DEFAULTS={"cloud","en-US",CloudApi.DEFAULT_TRANSCRIBE,CloudApi.DEFAULT_POLISH,"",CloudApi.DEFAULT_BASE,"small","off"};
+    private static final String[] STRING_KEYS={"engine","language","transcribe_model","polish_model","notes_transcribe_model","notes_polish_model","translate_transcribe_model","translate_model","dictionary","api_base","bubble_size","backup_frequency"};
+    private static final String[] STRING_DEFAULTS={"cloud","en-US",CloudApi.DEFAULT_TRANSCRIBE,CloudApi.DEFAULT_POLISH,"whisper-large-v3","openai/gpt-oss-120b","whisper-large-v3","openai/gpt-oss-120b","",CloudApi.DEFAULT_BASE,"small","off"};
     private static final String[] BOOL_KEYS={"clean","ai_polish","bubble","save_history","daily_summaries","typing_visible","backup_wifi","haptic_feedback","romanize","daily_recaps_opt_in","verbatim","spoken_punctuation","quick_thoughts"};
     private static final boolean[] BOOL_DEFAULTS={true,false,true,true,true,false,true,true,false,false,false,true,false};
     private static final String[] OPTIONAL_INTS={"rail_anchor_x","rail_anchor_y"};
@@ -47,6 +47,7 @@ final class BackupData {
     /** Validate before confirmation and again before mutation. The returned tree shares no objects. */
     static JSONObject validate(JSONObject data) throws Exception {
         if(data==null || data.toString().getBytes(StandardCharsets.UTF_8).length>BackupArchive.MAX_BYTES-64)throw invalid("The backup data is missing or too large.");
+        BackupJsonBounds.check(data.toString());
         if(!FORMAT.equals(string(data,"format",64,false)))throw invalid("This file does not contain VonoTation data.");
         if(integer(data,"schema",1,Integer.MAX_VALUE)!=SCHEMA)throw invalid("This backup version is not supported by this app.");
         long created=integer(data,"created_at",1,Long.MAX_VALUE);
@@ -63,7 +64,7 @@ final class BackupData {
             if(key.equals("bubble_size") && !oneOf(value,"small","medium","large"))throw invalid("The bubble size is not valid.");
             if(key.equals("backup_frequency") && !oneOf(value,"off","daily","weekly"))throw invalid("The backup schedule is not valid.");
             if(key.equals("language") && !value.matches("[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*"))throw invalid("The speech language is not valid.");
-            if((key.equals("transcribe_model") || key.equals("polish_model")) && (value.trim().isEmpty() || value.contains("\r") || value.contains("\n")))throw invalid("A saved model name is not valid.");
+            if(key.endsWith("_model") && (value.trim().isEmpty() || value.contains("\r") || value.contains("\n")))throw invalid("A saved model name is not valid.");
             if(key.equals("api_base"))value=CloudApi.validateBase(value);
             settings.put(key,value);
         }
@@ -76,7 +77,7 @@ final class BackupData {
             String id=string(source,"typing_keyboard",1024,true);
             if(!id.isEmpty() && !id.matches("[A-Za-z0-9_.$]+/[A-Za-z0-9_.$]+"))throw invalid("The saved keyboard is not valid.");settings.put("typing_keyboard",id);
         }
-        JSONArray old=(JSONArray)historyValue,history=new JSONArray();if(old.length()>100)throw invalid("The backup contains too many dictations.");HashSet<Long> ids=new HashSet<>();
+        JSONArray old=(JSONArray)historyValue,history=new JSONArray();if(old.length()>BackupJsonBounds.MAX_HISTORY)throw invalid("The backup contains too many dictations.");HashSet<Long> ids=new HashSet<>();
         for(int i=0;i<old.length();i++) {
             Object value=old.opt(i);if(!(value instanceof JSONObject))throw invalid("A saved dictation is not valid.");JSONObject entry=(JSONObject)value;
             long id=integer(entry,"id",1,Long.MAX_VALUE);if(!ids.add(id))throw invalid("The backup contains duplicate dictations.");
@@ -94,7 +95,7 @@ final class BackupData {
         JSONArray thoughts=new JSONArray();
         if(data.has("thoughts")){
             if(!(data.opt("thoughts") instanceof JSONArray))throw invalid("Saved thoughts are not valid.");
-            JSONArray sourceThoughts=data.getJSONArray("thoughts");if(sourceThoughts.length()>10000)throw invalid("The backup contains too many thoughts.");HashSet<Long> thoughtIds=new HashSet<>();
+            JSONArray sourceThoughts=data.getJSONArray("thoughts");if(sourceThoughts.length()>BackupJsonBounds.MAX_THOUGHTS)throw invalid("The backup contains too many thoughts.");HashSet<Long> thoughtIds=new HashSet<>();
             for(int i=0;i<sourceThoughts.length();i++){
                 JSONObject item=sourceThoughts.optJSONObject(i);if(item==null)throw invalid("A saved thought is not valid.");
                 long id=integer(item,"id",1,Long.MAX_VALUE);if(!thoughtIds.add(id))throw invalid("The backup contains duplicate thoughts.");
@@ -107,6 +108,24 @@ final class BackupData {
         if(!thoughtsIncluded && thoughts.length()>0)throw invalid("The thought backup marker conflicts with its contents.");
         checked.put("thoughts",thoughts).put("thoughts_included",thoughtsIncluded);
         if(data.has("draft"))checked.put("draft",string(data,"draft",1000000,true));return checked;
+    }
+
+    /** Hash the exact portable data, excluding only the archive's creation timestamp.
+     * Sorted keys make status independent of a JSON implementation's map order. */
+    static String fingerprint(JSONObject payload) throws Exception {
+        JSONObject checked=validate(payload);checked.remove("created_at");
+        StringBuilder canonical=new StringBuilder();appendCanonical(canonical,checked);
+        byte[] digest=java.security.MessageDigest.getInstance("SHA-256").digest(canonical.toString().getBytes(StandardCharsets.UTF_8));
+        StringBuilder hex=new StringBuilder();for(byte value:digest)hex.append(String.format(java.util.Locale.ROOT,"%02x",value&255));return hex.toString();
+    }
+    private static void appendCanonical(StringBuilder out,Object value) throws Exception {
+        if(value instanceof JSONObject) {
+            JSONObject object=(JSONObject)value;java.util.TreeSet<String> keys=new java.util.TreeSet<>();Iterator<String> iterator=object.keys();while(iterator.hasNext())keys.add(iterator.next());
+            out.append('{');boolean first=true;for(String key:keys){if(!first)out.append(',');first=false;out.append(JSONObject.quote(key)).append(':');appendCanonical(out,object.get(key));}out.append('}');
+        } else if(value instanceof JSONArray) {
+            JSONArray array=(JSONArray)value;out.append('[');for(int i=0;i<array.length();i++){if(i>0)out.append(',');appendCanonical(out,array.get(i));}out.append(']');
+        } else if(value instanceof String)out.append(JSONObject.quote((String)value));
+        else out.append(String.valueOf(value));
     }
 
     static void restore(Context context,JSONObject payload) throws Exception {

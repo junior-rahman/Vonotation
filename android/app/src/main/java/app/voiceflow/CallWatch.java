@@ -35,6 +35,12 @@ public final class CallWatch extends Service {
     private boolean ear;
     private boolean ending;
     private long recordingGeneration;
+    private long callStartedAt;
+    private final CallSessionState call=new CallSessionState();
+    private static volatile CallWatch active;
+    private static volatile boolean finishedUntilIdle;
+
+    @Override public void onCreate(){super.onCreate();active=this;}
 
     static boolean on(Context context){return Store.bool(context,"record_calls",false);}
     private static volatile boolean expect;
@@ -45,6 +51,10 @@ public final class CallWatch extends Service {
 
     /** Rejects a ringing call so a voice note is not cut off. */
     static void decline(Context context){
+        if(Build.VERSION.SDK_INT<28){
+            android.widget.Toast.makeText(context,"An incoming call may interrupt this recording on this Android version.",android.widget.Toast.LENGTH_LONG).show();
+            return;
+        }
         if(context.checkSelfPermission(android.Manifest.permission.ANSWER_PHONE_CALLS)!=android.content.pm.PackageManager.PERMISSION_GRANTED){
             android.widget.Toast.makeText(context,"Allow calls permission so a voice note can decline an incoming call.",android.widget.Toast.LENGTH_LONG).show();
             return;
@@ -58,14 +68,33 @@ public final class CallWatch extends Service {
     static void wake(Context context){LineWatch.start(context,null);}
 
     static void recordNow(Context context){
+        if(!on(context) || finishedUntilIdle || CaptureBarrier.installPending(context))return;
         Intent intent=new Intent(context,CallWatch.class).setAction(NOW);
         try{if(Build.VERSION.SDK_INT>=26)context.startForegroundService(intent);else context.startService(intent);}
         catch(RuntimeException error){android.util.Log.w("VonoTation","Android did not allow call recording to start",error);}
     }
 
+    /** The receiver and settings share cleanup; neither starts a new recording service just to stop it. */
     static void quit(Context context){
-        try{context.stopService(new Intent(context,CallWatch.class));}
-        catch(RuntimeException ignored){}
+        finishedUntilIdle=true;
+        stopActive(context);
+    }
+
+    static void hangup(Context context){
+        finishedUntilIdle=false;
+        stopActive(context);
+    }
+
+    private static void stopActive(Context context){
+        dropExpect();
+        CallWatch live=active;
+        if(live!=null){
+            long id=live.call.id(),epoch=live.call.epoch();
+            Runnable stop=()->{if(live.call.owns(id,epoch))live.finishOwned();};
+            if(Looper.myLooper()==Looper.getMainLooper())stop.run();else live.handler.post(stop);
+            return;
+        }
+        try{context.stopService(new Intent(context,CallWatch.class));}catch(RuntimeException ignored){}
     }
 
     @Override public IBinder onBind(Intent intent){return null;}
@@ -73,11 +102,15 @@ public final class CallWatch extends Service {
     @Override public int onStartCommand(Intent intent,int flags,int startId){
         String action=intent==null?null:intent.getAction();
         if(STOP.equals(action) || QUIT.equals(action)){
-            ending=true;
-            if(LineWire.running()){LineWire.stop();return START_NOT_STICKY;}
-            ShellEar.stop();
-            if(VoiceTake.callRunning()){VoiceTake.finish();handler.postDelayed(this::endWatch,2500);return START_NOT_STICKY;}
-            endWatch();
+            finishedUntilIdle=true;
+            finishOwned();
+            return START_NOT_STICKY;
+        }
+        if(!on(this) || finishedUntilIdle || CaptureBarrier.installPending(this)){finishOwned();return START_NOT_STICKY;}
+        if(ending && call.id()>=0){
+            // A new OFFHOOK may arrive while the previous source is still finalizing.
+            call.queueStart();
+            scheduleEnd(100);
             return START_NOT_STICKY;
         }
         ending=false;
@@ -86,37 +119,103 @@ public final class CallWatch extends Service {
         ensureEar();
         int state=TelephonyManager.CALL_STATE_IDLE;
         try{if(telephony!=null)state=telephony.getCallState();}catch(SecurityException ignored){}
-        if(NOW.equals(action) || state==TelephonyManager.CALL_STATE_OFFHOOK)begin();
+        if(state==TelephonyManager.CALL_STATE_OFFHOOK)begin();
         else endWatch();
         return START_NOT_STICKY;
     }
 
-    @Override public void onDestroy(){ending=true;LineWire.stop();dropEar();super.onDestroy();}
+    @Override public void onDestroy(){
+        ending=true;
+        stopOwnedSources();
+        speakerOff();
+        dropEar();
+        if(active==this)active=null;
+        super.onDestroy();
+    }
 
     private boolean forcedSpeaker;
 
     private void begin(){
-        if(ending || !recordingNotice())return;
-        if(LineWire.running() || ShellEar.running() || VoiceTake.callRunning())return;
-        if(VoiceTake.noteRunning()){decline(this);return;}
+        if(ending || finishedUntilIdle || !on(this) || CaptureBarrier.installPending(this) || !recordingNotice())return;
+        if(LineWire.running() || LineWire.updateBusy() || ShellEar.updateBusy() || VoiceTake.callRunning())return;
+        if(VoiceTake.noteRunning() || VoiceTake.thoughtRunning()){decline(this);endWatch();return;}
         File folder=new File(getFilesDir(),"notes");
         if(!folder.isDirectory())folder.mkdirs();
-        long id=System.currentTimeMillis();
-        File dest=new File(folder,id+"-0.m4a");
+        if(call.id()<0){callStartedAt=System.currentTimeMillis();call.begin(callStartedAt);}
+        long id=call.id();
+        File dest=new File(folder,id+"-wire.m4a");
+        if(!Notes.keepCallFiles(getApplicationContext(),id,java.util.Collections.emptyList(),false)){endWatch();return;}
         long take=++recordingGeneration;
-        if(LineWire.paired(this) && LineWire.start(this,dest,new LineWire.Callback(){
-            public void saved(){Notes.keepFile(CallWatch.this,dest);if(take==recordingGeneration)endWatch();}
-            public void failed(){if(dest.exists() && dest.length()<1000)dest.delete();if(take!=recordingGeneration)return;if(!ending && stillInCall())mic();else endWatch();}
+        if(LineWire.paired(this) && LineWire.start(this,id,dest,(files,intentionalStop)->{
+            if(take!=recordingGeneration){Notes.keepCallFiles(getApplicationContext(),id,files,true);return;}
+            boolean recover=!intentionalStop && !ending && stillInCall();
+            Notes.keepCallFiles(getApplicationContext(),id,files,!recover);
+            if(recover){
+                // Transport EOF keeps its source segments and falls back for the rest of this call.
+                if(!mic()){Notes.keepCallFiles(getApplicationContext(),id,files,true);endWatch();}
+            }else endWatch();
         }))return;
-        mic();
+        if(!mic())endWatch();
     }
 
-    private void mic(){if(ending)return;if(!lineOpen())speakerOn();Notes.beginCall(this);}
+    private boolean mic(){
+        if(ending || !on(this) || CaptureBarrier.installPending(this))return false;
+        if(!lineOpen())speakerOn();
+        boolean started=Notes.beginCall(this,call.id());
+        if(!started)speakerOff();
+        return started;
+    }
 
-    private void endWatch(){ending=true;speakerOff();try{stopForeground(STOP_FOREGROUND_REMOVE);}catch(RuntimeException ignored){}stopSelf();}
+    /** Idempotent and scoped to this service's call id; ordinary notes/thoughts are never finished here. */
+    private void stopOwnedSources(){
+        if(call.id()<0)return;
+        LineWire.stop(call.id());
+        ShellEar.stop(call.id());
+        VoiceTake.finishCall(call.id());
+    }
+
+    private void finishOwned(){
+        if(!ending){
+            ending=true;call.finish();
+            long endedAt=System.currentTimeMillis(),id=call.id(),startedAt=callStartedAt;
+            if(id>=0)handler.postDelayed(()->tagCall(id,startedAt,endedAt),1600);
+        }
+        stopOwnedSources();
+        speakerOff();
+        // Wireless closes on its worker; microphone finalization continues after this service stops.
+        if(oldSourceBusy())scheduleEnd(2500);
+        else endWatch();
+    }
+
+    private boolean oldSourceBusy(){
+        return LineWire.updateBusy() || ShellEar.updateBusy() || (VoiceTake.callId()==call.id() && VoiceTake.updateBusy());
+    }
+
+    private void scheduleEnd(long delay){
+        long id=call.id(),epoch=call.epoch();
+        handler.postDelayed(()->{if(call.owns(id,epoch))endWatch();},delay);
+    }
+
+    private void endWatch(){
+        if(call.queued() && !finishedUntilIdle && on(this) && stillInCall()){
+            if(oldSourceBusy()){scheduleEnd(100);return;}
+            // Only after the old handoff completes may the next call acquire a fresh identity.
+            callStartedAt=System.currentTimeMillis();
+            call.begin(callStartedAt);
+            ending=false;
+            begin();
+            return;
+        }
+        ending=true;call.finish();speakerOff();
+        try{stopForeground(STOP_FOREGROUND_REMOVE);}catch(RuntimeException ignored){}
+        stopSelf();
+    }
 
     /** True when this phone lets a normal app open the call audio itself. */
     private boolean lineOpen() {
+        if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED)return false;
+        CaptureGate.Lease lease=CaptureBarrier.begin(this);
+        if(lease==null)return false;
         AudioRecord rec=null;
         try {
             int min=AudioRecord.getMinBufferSize(16000,android.media.AudioFormat.CHANNEL_IN_MONO,android.media.AudioFormat.ENCODING_PCM_16BIT);
@@ -128,7 +227,7 @@ public final class CallWatch extends Service {
             rec.startRecording();
             return rec.getRecordingState()==AudioRecord.RECORDSTATE_RECORDING;
         } catch(Exception error) { return false; }
-        finally { if(rec!=null){try{rec.stop();}catch(Exception ignored){} try{rec.release();}catch(Exception ignored){}} }
+        finally { if(rec!=null){try{rec.stop();}catch(Exception ignored){} try{rec.release();}catch(Exception ignored){}} lease.close(); }
     }
 
     private void speakerOn() {
@@ -157,36 +256,37 @@ public final class CallWatch extends Service {
     }
 
     private boolean stillInCall() {
-        if(!on(this) || VoiceTake.callRunning() || ShellEar.running() || LineWire.running())return false;
+        if(!on(this))return false;
         try { return telephony!=null && telephony.getCallState()==TelephonyManager.CALL_STATE_OFFHOOK; }
         catch(SecurityException error) { return false; }
     }
 
     private void changed(int state){
-        if(!on(this))return;
-        if(state==TelephonyManager.CALL_STATE_OFFHOOK)begin();
-        else if(state==TelephonyManager.CALL_STATE_IDLE){
-            ending=true;
-            boolean live=LineWire.running() || ShellEar.running() || VoiceTake.callRunning();
-            if(LineWire.running())LineWire.stop();
-            else if(ShellEar.running())ShellEar.stop();
-            else if(VoiceTake.callRunning()){VoiceTake.finish();handler.postDelayed(this::endWatch,2500);}
-            else endWatch();
-            speakerOff();
-            if(live)handler.postDelayed(this::tagLatest,1600);
+        // Hangup cleanup must still run when Settings has already switched Calls off.
+        if(state==TelephonyManager.CALL_STATE_IDLE){finishedUntilIdle=false;finishOwned();return;}
+        if(state==TelephonyManager.CALL_STATE_OFFHOOK && on(this) && !finishedUntilIdle){
+            if(ending && call.id()>=0){call.queueStart();scheduleEnd(100);}
+            else begin();
         }
     }
 
-    private void tagLatest(){
+    private void tagCall(long id,long startedAt,long endedAt){
         if(checkSelfPermission(android.Manifest.permission.READ_CALL_LOG)!=android.content.pm.PackageManager.PERMISSION_GRANTED)return;
         String who="";
-        try(Cursor cursor=getContentResolver().query(CallLog.Calls.CONTENT_URI,new String[]{CallLog.Calls.CACHED_NAME,CallLog.Calls.NUMBER},null,null,CallLog.Calls.DATE+" DESC")){
-            if(cursor!=null && cursor.moveToFirst()){
+        long best=Long.MAX_VALUE;
+        try(Cursor cursor=getContentResolver().query(CallLog.Calls.CONTENT_URI,
+            new String[]{CallLog.Calls.CACHED_NAME,CallLog.Calls.NUMBER,CallLog.Calls.DATE,CallLog.Calls.DURATION},
+            CallLog.Calls.DATE+">=? AND "+CallLog.Calls.DATE+"<=?",
+            new String[]{Long.toString(startedAt-120000),Long.toString(endedAt+5000)},CallLog.Calls.DATE+" DESC")){
+            while(cursor!=null && cursor.moveToNext()){
+                long distance=CallSessionPolicy.callLogDistance(startedAt,endedAt,cursor.getLong(2),cursor.getLong(3));
+                if(distance>=best)continue;
+                best=distance;
                 String name=cursor.getString(0),number=cursor.getString(1);
                 who=name!=null && !name.isEmpty()?name:number==null?"":number;
             }
         }catch(RuntimeException ignored){}
-        Notes.tagLatestCall(this,who);
+        if(best!=Long.MAX_VALUE)Notes.tagCall(this,id,who);
     }
 
     private void ensureEar(){
@@ -211,6 +311,7 @@ public final class CallWatch extends Service {
         ear=false;
     }
 
+    @android.annotation.TargetApi(31)
     private final class Ear extends TelephonyCallback implements TelephonyCallback.CallStateListener {
         public void onCallStateChanged(int state){changed(state);}
     }

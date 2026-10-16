@@ -52,6 +52,8 @@ public final class CallShell extends ICallCapture.Stub {
         if(worker!=null)try{worker.join(1500);}catch(InterruptedException ignored){}
     }
 
+    // This helper runs as the authorized shell user, rather than the app's runtime-permission uid.
+    @android.annotation.SuppressLint("MissingPermission")
     private int[] arm() {
         int[][] tries={{48000,2},{48000,1},{16000,1},{8000,1},{44100,1}};
         for(int[] pick:tries){

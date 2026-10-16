@@ -567,12 +567,25 @@ public final class BackupActivity extends Activity {
         List<DriveCloudClient.BackupFile> files = connection.files;
         if (files.isEmpty()) { feedback(connection.hasRejected ? "Backups need attention" : "No backup found",connection.hasRejected ? connection.warning : "No VonoTation backup was found in this Google account.",connection.hasRejected ? NoticeKind.ERROR : NoticeKind.INFO); render(); return; }
         if (files.size() == 1) { selected.accept(files.get(0)); return; }
-        int count = Math.min(files.size(),3);
+        int count = files.size();
         String[] labels = new String[count];
         for (int i = 0; i < count; i++) labels[i] = (i == 0 ? (connection.hasRejected ? "Newest available · " : "Latest · ") : "") + backupDate(files.get(i));
-        show(new AlertDialog.Builder(this).setTitle(connection.hasRejected ? "Choose an available backup" : "Choose a backup")
+        AlertDialog picker=new AlertDialog.Builder(this).setTitle(connection.hasRejected ? "Choose an available backup" : "Choose a backup")
                 .setItems(labels,(dialog,index) -> selected.accept(files.get(index)))
-                .setNegativeButton("Cancel",null).create());
+                .setNegativeButton("Cancel",null).create();
+        show(picker);
+        // Keep the compact three-row viewport while allowing recovery from every
+        // discovered generation, including an older fourth or fifth backup.
+        ListView list=picker.getListView();
+        if(list!=null && count>3) {
+            list.post(()->{
+                if(!picker.isShowing() || list.getAdapter()==null)return;
+                int height=0,width=View.MeasureSpec.makeMeasureSpec(Math.max(1,list.getWidth()),View.MeasureSpec.EXACTLY);
+                for(int i=0;i<3;i++){View row=list.getAdapter().getView(i,null,list);row.measure(width,View.MeasureSpec.makeMeasureSpec(0,View.MeasureSpec.UNSPECIFIED));height+=Math.max(row.getMeasuredHeight(),Ui.dp(this,48));}
+                int available=Math.max(Ui.dp(this,48),getResources().getDisplayMetrics().heightPixels-Ui.dp(this,200));
+                android.view.ViewGroup.LayoutParams params=list.getLayoutParams();params.height=Math.min(height+list.getDividerHeight()*2,available);list.setLayoutParams(params);
+            });
+        }
     }
 
     private void offerRecovery(DriveBackup.Connection connection) {

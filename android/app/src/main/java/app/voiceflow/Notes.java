@@ -39,6 +39,8 @@ final class Notes {
     private static List<File> queue=new ArrayList<>();
     private static int queueAt;
     private static MediaPlayer player;
+    private static boolean paused;
+    private static long[] queueSpans=new long[0];
     private static long playing=-1,liveId=-1;
     private static volatile boolean draining;
     private static boolean translating;
@@ -64,6 +66,7 @@ final class Notes {
 
     static boolean back(){if(open<0)return false;stopPlayback();fixing=false;original=false;translating=false;thoughtSourceShown=-1;open=-1;return true;}
     static void stop(){stopPlayback();}
+    static boolean finishRecording(){return VoiceTake.finishNote(liveId);}
     static void resumeThoughtSummaries(Context context){ThoughtDailySummaries.resume(context);}
     static void pauseThoughtSummaries(){ThoughtDailySummaries.pause();}
     static void refreshThoughtSummaries(){if(ThoughtDailySummaries.active())poke();}
@@ -140,7 +143,7 @@ final class Notes {
             metaLine.setMaxLines(1);metaLine.setEllipsize(android.text.TextUtils.TruncateAt.END);
             words.addView(metaLine);
             row.addView(words,new LinearLayout.LayoutParams(0,-2,1));
-            boolean on=playing==id;
+            boolean on=playing==id&&!paused;
             Button play=Daybook.button(activity,on?"Pause":"Play",false,v->togglePlay(activity,note,refresh));
             if(filesOf(activity,note).isEmpty())play.setEnabled(false);
             LinearLayout.LayoutParams playLp=new LinearLayout.LayoutParams(Ui.dp(activity,72),Ui.dp(activity,40));playLp.leftMargin=Ui.dp(activity,8);
@@ -181,16 +184,16 @@ final class Notes {
         if(note.optBoolean("thought")){thoughtDetail(activity,body,note,refresh);return;}
         long id=note.optLong("id");
         boolean coming=transcribing==id;
-        boolean on=playing==id;
+        boolean on=playing==id&&!paused;
         body.addView(Daybook.text(activity,titleOf(note),22,Daybook.ink(activity),true));
         Ui.space(body,4);
         body.addView(Daybook.text(activity,(note.optBoolean("call")?"Call · ":"")+when(note)+" · "+name(note.optString("heard","").isEmpty()?note.optString("lang","auto"):note.optString("heard","")),12,Daybook.muted(activity),false));
         Ui.space(body,12);
-        playTime=Daybook.text(activity,(on?clock(position()):"0:00")+" / "+clock(note.optLong("duration")),16,Daybook.ink(activity),true);
+        playTime=Daybook.text(activity,(playing==id?clock(position()):"0:00")+" / "+clock(note.optLong("duration")),16,Daybook.ink(activity),true);
         body.addView(playTime);
         Ui.space(body,8);
         playWave=new Wave(activity);
-        playWave.show(barsOf(note.optString("wave")),on && totalDuration>0?position()/(float)totalDuration:0);
+        playWave.show(barsOf(note.optString("wave")),playing==id && totalDuration>0?position()/(float)totalDuration:0);
         body.addView(playWave,new LinearLayout.LayoutParams(-1,Ui.dp(activity,56)));
         if(on)armTick();
         Ui.space(body,12);
@@ -211,12 +214,14 @@ final class Notes {
             lead.setLineSpacing(Ui.dp(activity,3),1);lead.setTextIsSelectable(true);body.addView(lead);
             Ui.space(body,14);
         }
-        String shown=coming?"Writing it up…":note.optBoolean("pending")?"Saved on this phone. I'll write the summary and the full note when you're online.":note.optString("text","").isEmpty()?"The words will show up here.":note.optString("text");
+        if(!coming&&note.optBoolean("partial_transcript")){body.addView(Daybook.text(activity,note.optBoolean("replacement_pending")?"Replacement incomplete · your previous transcript is kept.":"Partial transcript · retry to fill in missing source segments.",13,Daybook.muted(activity),false));Ui.space(body,6);}
+        String shown=coming?"Writing it up…":note.optBoolean("pending")&&note.optString("text").isEmpty()?"Saved on this phone. I'll write the summary and the full note when you're online.":note.optString("text","").isEmpty()?"The words will show up here.":note.optString("text");
         if(!coming && !note.optBoolean("pending") && !note.optString("text","").isEmpty())body.addView(Daybook.text(activity,"Everything you said",12,Daybook.muted(activity),true));
         Ui.space(body,4);
         TextView transcript=Daybook.text(activity,shown,17,note.optString("text","").isEmpty()?Daybook.muted(activity):Daybook.ink(activity),false);
         transcript.setLineSpacing(Ui.dp(activity,4),1);transcript.setTextIsSelectable(!coming && !note.optString("text","").isEmpty());
         body.addView(transcript);
+        String issue=note.optString("transcription_error",note.optString("capture_error"));if(!coming&&!issue.isEmpty()){Ui.space(body,8);body.addView(Daybook.text(activity,issue,13,Daybook.muted(activity),false));}
         String translation=note.optString("translation","");
         if(!translation.isEmpty()){
             Ui.space(body,14);
@@ -228,7 +233,7 @@ final class Notes {
         LinearLayout actions=Ui.row(activity);actions.setGravity(android.view.Gravity.CENTER_VERTICAL);
         String writeLabel=note.optBoolean("pending")?"Transcribe":"Again";
         actions.addView(quiet(activity,coming?"Working":writeLabel,v->{
-            if(note.optBoolean("pending"))catchUp(activity.getApplicationContext());
+            if(note.optBoolean("pending")){resetRetry(activity,note.optLong("id"));writeUp(activity.getApplicationContext(),note.optLong("id"));}
             else retranscribe(activity,note,note.optString("lang","auto"),refresh);
         }));
         actions.addView(quiet(activity,"Summary",v->summarize(activity,note)));
@@ -274,8 +279,9 @@ final class Notes {
     private static void record(Activity activity,Runnable refresh) {
         if(Translate.going()){toast(activity,"Translation is still going. Finish it first.");return;}
         if(VoiceTake.callRunning() || LineWire.running()){toast(activity,"A call is being recorded. Wait until it ends.");return;}
-        if(VoiceTake.running()){
-            VoiceTake.finish();
+        if(VoiceTake.thoughtRunning()){toast(activity,"A Quick Thought is recording. Finish it with the floating control first.");return;}
+        if(VoiceTake.noteRunning()){
+            if(!VoiceTake.finishNote(liveId))return;
             if(liveDigits!=null){liveDigits.animate().cancel();liveDigits.setTranslationY(0);liveDigits.setAlpha(1f);liveDigits.setTextSize(16);liveDigits.setText("Saving…");shownFace="";}
             if(liveMeter!=null)liveMeter.setVisibility(android.view.View.GONE);
             if(beat!=null){beat.cancel();beat=null;}
@@ -296,7 +302,7 @@ final class Notes {
             public void failed(String message){liveId=-1;holdMic(app,false);toast(app,message);poke();}
             public void finished(File file){}
             public void partReady(List<File> files){remember(app,id,files,pick,true);}
-            public void finishedAll(List<File> files){liveId=-1;holdMic(app,false);remember(app,id,files,pick,true);stamp(app,id,"wave",barsText(VoiceTake.bars()));toast(app,online(app)?"Saved. Writing it up.":"Saved on this phone. I'll write it up when you're online.");writeUp(app,id);}
+            public void finishedAll(List<File> files,boolean captureComplete){liveId=-1;holdMic(app,false);remember(app,id,files,pick,true);stamp(app,id,"wave",barsText(VoiceTake.bars()));if(!captureComplete)stamp(app,id,"capture_error","Recording ended before every audio segment could be finalized.");toast(app,captureComplete?(online(app)?"Saved. Writing it up.":"Saved on this phone. I'll write it up when you're online."):"The recording was interrupted. Surviving source audio is saved.");writeUp(app,id);}
         },folder,id);
         if(dockHost!=null && VoiceTake.noteRunning() && !VoiceTake.callRunning()){dockHost.removeAllViews();dockHost.addView(actionPill(activity,refresh),new android.widget.FrameLayout.LayoutParams(-2,-2));armTick();}
         else refresh.run();
@@ -310,7 +316,7 @@ final class Notes {
     private static String shownFace="";
     private static android.view.View actionPill(Activity activity,Runnable refresh){
         boolean timing=VoiceTake.noteRunning() && !VoiceTake.callRunning();
-        boolean held=!timing && (Translate.going() || VoiceTake.callRunning() || LineWire.running());
+        boolean held=!timing && (Translate.going() || VoiceTake.callRunning() || VoiceTake.thoughtRunning() || LineWire.running());
         LinearLayout pill=Ui.column(activity);
         pill.setBackground(Daybook.ripple(activity,Daybook.action(activity),26));
         pill.setElevation(Ui.dp(activity,8));
@@ -370,52 +376,62 @@ final class Notes {
 
     private static long callId=-1;
 
-    /** Started by the call watcher so the recording survives leaving this screen. */
-    static void beginCall(Context context) {
-        if(VoiceTake.running() || busy)return;
-        if(context.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){toast(context,"Allow microphone access first.");return;}
-        long id=System.currentTimeMillis();
+    /** Started by the call watcher; each source path stays bound to the owned call id. */
+    static void beginCall(Context context) { beginCall(context,System.currentTimeMillis()); }
+    static boolean beginCall(Context context,long id) {
+        if(VoiceTake.running() || VoiceTake.updateBusy())return false;
+        if(context.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){toast(context,"Allow microphone access first.");return false;}
         liveId=id;callId=id;
-        File folder=dir(context);
+        if(!keepCallFiles(context,id,new ArrayList<>(),false))return false;
         VoiceTake.beginCall(context,new VoiceTake.Listener(){
             public void listening(){poke();}
-            public void failed(String message){liveId=-1;toast(context,message);poke();}
+            public void failed(String message){liveId=-1;keepCallFiles(context,id,new ArrayList<>(),true);toast(context,message);poke();}
             public void finished(File file){}
-            public void partReady(List<File> files){remember(context,id,files,pick,true);}
-            public void finishedAll(List<File> files){liveId=-1;remember(context,id,files,pick,true);stamp(context,id,"wave",barsText(VoiceTake.bars()));toast(context,online(context)?"Call saved. Writing it up.":"Call saved on this phone. I'll write it up when you're online.");writeUp(context,id);}
-        },folder,id);
+            public void partReady(List<File> files){keepCallFiles(context,id,files,false);}
+            public void finishedAll(List<File> files,boolean captureComplete){liveId=-1;keepCallFiles(context,id,files,true);stamp(context,id,"wave",barsText(VoiceTake.bars()));if(!captureComplete)stamp(context,id,"capture_error","Recording ended before every audio segment could be finalized.");toast(context,captureComplete?"Call saved. Writing it up.":"The call recording was interrupted. Surviving source audio is saved.");}
+        },dir(context),id);
+        return VoiceTake.callRunning();
     }
 
-    /** A call captured as a finished m4a, already in the notes folder. */
+    /** Merge sealed wireless and microphone sources without resetting text or changing call identity. */
+    static boolean keepCallFiles(Context context,long id,List<File> sources,boolean complete){
+        synchronized(Store.class){try{
+            if(id<=0 || noteDeleted(context,id))return false;
+            JSONArray previous=all(context);JSONObject old=find(context,id);
+            if(old!=null && (!old.optBoolean("call") || old.optBoolean("thought")))return false;
+            List<File> files=old==null?new ArrayList<>():filesOf(context,old);
+            if(sources!=null)for(File file:sources)if(file!=null&&file.isFile()&&file.length()>0&&!files.contains(file))files.add(file);
+            if(old!=null&&old.optBoolean("recording")==!complete&&String.valueOf(old.opt("parts")).equals(names(files).toString()))return true;
+            JSONObject item=old==null?new JSONObject().put("id",id).put("created",id).put("call",true).put("text","").put("raw","").put("summary","").put("lang","auto").put("heard",""):new JSONObject(old.toString());
+            item.put("audio",files.isEmpty()?"":files.get(0).getName()).put("parts",names(files)).put("duration",Math.max(item.optLong("duration"),durations(files))).put("recording",!complete).put("pending",complete&&!files.isEmpty()).put("retry_after",0).put("revision",old==null?1:old.optLong("revision",1)+1);
+            JSONArray next=new JSONArray().put(item);appendRetained(next,previous,id);
+            if(!commitNotes(context,previous,next))return false;
+        }catch(Exception unavailable){return false;}}
+        poke();if(complete)writeUp(context,id);return true;
+    }
+    static void tagCall(Context context,long id,String who){
+        if(who==null||who.trim().isEmpty())return;
+        synchronized(Store.class){JSONObject note=find(context,id);if(note!=null&&note.optBoolean("call"))stamp(context,id,"who",who.trim());}
+    }
     static void keepFile(Context context,File audio) {
-        if(audio==null || !audio.isFile() || audio.length()<1000)return;
-        long id;
-        try { id=Long.parseLong(audio.getName().substring(0,audio.getName().indexOf('-'))); }
-        catch(Exception error) { id=System.currentTimeMillis(); }
-        callId=id;
-        java.util.List<File> files=new java.util.ArrayList<>();
-        files.add(audio);
-        remember(context,id,files,"auto",true);
-        toast(context,online(context)?"Call saved. Writing it up.":"Call saved on this phone. I'll write it up when you're online.");
-        writeUp(context,id);
+        if(audio==null||!audio.isFile()||audio.length()<1000)return;
+        long id;try{id=Long.parseLong(audio.getName().substring(0,audio.getName().indexOf('-')));}catch(Exception invalid){id=System.currentTimeMillis();}
+        keepCallFiles(context,id,java.util.Collections.singletonList(audio),true);
     }
 
     private static void retranscribe(Activity activity,JSONObject note,String code,Runnable refresh) {
+        if(busy||draining)return;
         if(filesOf(activity,note).isEmpty()){Toast.makeText(activity,"The recording is missing.",Toast.LENGTH_SHORT).show();return;}
         fixing=false;busy=true;transcribing=note.optLong("id");refresh.run();
-        long id=note.optLong("id");
         Context app=activity.getApplicationContext();
         work.execute(()->{
             try {
-                String[] detected=new String[]{code};
-                String raw=transcribeFiles(app,filesOf(app,note),code,detected);
-                String text=organize(app,raw);
-                String summary=recap(app,text);
-                save(app,id,text,raw,!text.equals(raw),code,detected[0],note.optString("audio"),note.optLong("duration"),summary,false,note.optJSONArray("parts"));
-                busy=false;transcribing=-1;poke();
-            } catch(Exception error) {
-                busy=false;transcribing=-1;toast(app,offlineMessage(app,error));poke();
-            }
+                JSONObject source=new JSONObject(note.toString());source.remove("segment_transcripts");
+                Transcription result=transcribeNote(app,source,code);result.replacement=true;
+                String text=organize(app,result.raw),summary=recap(app,text);
+                updateCaptured(app,note,item->{applyTranscription(item,result,code,text,summary);});
+            }catch(Exception error){toast(app,offlineMessage(app,error));}
+            finally{busy=false;transcribing=-1;poke();catchUp(app);}
         });
     }
 
@@ -425,30 +441,28 @@ final class Notes {
 
     private static void togglePlay(Activity activity,JSONObject note,Runnable refresh) {
         long id=note.optLong("id");
-        if(playing==id){stopPlayback();refresh.run();return;}
-        stopPlayback();
-        List<File> files=filesOf(activity,note);
+        if(playing==id&&player!=null){
+            try{if(paused){player.start();paused=false;PlayWatch.show(activity.getApplicationContext(),titleOf(note));armTick();}else{player.pause();paused=true;PlayWatch.hide();}refresh.run();return;}catch(Exception failed){stopPlayback();}
+        }
+        stopPlayback();List<File> files=filesOf(activity,note);
         if(files.isEmpty()){Toast.makeText(activity,"The recording is missing.",Toast.LENGTH_SHORT).show();return;}
-        queue=files;queueAt=0;playedBefore=0;totalDuration=Math.max(1,note.optLong("duration"));playing=id;playQueue(activity,refresh);armTick();
+        queue=files;queueSpans=new long[files.size()];totalDuration=0;
+        for(int i=0;i<files.size();i++){queueSpans[i]=Math.max(0,audioDuration(files.get(i)));totalDuration+=queueSpans[i];}
+        totalDuration=Math.max(1,totalDuration>0?totalDuration:note.optLong("duration"));queueAt=0;playedBefore=0;playing=id;paused=false;playQueue(activity,refresh,0);armTick();
         if(playing==id)PlayWatch.show(activity.getApplicationContext(),titleOf(note));
     }
-
-    private static void playQueue(Activity activity,Runnable refresh) {
+    private static void playQueue(Activity activity,Runnable refresh,int seek) {
         if(queue==null || queueAt>=queue.size()){stopPlayback();activity.runOnUiThread(refresh);return;}
         try {
-            player=new MediaPlayer();
-            player.setDataSource(queue.get(queueAt).getAbsolutePath());
-            player.prepare();
-            int span=Math.max(0,player.getDuration());
-            player.setOnCompletionListener(mp->{playedBefore+=span;try{mp.release();}catch(Exception ignored){} if(player==mp)player=null; queueAt++; playQueue(activity,refresh);});
-            player.start();
-            activity.runOnUiThread(refresh);
-        } catch(Exception e) {
-            stopPlayback();Toast.makeText(activity,"Couldn't play that recording.",Toast.LENGTH_SHORT).show();
-        }
+            MediaPlayer next=new MediaPlayer();player=next;
+            next.setDataSource(queue.get(queueAt).getAbsolutePath());next.prepare();
+            int span=Math.max(0,next.getDuration());if(queueAt<queueSpans.length)queueSpans[queueAt]=span;
+            next.setOnCompletionListener(mp->{if(player!=mp)return;playedBefore+=span;try{mp.release();}catch(Exception ignored){}player=null;queueAt++;playQueue(activity,refresh,0);});
+            if(seek>0)next.seekTo(Math.min(seek,Math.max(0,span-1)));
+            if(!paused)next.start();activity.runOnUiThread(refresh);
+        }catch(Exception e){stopPlayback();Toast.makeText(activity,"Couldn't play that recording.",Toast.LENGTH_SHORT).show();}
     }
-
-    private static void stopPlayback(){playing=-1;if(player!=null){try{player.stop();}catch(Exception ignored){}try{player.release();}catch(Exception ignored){}player=null;}PlayWatch.hide();}
+    private static void stopPlayback(){playing=-1;paused=false;queueSpans=new long[0];if(player!=null){try{player.stop();}catch(Exception ignored){}try{player.release();}catch(Exception ignored){}player=null;}PlayWatch.hide();}
     static void stopFromNotice(){stopPlayback();poke();}
 
     private static void touch(Activity activity,JSONObject note,Runnable refresh) {
@@ -461,7 +475,7 @@ final class Notes {
         work.execute(()->{
             try {
                 String text=new CloudApi(activity).touchUp(source);
-                save(activity,id,text,source,!text.equals(source),lang,heard,audio,duration,note.optString("summary",""),note.optBoolean("pending"),note.optJSONArray("parts"));
+                updateCaptured(activity,note,item->{item.put("text",text).put("raw",source).put("touched",!text.equals(source));});
                 activity.runOnUiThread(()->{busy=false;refresh.run();});
             } catch(Exception error) {
                 activity.runOnUiThread(()->{busy=false;Toast.makeText(activity,error.getMessage()==null?"Touch-up failed. The transcript was kept.":error.getMessage(),Toast.LENGTH_LONG).show();refresh.run();});
@@ -540,7 +554,7 @@ final class Notes {
         if(text.trim().isEmpty() || busy){if(text.trim().isEmpty())Toast.makeText(activity,"Nothing to summarize yet.",Toast.LENGTH_SHORT).show();return;}
         busy=true;long id=note.optLong("id");Context app=activity.getApplicationContext();
         work.execute(()->{
-            try{String summary=new CloudApi(app).noteSummary(text);if(summary==null||summary.isEmpty())throw new java.io.IOException("No summary.");stamp(app,id,"summary",summary);}
+            try{String summary=new CloudApi(app).noteSummary(text);if(summary==null||summary.isEmpty())throw new java.io.IOException("No summary.");updateCaptured(app,note,item->item.put("summary",summary));}
             catch(Exception error){toast(app,error.getMessage()==null?"Couldn't summarize.":error.getMessage());}
             busy=false;poke();
         });
@@ -552,7 +566,7 @@ final class Notes {
         String from=name(note.optString("lang","auto"));if(from.equals("Auto"))from=heardLabel(note.optString("heard",""));
         String to=name(code);String sourceLang=from;
         work.execute(()->{
-            try{String result=new CloudApi(app).translate(text,sourceLang,to);stamp(app,id,"translation",result);stamp(app,id,"translationLang",code);}
+            try{String result=new CloudApi(app).translate(text,sourceLang,to);updateCaptured(app,note,item->item.put("translation",result).put("translationLang",code));}
             catch(Exception error){toast(app,error.getMessage()==null?"Couldn't translate.":error.getMessage());}
             busy=false;poke();
         });
@@ -603,15 +617,13 @@ final class Notes {
         for(int i=0;i<notes.length();i++){
             JSONObject note=notes.optJSONObject(i);if(note==null)continue;
             if(thoughtsOnlyDrain&&!note.optBoolean("thought"))continue;
-            if(note.optBoolean("thought")){
-                ensureThoughtRetry(context);
-                if(note.optBoolean("recording")){
-                    if(FlowAccessibility.thoughtCaptureActive(note.optLong("id")) || VoiceTake.noteRunning() || VoiceTake.updateBusy())continue;
-                    // Recover sealed segments on the worker; never inspect media metadata on the UI thread.
-                    recoverThought(context,note);continue;
-                }
+            if(note.optBoolean("thought"))ensureThoughtRetry(context);
+            if(note.optBoolean("recording")){
+                if(FlowAccessibility.thoughtCaptureActive(note.optLong("id"))||VoiceTake.updateBusy()||LineWire.updateBusy())continue;
+                // Recover sealed sources after process death; never inspect media metadata on the UI thread.
+                recoverRecording(context,note);continue;
             }
-            if(note.optBoolean("pending") || (note.optBoolean("thought") && note.optBoolean("recording"))){writeUp(context,note.optLong("id"));return;}
+            if(NoteWorkPolicy.eligible(note.optBoolean("pending"),note.optBoolean("recording"),note.optLong("retry_after"),System.currentTimeMillis())){writeUp(context,note.optLong("id"));return;}
         }
     }
 
@@ -634,7 +646,7 @@ final class Notes {
     }
     private static void requestThoughtRetry(){Runnable task=thoughtRetryAction;if(task!=null){tick.removeCallbacks(task);tick.post(task);}}
 
-    private static void recoverThought(Context context,JSONObject captured){
+    private static void recoverRecording(Context context,JSONObject captured){
         final Context app=context.getApplicationContext();final long id=captured.optLong("id"),revision=captured.optLong("revision",1);
         synchronized(recoveringThoughts){if(!recoveringThoughts.add(id))return;}
         thoughtWork.incrementAndGet();
@@ -642,18 +654,18 @@ final class Notes {
             boolean committed=false;
             try{
                 List<File> recovered=filesOf(app,captured);File[] candidates=dir(app).listFiles((folder,name)->name.matches(Long.toString(id)+"-[0-9]+\\.m4a"));
-                if(candidates!=null){java.util.Arrays.sort(candidates,(a,b)->Long.compare(segmentIndex(a),segmentIndex(b)));for(File file:candidates)if(!recovered.contains(file)&&audioDuration(file)>0)recovered.add(file);}
+                if(candidates!=null){java.util.Arrays.sort(candidates,(a,b)->Long.compare(segmentIndex(a),segmentIndex(b)));for(File file:candidates)if(!recovered.contains(file)&&file.isFile()&&file.length()>0)recovered.add(file);}
                 long duration=durations(recovered);
                 synchronized(Store.class){
                     JSONObject current=find(app,id);
-                    if(current==null||!current.optBoolean("thought")||!current.optBoolean("recording")||current.optLong("revision",1)!=revision||FlowAccessibility.thoughtCaptureActive(id)||VoiceTake.noteRunning()||VoiceTake.updateBusy())return;
+                    if(current==null||!current.optBoolean("recording")||current.optLong("revision",1)!=revision||FlowAccessibility.thoughtCaptureActive(id)||VoiceTake.updateBusy()||LineWire.updateBusy())return;
                     String before=Store.get(app,"notes","[]");JSONArray notes=new JSONArray(before);
-                    for(int i=0;i<notes.length();i++){JSONObject item=notes.optJSONObject(i);if(item!=null&&item.optLong("id")==id)item.put("recording",false).put("pending",!recovered.isEmpty()&&item.optString("raw").isEmpty()).put("audio",recovered.isEmpty()?"":recovered.get(0).getName()).put("parts",names(recovered)).put("duration",duration>0?duration:item.optLong("duration")).put("source_interrupted",recovered.isEmpty()).put("thought_capture_complete",false).put("revision",revision+1);}
+                    for(int i=0;i<notes.length();i++){JSONObject item=notes.optJSONObject(i);if(item!=null&&item.optLong("id")==id)item.put("recording",false).put("pending",!recovered.isEmpty()&&(item.optBoolean("pending")||item.optString("raw").isEmpty()||item.optBoolean("partial_transcript"))).put("audio",recovered.isEmpty()?"":recovered.get(0).getName()).put("parts",names(recovered)).put("duration",duration>0?duration:item.optLong("duration")).put("source_interrupted",true).put("capture_error","Recording interrupted. Surviving source audio is saved.").put("thought_capture_complete",false).put("revision",revision+1);}
                     committed=Store.prefs(app).edit().putString("notes",notes.toString()).commit();if(!committed)Store.prefs(app).edit().putString("notes",before).commit();
                 }
             }catch(Exception ignored){/* Original files remain on this phone for another recovery attempt. */}
             finally{synchronized(recoveringThoughts){recoveringThoughts.remove(id);}thoughtWork.decrementAndGet();}
-            if(committed){poke();ThoughtJob.schedule(app);catchUpThoughts(app);}
+            if(committed){poke();ThoughtJob.schedule(app);catchUp(app);}
         });
     }
     private static long segmentIndex(File file){try{String name=file.getName();return Long.parseLong(name.substring(name.lastIndexOf('-')+1,name.length()-4));}catch(RuntimeException invalid){return Long.MAX_VALUE;}}
@@ -663,44 +675,32 @@ final class Notes {
 
     private static void writeUp(Context context,long id) {
         JSONObject waiting=find(context,id);if(waiting==null || waiting.optBoolean("recording"))return;
-        final boolean thought=waiting.optBoolean("thought");
         if(!online(context)||Vault.get(context).isEmpty())return;
-        synchronized(Notes.class){if(draining)return;draining=true;transcribing=id;}
+        synchronized(Notes.class){if(draining||busy)return;draining=true;transcribing=id;}
         poke();
         work.execute(()->{
-            boolean wrote=false;
+            JSONObject[] processing={waiting};
             try {
-                JSONObject note=find(context,id);
-                if(note==null || note.optBoolean("recording"))return;
-                List<File> files=note==null?new ArrayList<>():filesOf(context,note);
-                if(note==null || files.isEmpty())throw new java.io.IOException("The recording is missing.");
-                String language=note.optString("lang","auto");
-                String[] detected=new String[]{language};
-                boolean completeSources=!note.optBoolean("thought") || completeThoughtSources(context,note,files);
-                boolean[] completeTranscription=new boolean[]{true};
-                String raw=transcribeFiles(context,files,language,detected,completeTranscription);
-                completeTranscription[0]&=completeSources;
+                JSONObject note=find(context,id);if(note==null||note.optBoolean("recording"))return;processing[0]=note;
+                String requestedLanguage=note.optString("retry_language",note.optString("lang","auto"));
+                Transcription result=transcribeNote(context,note,requestedLanguage);
                 if(note.optBoolean("thought")){
-                    // Persist the full transcript before optional organization, and never recreate a deleted note.
-                    int saved=saveThoughtTranscript(context,note,raw,detected[0],completeTranscription[0]);
-                    if(saved==THOUGHT_TRANSCRIPT_SAVED){if(!raw.isEmpty())formatThought(context,id);else thoughtToast(context,"I couldn't hear speech in that one. The source audio is still saved.");wrote=true;}
-                    else if(saved==THOUGHT_TRANSCRIPT_FILTERED)wrote=true;
+                    int saved=saveThoughtTranscript(context,note,result);
+                    if(saved==THOUGHT_TRANSCRIPT_SAVED && !result.raw.isEmpty() && result.complete)formatThought(context,id);
+                }else{
+                    String text=organize(context,result.raw),summary=recap(context,text);
+                    updateCaptured(context,note,item->applyTranscription(item,result,requestedLanguage,text,summary));
                 }
-                else if(raw.isEmpty()){save(context,id,"","",false,language,"",files.get(0).getName(),durations(files),"",false,names(files));toast(context,"I couldn't hear speech in that one. The recording is still saved.");}
-                else {
-                    String text=organize(context,raw);
-                    String summary=recap(context,text);
-                    save(context,id,text,raw,!text.equals(raw),language,detected[0],files.get(0).getName(),durations(files),summary,false,names(files));
-                }
-                if(!note.optBoolean("thought"))wrote=true;
-            } catch(Exception error) { if(thought)thoughtToast(context,offlineMessage(context,error));else toast(context,offlineMessage(context,error)); }
-            finally{synchronized(Notes.class){draining=false;transcribing=-1;}poke();}
-            if(wrote){if(thought)catchUpThoughts(context);else catchUp(context);}
+            }catch(Exception error){
+                // A durable cooldown makes one bad item yield to every other eligible recording.
+                JSONObject captured=processing[0];if(captured!=null)try{updateCaptured(context,captured,item->{int attempt=item.optInt("retry_count",0)+1;item.put("pending",true).put("retry_count",attempt).put("retry_after",System.currentTimeMillis()+NoteWorkPolicy.retryDelay(attempt)).put("transcription_error",offlineMessage(context,error));});}catch(Exception ignored){}
+            }finally{synchronized(Notes.class){draining=false;transcribing=-1;}poke();catchUp(context);}
         });
     }
 
     private static final int THOUGHT_TRANSCRIPT_UNCHANGED=0,THOUGHT_TRANSCRIPT_SAVED=1,THOUGHT_TRANSCRIPT_FILTERED=2;
-    private static int saveThoughtTranscript(Context context,JSONObject captured,String raw,String heard,boolean completeTranscription){
+    private static int saveThoughtTranscript(Context context,JSONObject captured,Transcription result){
+        String raw=result.raw,heard=result.heard;boolean completeTranscription=result.complete;
         if(raw==null)return THOUGHT_TRANSCRIPT_UNCHANGED;
         // Measuring is local, uses a stable canonical width, and never holds the note-storage lock.
         // A skipped/uncertain segment is not evidence that the complete source was a short thought.
@@ -724,7 +724,7 @@ final class Notes {
                     for(File audio:source)if(audio.isFile())audio.delete();
                     return THOUGHT_TRANSCRIPT_FILTERED;
                 }
-                for(int i=0;i<notes.length();i++){JSONObject note=notes.optJSONObject(i);if(note!=null&&note.optLong("id")==id)note.put("raw",raw).put("text",raw.trim()).put("title",QuickThoughtPolicy.title(raw,"Quick thought")).put("summary",QuickThoughtPolicy.summary(raw)).put("summary_version",QuickThoughtPolicy.SUMMARY_VERSION).put("heard",heard==null?"":heard).put("pending",false).put("revision",revision+1);}
+                for(int i=0;i<notes.length();i++){JSONObject note=notes.optJSONObject(i);if(note!=null&&note.optLong("id")==id){applyTranscription(note,result,note.optString("lang","auto"),raw.trim(),QuickThoughtPolicy.summary(raw));if(!note.optBoolean("user_edited"))note.put("title",QuickThoughtPolicy.title(raw,"Quick thought"));note.put("summary_version",QuickThoughtPolicy.SUMMARY_VERSION).put("revision",revision+1);}}
                 if(Store.prefs(context).edit().putString("notes",notes.toString()).commit())return THOUGHT_TRANSCRIPT_SAVED;
                 Store.prefs(context).edit().putString("notes",before).commit();return THOUGHT_TRANSCRIPT_UNCHANGED;
             }catch(Exception unavailable){return THOUGHT_TRANSCRIPT_UNCHANGED;}
@@ -753,34 +753,57 @@ final class Notes {
         poke();
     }
 
-    private static String transcribeFiles(Context context,List<File> files,String language,String[] detected) throws Exception {
-        return transcribeFiles(context,files,language,detected,null);
+    private static final class Transcription {
+        final JSONArray segments=new JSONArray();String raw="",heard="",error="",configuration="";boolean complete=true,replacement;
     }
-    private static String transcribeFiles(Context context,List<File> files,String language,String[] detected,boolean[] completeTranscription) throws Exception {
-        if(completeTranscription!=null&&completeTranscription.length>0)completeTranscription[0]=true;
-        StringBuilder raw=new StringBuilder();
-        String lang=language!=null && language.equals("auto")?null:language;
-        for(File file:files){
-            try {
-                String piece=new CloudApi(context).transcribe(file,true,null,lang,detected,"notes_transcribe_model");
-                if((lang==null || "auto".equals(lang)) && LanguagePolicy.arabicMisread(piece)){
-                    String[] again=new String[]{""};
-                    String retry=new CloudApi(context).transcribe(file,true,null,"bn",again,"notes_transcribe_model");
-                    if(retry!=null && !LanguagePolicy.wrongScript("bn",retry)){piece=retry;if(detected!=null && detected.length>0)detected[0]="bn";}
-                    if((retry==null || retry.trim().isEmpty() || LanguagePolicy.wrongScript("bn",retry)) && completeTranscription!=null && completeTranscription.length>0)completeTranscription[0]=false;
-                }
-                piece=piece==null?"":piece.trim();
-                if(piece.isEmpty())continue;
-                if(raw.length()>0)raw.append('\n');
-                raw.append(piece);
-            } catch(Exception error) {
-                if(completeTranscription!=null&&completeTranscription.length>0)completeTranscription[0]=false;
-                String message=error.getMessage()==null?"":error.getMessage();
-                if(message.contains("unsure") || message.contains("No speech"))continue;
-                throw error;
+    /** Successes are cached per immutable source and provider/language; retry only missing pieces. */
+    private static Transcription transcribeNote(Context context,JSONObject note,String language) throws Exception {
+        Transcription result=new Transcription();result.replacement=note.optBoolean("replacement_pending");
+        String chosen=language==null?"auto":language,lang="auto".equals(chosen)?null:chosen;
+        String configuration=chosen+"\n"+Store.get(context,"notes_transcribe_model","whisper-large-v3")+"\n"+Store.get(context,"api_base",CloudApi.DEFAULT_BASE);
+        result.configuration=configuration;
+        JSONArray cached=configuration.equals(note.optString("transcription_config"))?note.optJSONArray("segment_transcripts"):null;
+        JSONArray declared=note.optJSONArray("parts");if(declared==null||declared.length()==0)declared=new JSONArray().put(note.optString("audio"));
+        StringBuilder raw=new StringBuilder();java.util.HashSet<String> seen=new java.util.HashSet<>();
+        for(int i=0;i<declared.length();i++){
+            String name=declared.optString(i);if(name.isEmpty()||!seen.add(name)){result.complete=false;result.error="A source audio segment is missing.";continue;}
+            File file=sourceFile(context,name);JSONObject segment=null;
+            if(cached!=null&&file!=null&&file.isFile()&&file.length()>0)for(int j=0;j<cached.length();j++){JSONObject candidate=cached.optJSONObject(j);if(candidate!=null&&name.equals(candidate.optString("source"))&&candidate.optBoolean("complete")&&candidate.optLong("bytes")==file.length()){segment=new JSONObject(candidate.toString());break;}}
+            if(segment==null){
+                segment=new JSONObject().put("source",name).put("complete",false).put("text","");
+                String[] detected={""};
+                try{
+                    if(file==null||!file.isFile()||file.length()==0)throw new java.io.IOException("A source audio segment is missing.");
+                    String piece=new CloudApi(context).transcribe(file,true,null,lang,detected,"notes_transcribe_model");
+                    // Auto respects the recognizer's language. Arabic script alone is never evidence of Bengali.
+                    segment.put("bytes",file.length()).put("text",piece==null?"":piece.trim()).put("heard",detected[0]==null?"":detected[0]).put("complete",true);
+                }catch(Exception error){segment.put("error",offlineMessage(context,error));}
             }
+            result.segments.put(segment);
+            if(!segment.optBoolean("complete")){result.complete=false;if(result.error.isEmpty())result.error=segment.optString("error","One source segment could not be transcribed.");}
+            String piece=segment.optString("text").trim();if(!piece.isEmpty()){if(raw.length()>0)raw.append('\n');raw.append(piece);}
+            if(result.heard.isEmpty())result.heard=segment.optString("heard");
         }
-        return raw.toString().trim();
+        if(result.segments.length()==0){result.complete=false;result.error="The recording is missing.";}
+        result.raw=raw.toString().trim();return result;
+    }
+    private static void applyTranscription(JSONObject item,Transcription result,String language,String text,String summary)throws Exception{
+        boolean hasExisting=!item.optString("raw").trim().isEmpty()||!item.optString("text").trim().isEmpty();
+        if(result.replacement&&result.complete&&result.raw.trim().isEmpty()&&hasExisting){
+            result.complete=false;result.error="No speech was recognized in the replacement. Your previous transcript was kept.";
+            // Empty cached replacements must remain retryable instead of repeating a cached empty result.
+            for(int i=0;i<result.segments.length();i++){JSONObject segment=result.segments.optJSONObject(i);if(segment!=null&&segment.optString("text").trim().isEmpty())segment.put("complete",false).put("error",result.error);}
+        }
+        int attempt=result.complete?0:item.optInt("retry_count",0)+1;
+        boolean keepExisting=result.replacement&&!result.complete&&hasExisting;
+        if(!keepExisting){
+            if(!item.optBoolean("user_edited"))item.put("text",text).put("touched",!text.equals(result.raw)).put("summary",summary==null?"":summary);
+            item.put("raw",result.raw).put("lang",language).put("heard",result.heard);item.remove("retry_language");
+        }else item.put("retry_language",language);
+        item.put("segment_transcripts",result.segments).put("partial_transcript",!result.complete).put("pending",!result.complete).put("replacement_pending",keepExisting).put("transcription_error",result.error)
+            .put("retry_count",attempt).put("retry_after",result.complete?0:System.currentTimeMillis()+NoteWorkPolicy.retryDelay(attempt));
+        // Only matching immutable source/provider snapshots may reuse successful pieces.
+        item.put("transcription_config",result.configuration);
     }
 
     private static String recap(Context context,String text) {
@@ -798,9 +821,11 @@ final class Notes {
 
     private static void addFile(List<File> files,Context context,String name) {
         if(name==null || name.isEmpty())return;
-        File file=new File(dir(context),name);
-        if(file.isFile())files.add(file);
+        File file=sourceFile(context,name);
+        if(file!=null&&file.isFile()&&!files.contains(file))files.add(file);
     }
+
+    private static File sourceFile(Context context,String name){try{File folder=dir(context).getCanonicalFile(),file=new File(folder,name).getCanonicalFile();return folder.equals(file.getParentFile())?file:null;}catch(Exception unavailable){return null;}}
 
     private static JSONArray names(List<File> files) {
         JSONArray parts=new JSONArray();
@@ -868,44 +893,63 @@ final class Notes {
             JSONArray notes=all(context),next=new JSONArray();
             JSONObject item=new JSONObject().put("id",id).put("text",spoken==null?"":spoken).put("raw",spoken==null?"":spoken).put("touched",false)
                 .put("lang",spokenCode==null?"auto":spokenCode).put("heard",spokenCode==null?"":spokenCode).put("audio",audioName).put("duration",duration)
-                .put("created",id).put("summary","").put("pending",false).put("translation",translation==null?"":translation).put("translationLang",targetCode==null?"":targetCode);
+                .put("created",id).put("revision",1L).put("summary","").put("pending",false).put("translation",translation==null?"":translation).put("translationLang",targetCode==null?"":targetCode);
             if(parts!=null)item.put("parts",parts);
             next.put(item);
             appendRetained(next,notes,id);
-            Store.prefs(context).edit().putString("notes",next.toString()).apply();
+            commitNotes(context,notes,next);
         } catch(Exception ignored) {}
             }
     }
 
+    /** Creation is reserved for source handoff; async text workers only use updateCaptured. */
     private static void save(Context context,long id,String text,String raw,boolean touched,String lang,String heard,String audio,long duration,String summary,boolean pending,JSONArray parts) throws Exception {
         synchronized(Store.class){
-        JSONArray notes=all(context),next=new JSONArray();
-        JSONObject item=new JSONObject().put("id",id).put("text",text).put("raw",raw==null?"":raw).put("touched",touched).put("lang",lang).put("heard",heard==null?"":heard).put("audio",audio).put("duration",duration).put("created",id).put("summary",summary==null?"":summary).put("pending",pending);
-        if(parts!=null)item.put("parts",parts);
-        JSONObject previous=find(context,id);
-        if(previous!=null){
-            if(previous.has("wave"))item.put("wave",previous.optString("wave"));
-            if(previous.has("translation"))item.put("translation",previous.optString("translation"));
-            if(previous.has("translationLang"))item.put("translationLang",previous.optString("translationLang"));
-            if(previous.optBoolean("call"))item.put("call",true);
-            if(previous.optBoolean("thought")){item.put("thought",true);item.put("title",previous.optString("title"));item.put("revision",previous.optLong("revision",1));}
-            if(previous.has("who"))item.put("who",previous.optString("who"));
+            if(noteDeleted(context,id))return;
+            JSONArray notes=all(context),next=new JSONArray();JSONObject previous=find(context,id);
+            JSONObject item=previous==null?new JSONObject().put("id",id).put("created",id).put("text",text).put("raw",raw==null?"":raw).put("touched",touched).put("lang",lang).put("heard",heard==null?"":heard).put("summary",summary==null?"":summary):new JSONObject(previous.toString());
+            item.put("audio",audio).put("duration",duration).put("pending",pending).put("recording",VoiceTake.noteRunning()).put("retry_after",0).put("revision",previous==null?1:previous.optLong("revision",1)+1);
+            if(parts!=null)item.put("parts",parts);
+            next.put(item);appendRetained(next,notes,id);commitNotes(context,notes,next);
         }
-        if(id==callId)item.put("call",true);
-        next.put(item);
-        appendRetained(next,notes,id);
-        Store.prefs(context).edit().putString("notes",next.toString()).apply();
-            }
     }
+    interface NoteMutation{void apply(JSONObject note)throws Exception;}
+    /** A late provider response can update only the exact existing revision it read. */
+    private static boolean updateCaptured(Context context,JSONObject captured,NoteMutation mutation)throws Exception{
+        synchronized(Store.class){
+            long id=captured.optLong("id");JSONObject current=find(context,id);
+            if(!NoteWorkPolicy.canApply(captured.toString(),current==null?null:current.toString()))return false;
+            JSONArray previous=all(context),next=new JSONArray();
+            for(int i=0;i<previous.length();i++){JSONObject item=previous.optJSONObject(i);if(item==null)continue;if(item.optLong("id")==id){mutation.apply(item);item.put("revision",item.optLong("revision",1)+1);}next.put(item);}
+            return commitNotes(context,previous,next);
+        }
+    }
+    /** Commit metadata before deleting audio that the retention limit made unreachable. */
+    private static boolean commitNotes(Context context,JSONArray previous,JSONArray next){
+        String before=previous.toString();
+        if(!Store.prefs(context).edit().putString("notes",next.toString()).commit()){Store.prefs(context).edit().putString("notes",before).commit();return false;}
+        java.util.HashSet<Long> retainedIds=new java.util.HashSet<>();java.util.HashSet<String> retainedFiles=new java.util.HashSet<>();
+        for(int i=0;i<next.length();i++){JSONObject item=next.optJSONObject(i);if(item==null)continue;retainedIds.add(item.optLong("id"));for(File audio:filesOf(context,item))retainedFiles.add(audio.getAbsolutePath());}
+        for(int i=0;i<previous.length();i++){JSONObject item=previous.optJSONObject(i);if(item==null||retainedIds.contains(item.optLong("id"))||item.optBoolean("recording")||item.optBoolean("pending"))continue;for(File audio:filesOf(context,item))if(!retainedFiles.contains(audio.getAbsolutePath()))audio.delete();}
+        return true;
+    }
+    private static void resetRetry(Context context,long id){
+        synchronized(Store.class){try{JSONObject current=find(context,id);if(current!=null)updateCaptured(context,current,item->item.put("retry_after",0).put("retry_count",0));}catch(Exception ignored){}}
+    }
+    private static boolean noteDeleted(Context context,long id){
+        if(thoughtDeleted(context,id))return true;
+        try{JSONArray ids=new JSONArray(Store.get(context,"note_deletions","[]"));for(int i=0;i<ids.length();i++)if(ids.optLong(i)==id)return true;}catch(Exception ignored){}return false;
+    }
+    private static JSONArray deletedNotes(Context context,long id){JSONArray next=new JSONArray().put(id);try{JSONArray old=new JSONArray(Store.get(context,"note_deletions","[]"));for(int i=0;i<old.length()&&next.length()<10000;i++)if(old.optLong(i)!=id)next.put(old.optLong(i));}catch(Exception ignored){}return next;}
 
     private static void remove(Context activity,long id) {
         synchronized(Store.class){
         stopPlayback();
         JSONArray notes=all(activity),next=new JSONArray();List<File> removedFiles=new ArrayList<>();boolean thought=false;
         for(int i=0;i<notes.length();i++){JSONObject old=notes.optJSONObject(i);if(old==null)continue;if(old.optLong("id")==id){removedFiles.addAll(filesOf(activity,old));thought=old.optBoolean("thought");}else next.put(old);}
-        String previousDeleted=Store.get(activity,"thought_deletions","[]");android.content.SharedPreferences.Editor edit=Store.prefs(activity).edit().putString("notes",next.toString());
+        String previousDeleted=Store.get(activity,"thought_deletions","[]"),previousNoteDeleted=Store.get(activity,"note_deletions","[]");android.content.SharedPreferences.Editor edit=Store.prefs(activity).edit().putString("notes",next.toString()).putString("note_deletions",deletedNotes(activity,id).toString());
         if(thought)edit.putString("thought_deletions",deletedThoughts(activity,id).toString());
-        if(!edit.commit()){Store.prefs(activity).edit().putString("notes",notes.toString()).putString("thought_deletions",previousDeleted).commit();toast(activity,"Could not delete this note. Check available phone storage.");return;}
+        if(!edit.commit()){Store.prefs(activity).edit().putString("notes",notes.toString()).putString("thought_deletions",previousDeleted).putString("note_deletions",previousNoteDeleted).commit();toast(activity,"Could not delete this note. Check available phone storage.");return;}
         if(thought)DailySummaryCache.invalidateEntry(activity,"thought",id);
         for(File audio:removedFiles)if(audio.isFile())audio.delete();
             }
@@ -919,7 +963,7 @@ final class Notes {
         synchronized(Store.class){
         try {
             JSONArray notes=all(context);
-            for(int i=0;i<notes.length();i++){JSONObject note=notes.optJSONObject(i);if(note!=null && note.optLong("id")==id)note.put(key,value==null?"":value);}
+            for(int i=0;i<notes.length();i++){JSONObject note=notes.optJSONObject(i);if(note!=null && note.optLong("id")==id)note.put(key,value==null?"":value).put("revision",note.optLong("revision",1)+1);}
             Store.prefs(context).edit().putString("notes",notes.toString()).apply();
         } catch(Exception ignored) {}
         poke();
@@ -933,7 +977,7 @@ final class Notes {
         for(int i=0;i<next.length();i++){JSONObject entry=next.optJSONObject(i);if(entry!=null && !entry.optBoolean("thought"))ordinary++;}
         for(int i=0;i<previous.length();i++){
             JSONObject entry=previous.optJSONObject(i);if(entry==null || entry.optLong("id")==excludedId)continue;
-            if(entry.optBoolean("thought"))next.put(entry);else if(ordinary<100){next.put(entry);ordinary++;}
+            if(entry.optBoolean("thought"))next.put(entry);else if(entry.optBoolean("recording")||entry.optBoolean("pending")){next.put(entry);}else if(ordinary<100){next.put(entry);ordinary++;}
         }
     }
 
@@ -987,6 +1031,7 @@ final class Notes {
                 if(old!=null&&old.optBoolean("recording")==!complete&&old.optBoolean("pending")==complete&&old.optBoolean("thought_capture_complete")==verifiedCaptureComplete&&String.valueOf(old.opt("parts")).equals(names(files).toString())&&old.optLong("duration")>=Math.max(0,duration))return requestedId;
                 JSONObject note=old==null?new JSONObject().put("id",requestedId).put("created",requestedId).put("thought",true).put("raw","").put("text","").put("title","Quick thought").put("summary","").put("lang","auto").put("heard",""):new JSONObject(old.toString());
                 if(old==null&&!complete)note.put("minimum_thought_lines",2);
+                if(complete&&!verifiedCaptureComplete)note.put("source_interrupted",true).put("capture_error","Recording interrupted. Surviving source audio is saved.");
                 note.put("audio",files.isEmpty()?"":files.get(0).getName()).put("parts",names(files)).put("duration",Math.max(Math.max(0,duration),durations(files)))
                     .put("recording",!complete).put("pending",complete).put("thought_capture_complete",verifiedCaptureComplete).put("revision",old==null?1:old.optLong("revision",1)+1);
                 JSONArray next=new JSONArray().put(note);appendRetained(next,previous,requestedId);
@@ -995,6 +1040,12 @@ final class Notes {
             }catch(Exception unavailable){for(File file:copied)file.delete();return -1;}
         }
         ensureThoughtRetry(context);poke();if(complete){ThoughtJob.schedule(context.getApplicationContext());writeUpThought(context,saved);}return saved;
+    }
+
+    /** Compatibility for a failed capture callback; normal final saves set these fields atomically. */
+    static void markThoughtInterrupted(Context context,long id){
+        synchronized(Store.class){try{JSONObject current=find(context,id);if(current==null||!current.optBoolean("thought")||(current.optBoolean("source_interrupted")&&!current.optString("capture_error").isEmpty()))return;updateCaptured(context,current,item->item.put("source_interrupted",true).put("thought_capture_complete",false).put("capture_error","Recording interrupted. Surviving source audio is saved."));}catch(Exception ignored){}}
+        poke();
     }
 
     /** External finalized files are copied and synced; a failed commit never consumes the caller's source. */
@@ -1014,7 +1065,7 @@ final class Notes {
 
     static void formatThought(Context context,long id) {
         Context app=context.getApplicationContext();
-        JSONObject captured=find(app,id);if(captured==null || !captured.optBoolean("thought"))return;
+        JSONObject captured=find(app,id);if(captured==null || !captured.optBoolean("thought") || captured.optBoolean("user_edited"))return;
         final long revision=captured.optLong("revision",1);
         final String raw=captured.optString("raw");
         if(raw.isEmpty() || Vault.get(app).isEmpty())return;
@@ -1048,7 +1099,7 @@ final class Notes {
             String before=Store.get(context,"notes","[]");JSONArray old=new JSONArray(before),next=new JSONArray();
             for(int i=0;i<old.length();i++){
                 JSONObject note=old.optJSONObject(i);if(note==null)continue;
-                if(note.optLong("id")==id)note.put("text",text.trim()).put("title",QuickThoughtPolicy.title(text,"Quick thought")).put("summary",QuickThoughtPolicy.summary(text)).put("summary_version",QuickThoughtPolicy.SUMMARY_VERSION).put("revision",note.optLong("revision",1)+1);
+                if(note.optLong("id")==id)note.put("user_edited",true).put("pending",false).put("text",text.trim()).put("title",QuickThoughtPolicy.title(text,"Quick thought")).put("summary",QuickThoughtPolicy.summary(text)).put("summary_version",QuickThoughtPolicy.SUMMARY_VERSION).put("revision",note.optLong("revision",1)+1);
                 next.put(note);
             }
             boolean saved=Store.prefs(context).edit().putString("notes",next.toString()).commit();if(saved){DailySummaryCache.invalidateEntry(context,"thought",id);poke();}else Store.prefs(context).edit().putString("notes",before).commit();return saved;
@@ -1149,9 +1200,11 @@ final class Notes {
             TextView recap=Daybook.text(activity,summary,16,Daybook.ink(activity),false);recap.setLineSpacing(Ui.dp(activity,3),1);recap.setTextIsSelectable(true);body.addView(recap);Ui.space(body,16);
         }
         body.addView(Daybook.text(activity,original?"Original transcript":"Full transcript",12,Daybook.muted(activity),true));Ui.space(body,6);
+        if(!coming&&note.optBoolean("partial_transcript")){body.addView(Daybook.text(activity,"Partial transcript · some source segments still need transcription.",13,Daybook.muted(activity),false));Ui.space(body,6);}
         String text=note.optString(original?"raw":"text");
         if(!original&&!recording&&!note.optBoolean("pending")&&text.trim().isEmpty())text=note.optString("raw");
         if(text.isEmpty())text=recording?"Recording. Your source audio is being kept on this phone.":coming?"Writing it up…":note.optBoolean("pending")?"Saved on this phone. The words will fill in when you are online and your provider is connected.":note.optBoolean("source_interrupted")?"The recording was interrupted before a finalized source segment could be recovered.":"No speech was recognized. Your source audio is still saved.";
+        String issue=note.optString("transcription_error",note.optString("capture_error"));if(!coming&&!issue.isEmpty()){body.addView(Daybook.text(activity,issue,13,Daybook.muted(activity),false));Ui.space(body,6);}
         TextView words=Daybook.text(activity,text,17,Daybook.ink(activity),false);words.setLineSpacing(Ui.dp(activity,4),1);words.setTextIsSelectable(true);body.addView(words);Ui.space(body,18);
         LinearLayout actions=Ui.row(activity);
         if(!note.optString("raw").isEmpty())actions.addView(quiet(activity,original?"Organized":"Original",v->{original=!original;refresh.run();}));
@@ -1163,21 +1216,21 @@ final class Notes {
         if(!filesOf(activity,note).isEmpty()&&!recording)actions.addView(quiet(activity,thoughtSourceShown==id?"Hide audio":"Source audio",v->{if(thoughtSourceShown==id){thoughtSourceShown=-1;stopPlayback();}else thoughtSourceShown=id;refresh.run();}));
         actions.addView(quiet(activity,"Delete",v->new android.app.AlertDialog.Builder(activity).setTitle("Delete this thought?").setMessage("Removes the thought, its original transcript and source audio from this phone.").setNegativeButton("Keep",null).setPositiveButton("Delete",(d,w)->{remove(activity,id);back();refresh.run();}).show()));
         body.addView(actions);
-        if(!recording&&!coming&&note.optString("raw").isEmpty()&&!filesOf(activity,note).isEmpty())body.addView(quiet(activity,"Retry transcription",v->{retryThought(activity,id);refresh.run();}));
+        if(!recording&&!coming&&(note.optString("raw").isEmpty()||note.optBoolean("partial_transcript"))&&!filesOf(activity,note).isEmpty())body.addView(quiet(activity,"Retry transcription",v->{retryThought(activity,id);refresh.run();}));
         if(thoughtSourceShown==id&&!recording){Ui.space(body,12);thoughtSourcePlayer(activity,body,note,refresh);}
     }
 
     private static void retryThought(Context context,long id){
-        synchronized(Store.class){try{String before=Store.get(context,"notes","[]");JSONArray notes=new JSONArray(before);boolean found=false;for(int i=0;i<notes.length();i++){JSONObject note=notes.optJSONObject(i);if(note!=null&&note.optLong("id")==id&&note.optBoolean("thought")&&!note.optBoolean("recording")){note.put("pending",true).put("revision",note.optLong("revision",1)+1);found=true;}}if(!found)return;if(!Store.prefs(context).edit().putString("notes",notes.toString()).commit()){Store.prefs(context).edit().putString("notes",before).commit();return;}}catch(Exception unavailable){return;}}
+        synchronized(Store.class){try{String before=Store.get(context,"notes","[]");JSONArray notes=new JSONArray(before);boolean found=false;for(int i=0;i<notes.length();i++){JSONObject note=notes.optJSONObject(i);if(note!=null&&note.optLong("id")==id&&note.optBoolean("thought")&&!note.optBoolean("recording")){note.put("pending",true).put("retry_after",0).put("retry_count",0).put("revision",note.optLong("revision",1)+1);found=true;}}if(!found)return;if(!Store.prefs(context).edit().putString("notes",notes.toString()).commit()){Store.prefs(context).edit().putString("notes",before).commit();return;}}catch(Exception unavailable){return;}}
         ThoughtJob.schedule(context.getApplicationContext());writeUpThought(context,id);
     }
 
     /** Uses the existing note player, revealed only by an explicit detail action. */
     private static void thoughtSourcePlayer(Activity activity,LinearLayout body,JSONObject note,Runnable refresh){
-        boolean on=playing==note.optLong("id");
+        boolean on=playing==note.optLong("id")&&!paused;
         body.addView(Daybook.text(activity,"Source audio",12,Daybook.muted(activity),true));Ui.space(body,8);
-        playTime=Daybook.text(activity,(on?clock(position()):"0:00")+" / "+clock(note.optLong("duration")),16,Daybook.ink(activity),true);body.addView(playTime);Ui.space(body,8);
-        playWave=new Wave(activity);playWave.show(barsOf(note.optString("wave")),on&&totalDuration>0?position()/(float)totalDuration:0);body.addView(playWave,new LinearLayout.LayoutParams(-1,Ui.dp(activity,56)));Ui.space(body,12);
+        playTime=Daybook.text(activity,(playing==note.optLong("id")?clock(position()):"0:00")+" / "+clock(note.optLong("duration")),16,Daybook.ink(activity),true);body.addView(playTime);Ui.space(body,8);
+        playWave=new Wave(activity);playWave.show(barsOf(note.optString("wave")),playing==note.optLong("id")&&totalDuration>0?position()/(float)totalDuration:0);body.addView(playWave,new LinearLayout.LayoutParams(-1,Ui.dp(activity,56)));Ui.space(body,12);
         LinearLayout controls=Ui.row(activity);controls.setGravity(android.view.Gravity.CENTER);
         TextView back5=Daybook.text(activity,"−5s",14,Daybook.muted(activity),true);back5.setPadding(Ui.dp(activity,8),Ui.dp(activity,8),Ui.dp(activity,8),Ui.dp(activity,8));back5.setOnClickListener(v->{Daybook.feedback(v);nudge(-5000);});controls.addView(back5);
         LinearLayout.LayoutParams mid=new LinearLayout.LayoutParams(0,Ui.dp(activity,48),1);mid.leftMargin=Ui.dp(activity,8);mid.rightMargin=Ui.dp(activity,8);controls.addView(Daybook.button(activity,on?"Pause":"Play",true,v->togglePlay(activity,note,refresh)),mid);
@@ -1193,7 +1246,7 @@ final class Notes {
                 if(liveWave!=null)liveWave.show(VoiceTake.liveBars(48),1f);
                 again=true;
             }
-            if(playing>=0 && player!=null){
+            if(playing>=0 && player!=null && !paused){
                 float p=totalDuration<=0?0:Math.min(1f,position()/(float)totalDuration);
                 if(playWave!=null)playWave.show(null,p);
                 if(playTime!=null)playTime.setText(clock(position())+" / "+clock(totalDuration));
@@ -1204,7 +1257,14 @@ final class Notes {
     };
     private static void armTick(){tick.removeCallbacks(pulse);tick.post(pulse);}
     private static long position(){long at=playedBefore;try{if(player!=null)at+=player.getCurrentPosition();}catch(Exception ignored){}return at;}
-    private static void nudge(int delta){if(player==null)return;try{int next=player.getCurrentPosition()+delta;if(next<0)next=0;int dur=player.getDuration();if(dur>0 && next>dur)next=dur;player.seekTo(next);}catch(Exception ignored){}}
+    private static void nudge(int delta){
+        if(player==null||queue.isEmpty())return;Activity activity=screen.get();if(activity==null||activity.isDestroyed())return;
+        try{
+            PlaybackPosition at=PlaybackPosition.locate(queueSpans,position()+delta);if(at.index==queueAt){player.seekTo((int)at.offset);return;}
+            MediaPlayer old=player;player=null;try{old.stop();}catch(Exception ignored){}try{old.release();}catch(Exception ignored){}
+            queueAt=at.index;playedBefore=at.before;playQueue(activity,onChange,(int)at.offset);if(!paused)armTick();
+        }catch(Exception ignored){}
+    }
 
     static final class Wave extends android.view.View {
         private int[] bars=new int[]{1,2,3,2,1};

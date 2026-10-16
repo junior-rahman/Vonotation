@@ -11,12 +11,18 @@ public final class CallEvents extends BroadcastReceiver {
         if(intent==null || !TelephonyManager.ACTION_PHONE_STATE_CHANGED.equals(intent.getAction()))return;
         String state=intent.getStringExtra(TelephonyManager.EXTRA_STATE);
         if(TelephonyManager.EXTRA_STATE_RINGING.equals(state)){
-            if(VoiceTake.noteRunning() && !VoiceTake.callRunning()){CallWatch.decline(context);return;}
-            if(Translate.going()){Translate.stop();CallWatch.expectCall();android.widget.Toast.makeText(context,"Translation finished. This call will be recorded.",android.widget.Toast.LENGTH_LONG).show();}
+            if((VoiceTake.noteRunning() || VoiceTake.thoughtRunning()) && !VoiceTake.callRunning()){CallWatch.decline(context);return;}
+            if(Translate.going()){
+                Translate.stop();
+                if(CallWatch.on(context)){
+                    CallWatch.expectCall();
+                    android.widget.Toast.makeText(context,"Translation finished. This call will be recorded.",android.widget.Toast.LENGTH_LONG).show();
+                }
+            }
         }
-        if(TelephonyManager.EXTRA_STATE_IDLE.equals(state))CallWatch.dropExpect();
-        if(!CallWatch.on(context) && !CallWatch.waitingForCall())return;
-        if(TelephonyManager.EXTRA_STATE_OFFHOOK.equals(state)){CallWatch.dropExpect();CallWatch.recordNow(context);}
-        else if(TelephonyManager.EXTRA_STATE_IDLE.equals(state) && CallWatch.on(context)){try{context.startService(new Intent(context,CallWatch.class).setAction(CallWatch.STOP));}catch(RuntimeException ignored){}}
+        if(TelephonyManager.EXTRA_STATE_IDLE.equals(state)){CallWatch.hangup(context);return;}
+        if(!CallSessionPolicy.mayStart(CallWatch.on(context),TelephonyManager.EXTRA_STATE_OFFHOOK.equals(state)))return;
+        CallWatch.dropExpect();
+        CallWatch.recordNow(context);
     }
 }

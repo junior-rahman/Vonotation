@@ -24,6 +24,7 @@ final class Translate {
     private static String from="en",to="bn";
     private static int mode=TOGETHER;
     private static boolean busy,listening,speaking,session,paused,hushed,askedMic;
+    private static CaptureGate.Lease earLease;
     private static int sessionKind=TOGETHER,earGen,speakGen;
     private static String live="",liveSide="",heardTag="",lastSaid="";
     private static long lastSaidAt;
@@ -229,7 +230,7 @@ final class Translate {
 
     private static android.widget.Button startButton(Activity activity,Runnable refresh,boolean oneWay) {
         boolean live=session && !paused;
-        boolean note=VoiceTake.noteRunning() && !VoiceTake.callRunning();
+        boolean note=VoiceTake.noteRunning() || VoiceTake.thoughtRunning();
         boolean call=VoiceTake.callRunning() || LineWire.running();
         android.widget.Button button=Daybook.button(activity,live?"Pause":"Start",!live && !note && !call,v->{
             if(live){paused=true;endListen();refresh.run();return;}
@@ -243,7 +244,8 @@ final class Translate {
 
     private static void arm(Activity activity,Runnable refresh,boolean oneWay) {
         if(paused||speaking||hushed||activity.isFinishing())return;
-        if(VoiceTake.noteRunning() && !VoiceTake.callRunning())return;
+        if(CaptureBarrier.installPending(activity)){Toast.makeText(activity,"Finish or cancel the app update before recording.",Toast.LENGTH_LONG).show();return;}
+        if(VoiceTake.noteRunning() || VoiceTake.thoughtRunning())return;
         if(VoiceTake.callRunning() || LineWire.running())return;
         if(activity.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){
             if(!askedMic){askedMic=true;activity.requestPermissions(new String[]{android.Manifest.permission.RECORD_AUDIO},22);}
@@ -255,8 +257,11 @@ final class Translate {
         if(ear!=null && listening && sessionKind==LISTEN)return;
         if(!SpeechRecognizer.isRecognitionAvailable(activity)){capture(activity,refresh,oneWay);return;}
         dropEar();
+        earLease=CaptureBarrier.begin(activity);
+        if(earLease==null){Toast.makeText(activity,"Finish or cancel the app update before recording.",Toast.LENGTH_LONG).show();return;}
         session=true;sessionKind=oneWay?LISTEN:TOGETHER;listening=true;hushed=false;
         final int gen=++earGen;
+        try{
         ear=SpeechRecognizer.createSpeechRecognizer(activity.getApplicationContext());
         ear.setRecognitionListener(new RecognitionListener(){
             public void onReadyForSpeech(Bundle p){}
@@ -268,7 +273,7 @@ final class Translate {
             public void onError(int code){
                 if(gen!=earGen||hushed||paused||speaking)return;
                 listening=false;
-                if(code==SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS){session=false;return;}
+                if(code==SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS){session=false;dropEar();refresh.run();return;}
                 if(code==SpeechRecognizer.ERROR_CLIENT && !SpeechRecognizer.isRecognitionAvailable(activity)){capture(activity,refresh,oneWay);return;}
                 activity.getWindow().getDecorView().postDelayed(()->{if(gen==earGen && session && !paused && !speaking && !hushed)startEar();},280);
             }
@@ -279,6 +284,7 @@ final class Translate {
             public void onLanguageDetection(Bundle bundle){String tag=bundle==null?null:bundle.getString(SpeechRecognizer.DETECTED_LANGUAGE);if(tag!=null)heardTag=tag;}
         });
         startEar();
+        }catch(RuntimeException unavailable){dropEar();session=false;listening=false;Toast.makeText(activity,"The speech engine could not start. Try again.",Toast.LENGTH_LONG).show();refresh.run();}
     }
 
     private static void startEar() {
@@ -372,7 +378,7 @@ final class Translate {
 
     private static void hush(){listening=false;try{if(ear!=null)ear.cancel();}catch(RuntimeException ignored){}}
 
-    private static void dropEar(){earGen++;SpeechRecognizer gone=ear;ear=null;if(gone!=null){try{gone.cancel();}catch(RuntimeException ignored){}try{gone.destroy();}catch(RuntimeException ignored){}}}
+    private static void dropEar(){earGen++;SpeechRecognizer gone=ear;ear=null;if(gone!=null){try{gone.cancel();}catch(RuntimeException ignored){}try{gone.destroy();}catch(RuntimeException ignored){}}CaptureGate.Lease lease=earLease;earLease=null;if(lease!=null)lease.close();}
 
     private static String codeOfTag(String tag) {
         if(tag==null)return null;
@@ -391,6 +397,7 @@ final class Translate {
 
     private static void capture(Activity activity,Runnable refresh,boolean oneWay) {
         if(listening||paused||speaking||hushed)return;
+        if(CaptureBarrier.installPending(activity)){session=false;listening=false;Toast.makeText(activity,"Finish or cancel the app update before recording.",Toast.LENGTH_LONG).show();refresh.run();return;}
         if(activity.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){if(!askedMic){askedMic=true;activity.requestPermissions(new String[]{android.Manifest.permission.RECORD_AUDIO},22);}return;}
         session=true;sessionKind=oneWay?LISTEN:TOGETHER;listening=true;
         VoiceTake.begin(activity,new VoiceTake.Listener(){

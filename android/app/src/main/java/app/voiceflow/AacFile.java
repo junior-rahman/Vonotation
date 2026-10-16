@@ -22,10 +22,19 @@ final class AacFile {
         MediaFormat format=MediaFormat.createAudioFormat(MediaFormat.MIMETYPE_AUDIO_AAC,rate,this.channels);
         format.setInteger(MediaFormat.KEY_AAC_PROFILE,MediaCodecInfo.CodecProfileLevel.AACObjectLC);
         format.setInteger(MediaFormat.KEY_BIT_RATE,64000);
-        codec=MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_AAC);
-        codec.configure(format,null,null,MediaCodec.CONFIGURE_FLAG_ENCODE);
-        codec.start();
-        muxer=new MediaMuxer(dest.getAbsolutePath(),MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
+        MediaCodec opened=null;
+        MediaMuxer container=null;
+        try{
+            opened=MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_AAC);
+            opened.configure(format,null,null,MediaCodec.CONFIGURE_FLAG_ENCODE);
+            opened.start();
+            container=new MediaMuxer(dest.getAbsolutePath(),MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
+        }catch(Exception error){
+            if(opened!=null){try{opened.stop();}catch(Exception ignored){}try{opened.release();}catch(Exception ignored){}}
+            if(container!=null)try{container.release();}catch(Exception ignored){}
+            throw error;
+        }
+        codec=opened;muxer=container;
     }
 
     void write(byte[] pcm,int length) {
