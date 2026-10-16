@@ -42,7 +42,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 /** Production UI/dispatcher with controlled SYNTHETIC work, never a Google/Drive success claim. */
 public final class BackupFeedbackTest extends Instrumentation {
-    private static final String GOOGLE_UNAVAILABLE="Google Play services must be available and up to date to connect Google Drive.";
+    private static final String GOOGLE_UNAVAILABLE="Google Play services must be available and up to date to connect Google Drive";
     private static final String SUCCESS="Synthetic QA: controlled worker finished. No Google account or upload was used.";
     private static final String FAILURE="Synthetic QA: connection unavailable.\nPlease try again later.";
     private volatile BackupActivity activity;
@@ -78,6 +78,7 @@ public final class BackupFeedbackTest extends Instrumentation {
             baselineAndFirstTaps();
             controlledCompletion();
             controlledFailure();
+            restoreBackGuard();
             destroyedOwner();
             require(externalRequests.get()==0,"Fixture attempted HTTP/HTTPS");
             require("off".equals(Store.get(context,"backup_frequency","")) && noBackupJob(),"Feedback testing enabled automatic backup");
@@ -116,15 +117,16 @@ public final class BackupFeedbackTest extends Instrumentation {
         assertPinned();
         Map<String,?> seeded=prefs.getAll();
         if(!packageInstalled("com.google.android.gms")){
-            singleTap(text("Connect Google"),true);waitText(GOOGLE_UNAVAILABLE);
-            require(text("Google connection needs attention")!=null && !busy(activity),"First Connect tap failed to leave visible terminal feedback");
+            singleTap(text("Connect Google"),true);waitTextStarting(GOOGLE_UNAVAILABLE);
+            require(text("Google Play services unavailable")!=null && !busy(activity),"First Connect tap failed to leave visible terminal feedback");
+            require(enabled(description("Resolve backup status")),"Google failure has no usable pinned recovery action");
             require(seeded.equals(prefs.getAll()) && noBackupJob(),"Missing-GMS Connect changed backup state");
             // The same missing-services error must be newly produced by Restore, not left over from Connect.
             BackupActivity connectOwner=activity;
             launch();
             require(activity!=connectOwner && text("Your backup status")!=null
-                    && text(GOOGLE_UNAVAILABLE)==null && !busy(activity),"Restore first-tap baseline retained Connect feedback");
-            singleTap(text("Restore from Google Drive"),true);waitText(GOOGLE_UNAVAILABLE);
+                    && textStarting(GOOGLE_UNAVAILABLE)==null && !busy(activity),"Restore first-tap baseline retained Connect feedback");
+            singleTap(text("Restore from Google Drive"),true);waitTextStarting(GOOGLE_UNAVAILABLE);
             require(enabled(text("Restore from Google Drive")) && !busy(activity),"First Restore tap left the screen busy");
             require(seeded.equals(prefs.getAll()) && BackupSecrets.snapshot(context).isEmpty(),"Missing-GMS Restore changed local data or password state");
             assertPinned();capture("backup-feedback-1910-google-unavailable-synthetic.png");
@@ -137,6 +139,7 @@ public final class BackupFeedbackTest extends Instrumentation {
         perform(activity,"Saving backup…",work);
         require(work.started.await(5,TimeUnit.SECONDS),"Controlled worker never started");
         require(busy(activity) && text("Saving backup…")!=null && text("In progress")!=null,"Dispatcher did not present progress immediately");
+        require(field(activity,"authProblem")==null && text("Google Play services unavailable")==null,"New work retained a stale Google error");
         ProgressBar bar=(ProgressBar)field(activity,"feedbackProgress");
         boolean[] indicator={false},motion={false};runOnMainSync(()->{motion[0]=android.animation.ValueAnimator.areAnimatorsEnabled();indicator[0]=bar.isIndeterminate() && (motion[0]?bar.getVisibility()==View.VISIBLE:bar.getVisibility()==View.GONE);});
         require(indicator[0],"Busy feedback must be indeterminate, or static when Android animations are off");
@@ -166,6 +169,22 @@ public final class BackupFeedbackTest extends Instrumentation {
         require(text("Completed")==null && enabled(text("Restore from Google Drive")),"Failure reports success or blocks future actions");
         assertPinned();capture("backup-feedback-1910-error-synthetic.png");
         assertDetails(FAILURE.replace("\n",""));
+    }
+
+    private void restoreBackGuard()throws Exception{
+        progress("SYNTHETIC replacement stage: header Back stays on the screen until the controlled dispatcher finishes");
+        ControlledWork work=new ControlledWork("Synthetic QA: restore stage finished without replacing any data",null,false);workers.add(work);
+        Map<String,?> before=prefs.getAll();
+        perform(activity,"Restoring…",work);require(work.started.await(5,TimeUnit.SECONDS),"Controlled restore stage never started");
+        long ticket=(Long)field(activity,"operation");
+        singleTap(description("Back to settings"),true);
+        AlertDialog guard=(AlertDialog)field(activity,"activeDialog");
+        require(guard!=null && guard.isShowing() && !activity.isFinishing() && busy(activity),"Back interrupted the active replacement stage");
+        require(ticket==(Long)field(activity,"operation") && work.release.getCount()==1,"Back changed replacement ownership or released its worker");
+        singleTap(guard.getButton(AlertDialog.BUTTON_POSITIVE),true);
+        require(!guard.isShowing() && !activity.isFinishing() && busy(activity),"Stay did not preserve active replacement work");
+        work.release.countDown();waitText("Restore complete");
+        require(!busy(activity) && before.equals(prefs.getAll()),"Synthetic replacement guard changed data or retained busy state");
     }
     private void destroyedOwner()throws Exception{
         progress("SYNTHETIC delayed result: native Back, owned-password cleanup and stale callback rejection");
@@ -280,6 +299,8 @@ public final class BackupFeedbackTest extends Instrumentation {
     private int visibility(View view){int[] value={-1};runOnMainSync(()->value[0]=view.getVisibility());return value[0];}
     private boolean hasAncestor(View view,Class<?> type){android.view.ViewParent parent=view.getParent();while(parent!=null){if(type.isInstance(parent))return true;parent=parent.getParent();}return false;}
     private View text(String label){return findCurrent(label,null);}
+    private View textStarting(String prefix){View[] result={null};runOnMainSync(()->result[0]=findStarting(activity.getWindow().getDecorView(),prefix));return result[0];}
+    private View findStarting(View view,String prefix){if(view instanceof TextView && ((TextView)view).getText().toString().startsWith(prefix))return view;if(view instanceof ViewGroup){ViewGroup group=(ViewGroup)view;for(int i=0;i<group.getChildCount();i++){View found=findStarting(group.getChildAt(i),prefix);if(found!=null)return found;}}return null;}
     private View description(String label){return findCurrent(null,label);}
     private View findCurrent(String label,String description){View[] result={null};runOnMainSync(()->result[0]=find(activity.getWindow().getDecorView(),label,description));return result[0];}
     private View find(View view,String label,String description){
@@ -288,6 +309,7 @@ public final class BackupFeedbackTest extends Instrumentation {
         if(view instanceof ViewGroup){ViewGroup group=(ViewGroup)view;for(int index=0;index<group.getChildCount();index++){View match=find(group.getChildAt(index),label,description);if(match!=null)return match;}}return null;
     }
     private void waitText(String label)throws Exception{long until=SystemClock.elapsedRealtime()+10000;while(SystemClock.elapsedRealtime()<until){if(text(label)!=null){waitForIdleSync();return;}Thread.sleep(50);}throw new Exception("Expected native feedback missing: "+label);}
+    private void waitTextStarting(String prefix)throws Exception{long until=SystemClock.elapsedRealtime()+10000;while(SystemClock.elapsedRealtime()<until){if(textStarting(prefix)!=null){waitForIdleSync();return;}Thread.sleep(50);}throw new Exception("Expected native feedback missing: "+prefix);}
     private boolean packageInstalled(String name){try{context.getPackageManager().getPackageInfo(name,0);return true;}catch(PackageManager.NameNotFoundException absent){return false;}}
     private boolean noBackupJob(){return ((JobScheduler)context.getSystemService(Context.JOB_SCHEDULER_SERVICE)).getPendingJob(DriveBackup.JOB_ID)==null;}
     private boolean busy(BackupActivity target)throws Exception{return ((Boolean)field(target,"busy")).booleanValue();}

@@ -230,6 +230,7 @@ public final class DriveCloudTest extends Instrumentation {
         DriveBackup.backup(context,TOKEN_A);
         DriveBackup.Connection saved=DriveBackup.discover(context,TOKEN_A);
         require(saved.files.size()==1 && DriveBackup.lastSuccess(context)>0,"Successful backup was not committed or recorded");
+        testFreshnessCache();
         DriveCloudClient.BackupFile previous=saved.files.get(0);byte[] previousBytes=server.files.get(previous.id).bytes.clone();long success=DriveBackup.lastSuccess(context);
         require(!new String(previousBytes,StandardCharsets.ISO_8859_1).contains("Fixture saved words") && !new String(previousBytes,StandardCharsets.ISO_8859_1).contains("fixture-current-api"),"Cloud archive exposes plaintext user data");
         JSONObject remote=DriveBackup.read(context,saved,previous,PASSWORD);
@@ -330,8 +331,14 @@ public final class DriveCloudTest extends Instrumentation {
         DriveBackup.Connection otherReconnect=another;reject(()->DriveBackup.connect(context,otherReconnect),"Reconnect switched the configured account without disconnect");
         require(EMAIL_A.equals(DriveBackup.accountEmail(context)),"Wrong-account reconnect changed identity");
         int remoteCount=server.files.size(),deletesBefore=server.deletes;String history=Store.get(context,"history","");
+        require(prefs.contains("backup_snapshot_at") && prefs.contains("backup_snapshot_fingerprint"),"Successful backup did not record its local snapshot status");
+        Map<String,?> beforeDisconnect=prefs.getAll(),secretBeforeDisconnect=BackupSecrets.snapshot(context);
+        Context failDisconnect=new CommitFailureContext(context,1);
+        reject(()->DriveBackup.disconnect(failDisconnect),"A failed disconnect commit was reported as successful");
+        require(prefs.getAll().equals(beforeDisconnect) && BackupSecrets.snapshot(context).equals(secretBeforeDisconnect),"Failed disconnect did not restore the account's snapshot status and password");
         DriveBackup.disconnect(context);
         require(!DriveBackup.configured(context) && !DriveBackup.passwordReady(context) && backupJob()==null && BackupSecrets.snapshot(context).isEmpty(),"Disconnect retained an account/password/schedule");
+        require(!prefs.contains("backup_snapshot_at") && !prefs.contains("backup_snapshot_fingerprint") && DriveBackup.snapshotNote(context).isEmpty(),"Disconnect retained another account's saved snapshot status");
         require(server.files.size()==remoteCount && server.deletes==deletesBefore && history.equals(Store.get(context,"history","")),"Disconnect deleted remote backup or local history");
 
         byte[] otherBytes=BackupArchive.encode(validPayload("Another account words"),WRONG_PASSWORD);server.files.put("account-b-existing",new RemoteFile(TOKEN_B,metadata("account-b-existing",1700000010000L,"committed",otherBytes.length),otherBytes));
@@ -342,6 +349,7 @@ public final class DriveCloudTest extends Instrumentation {
         require(prefs.getAll().equals(untouched) && BackupSecrets.snapshot(context).equals(noSecret),"Cross-account/password selection changed local data or account");
         JSONObject otherData=DriveBackup.read(context,otherSession,otherFile,WRONG_PASSWORD);DriveBackup.restore(context,otherSession,WRONG_PASSWORD,otherFile,otherData);
         require(EMAIL_B.equals(DriveBackup.accountEmail(context)) && Store.history(context).getJSONObject(0).getString("text").equals("Another account words") && !DriveBackup.automaticEnabled(context) && "off".equals(Store.get(context,"backup_frequency","")),"New-phone restore did not adopt account/history with automation off");
+        require(!prefs.contains("backup_snapshot_at") && !prefs.contains("backup_snapshot_fingerprint"),"Adopting a different account reused the previous account's snapshot status");
         byte[] newerLocked=BackupArchive.encode(validPayload("Latest locked words"),PASSWORD);server.files.put("account-b-locked",new RemoteFile(TOKEN_B,metadata("account-b-locked",1700000020000L,"committed",newerLocked.length),newerLocked));
         DriveBackup.Connection recoverOlder=DriveBackup.discover(context,TOKEN_B);JSONObject olderData=DriveBackup.read(context,recoverOlder,otherFile,WRONG_PASSWORD);
         DriveBackup.restore(context,recoverOlder,WRONG_PASSWORD,otherFile,olderData);
@@ -352,6 +360,88 @@ public final class DriveCloudTest extends Instrumentation {
         Exception missingSecret=reject(()->DriveBackup.backup(context,TOKEN_B),"Backup proceeded without the remembered password");
         require(!DriveBackup.retryable(missingSecret),"Missing password was treated as a transient network error");
         require(!DriveBackup.retryable(new java.io.InterruptedIOException("cancelled")) && !DriveBackup.retryable(new DriveCloudClient.ProtocolFailure("bad metadata")),"Cancellation or malformed protocol was classified for recurring retry");
+        prefs.edit().putString("backup_snapshot_at","malformed").putString("backup_snapshot_fingerprint","fixture-status-only").commit();
+        require(DriveBackup.snapshotNote(context).isEmpty(),"Malformed local snapshot status crashed backup settings");
+    }
+
+    /** Production status parsing must stay off main, coalesce work, and reject stale results. */
+    private void testFreshnessCache()throws Exception {
+        SharedPreferences prefs=Store.prefs(context);Map<String,?> before=prefs.getAll();String draft=MainActivity.currentDraft;
+        FingerprintContext guarded=new FingerprintContext(context);
+        try {
+            runOnMainSync(()->{DriveBackup.summary(guarded);DriveBackup.snapshotNote(guarded);});
+            require(guarded.historyReads.get()==0 && !guarded.readOnMain.get(),"Rendering backup status parsed history on main");
+            java.util.concurrent.CountDownLatch completed=new java.util.concurrent.CountDownLatch(2);
+            java.util.concurrent.atomic.AtomicReference<String> note=new java.util.concurrent.atomic.AtomicReference<>();
+            java.util.concurrent.atomic.AtomicBoolean callbackOnMain=new java.util.concurrent.atomic.AtomicBoolean(true);
+            DriveBackup.SnapshotNoteCallback callback=value->{note.set(value);if(android.os.Looper.myLooper()!=android.os.Looper.getMainLooper())callbackOnMain.set(false);completed.countDown();};
+            runOnMainSync(()->{DriveBackup.requestSnapshotNote(guarded,callback);DriveBackup.requestSnapshotNote(guarded,callback);});
+            require(guarded.entered.await(20,java.util.concurrent.TimeUnit.SECONDS),"Async freshness calculation did not reach its worker");
+            String dictionary=Store.get(context,"dictionary","");
+            runOnMainSync(()->prefs.edit().putString("dictionary",dictionary+"\nfixture=Fixture").commit());
+            guarded.release.countDown();
+            require(completed.await(30,java.util.concurrent.TimeUnit.SECONDS),"Coalesced freshness callbacks did not complete");
+            require(callbackOnMain.get() && !guarded.readOnMain.get(),"Freshness parsing or callback ran on the wrong thread");
+            require(guarded.historyReads.get()==2 && note.get()!=null && note.get().contains("Newer dictations"),"A stale pre-edit freshness result was delivered or requests did not coalesce/retry once");
+            int reads=guarded.historyReads.get();
+            require(requestFreshness(guarded).contains("Newer dictations") && guarded.historyReads.get()==reads,"Ordinary status refresh reparsed unchanged history instead of using its cache");
+            runOnMainSync(()->prefs.edit().putString("backup_error","fixture status-only change").commit());
+            require(requestFreshness(guarded).contains("Newer dictations") && guarded.historyReads.get()==reads,"Status-only feedback invalidated portable-data freshness");
+            runOnMainSync(()->prefs.edit().putString("dictionary",dictionary).commit());
+            require(requestFreshness(guarded).isEmpty() && guarded.historyReads.get()==reads+1,"A portable edit did not invalidate freshness or restore the correct current-snapshot status");
+            require(requestFreshnessWithQueuedEdit(guarded,prefs,dictionary).contains("Newer dictations") && guarded.historyReads.get()==reads+2,"A queued cached callback ignored a background edit whose listener had not yet run");
+            runOnMainSync(()->prefs.edit().putString("dictionary",dictionary).commit());
+            require(requestFreshness(guarded).isEmpty() && guarded.historyReads.get()==reads+3,"Freshness did not recover after the queued-listener race");
+            runOnMainSync(()->DraftState.set(draft+" changed fixture draft"));
+            require(requestFreshness(guarded).contains("Newer dictations") && guarded.historyReads.get()==reads+4,"A draft-only edit reused cached freshness without checking the draft identity");
+        } finally {
+            guarded.release.countDown();
+            runOnMainSync(()->{restorePrefs(prefs,before);DraftState.set(draft);});
+        }
+    }
+
+    private String requestFreshness(Context source)throws Exception {
+        java.util.concurrent.CountDownLatch completed=new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.atomic.AtomicReference<String> result=new java.util.concurrent.atomic.AtomicReference<>();
+        runOnMainSync(()->DriveBackup.requestSnapshotNote(source,note->{result.set(note);completed.countDown();}));
+        require(completed.await(30,java.util.concurrent.TimeUnit.SECONDS),"Freshness request did not complete");
+        return result.get();
+    }
+
+    private String requestFreshnessWithQueuedEdit(Context source,SharedPreferences preferences,String dictionary)throws Exception {
+        java.util.concurrent.CountDownLatch queued=new java.util.concurrent.CountDownLatch(1),releaseMain=new java.util.concurrent.CountDownLatch(1),completed=new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.atomic.AtomicReference<String> result=new java.util.concurrent.atomic.AtomicReference<>();
+        new android.os.Handler(android.os.Looper.getMainLooper()).post(()->{
+            DriveBackup.requestSnapshotNote(source,note->{result.set(note);completed.countDown();});
+            queued.countDown();
+            try{releaseMain.await(5,java.util.concurrent.TimeUnit.SECONDS);}catch(InterruptedException interrupted){Thread.currentThread().interrupt();}
+        });
+        try {
+            require(queued.await(5,java.util.concurrent.TimeUnit.SECONDS),"Cached freshness callback was not queued on main");
+            // The cached callback is already ahead of this background write's listener message.
+            require(preferences.edit().putString("dictionary",dictionary+"\nqueued=Queued").commit(),"Could not seed the queued-listener freshness race");
+        } finally {releaseMain.countDown();}
+        require(completed.await(30,java.util.concurrent.TimeUnit.SECONDS),"Queued-listener freshness calculation did not complete");
+        return result.get();
+    }
+
+    /** Only the first background history read is held; main reads fail immediately, never block. */
+    private static final class FingerprintContext extends android.content.ContextWrapper {
+        final java.util.concurrent.atomic.AtomicInteger historyReads=new java.util.concurrent.atomic.AtomicInteger();
+        final java.util.concurrent.atomic.AtomicBoolean readOnMain=new java.util.concurrent.atomic.AtomicBoolean();
+        final java.util.concurrent.CountDownLatch entered=new java.util.concurrent.CountDownLatch(1),release=new java.util.concurrent.CountDownLatch(1);
+        final SharedPreferences wrapped;
+        FingerprintContext(Context base){super(base);SharedPreferences actual=Store.prefs(base);
+            wrapped=(SharedPreferences)java.lang.reflect.Proxy.newProxyInstance(SharedPreferences.class.getClassLoader(),new Class<?>[]{SharedPreferences.class},(proxy,method,args)->{
+                if(method.getName().equals("getString") && args!=null && "history".equals(args[0])){
+                    if(android.os.Looper.myLooper()==android.os.Looper.getMainLooper()){readOnMain.set(true);throw new IllegalStateException("History was parsed on main");}
+                    if(historyReads.incrementAndGet()==1){entered.countDown();if(!release.await(30,java.util.concurrent.TimeUnit.SECONDS))throw new IOException("Fixture freshness latch expired");}
+                }
+                try{return method.invoke(actual,args);}catch(java.lang.reflect.InvocationTargetException error){throw error.getCause();}
+            });
+        }
+        @Override public Context getApplicationContext(){return this;}
+        @Override public SharedPreferences getSharedPreferences(String name,int mode){return name.equals("voiceflow")?wrapped:super.getSharedPreferences(name,mode);}
     }
 
     /** Crypto still uses the production cost; slow software emulation gets a bounded diagnostic wait. */

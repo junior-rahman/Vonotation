@@ -45,7 +45,7 @@ public final class DaybookUiTest extends Instrumentation {
     private static final String NEW_TEXT="Synthetic QA: planned a quiet afternoon and a short walk.";
     private static final String OLD_TEXT="Synthetic QA: checked today's notes and the shopping list.";
     private static final String YESTERDAY_TEXT="Synthetic QA: finished a small project and saved the next steps.";
-    private static final String GOOGLE_UNAVAILABLE="Google Play services must be available and up to date to connect Google Drive.";
+    private static final String GOOGLE_UNAVAILABLE="Google Play services must be available and up to date to connect Google Drive";
     private static final String HAPTICS="haptic_feedback";
     private volatile MainActivity main;
     private volatile BackupActivity backup;
@@ -402,7 +402,7 @@ public final class DaybookUiTest extends Instrumentation {
     private View find(Activity activity,String text,String description){if(activity==null)return null;View[] found={null};runOnMainSync(()->found[0]=findView(activity.getWindow().getDecorView(),text,description));return found[0];}
     private View findView(View view,String text,String description){
         if(description!=null && description.equals(String.valueOf(view.getContentDescription())))return view;
-        if(text!=null && view instanceof TextView && text.equals(((TextView)view).getText().toString()))return view;
+        if(text!=null && view instanceof TextView){String actual=((TextView)view).getText().toString();if(text.equals(actual) || (GOOGLE_UNAVAILABLE.equals(text) && actual.startsWith(text)))return view;}
         if(view instanceof ViewGroup){ViewGroup group=(ViewGroup)view;for(int i=0;i<group.getChildCount();i++){View found=findView(group.getChildAt(i),text,description);if(found!=null)return found;}}return null;
     }
     private View waitDescription(Activity activity,String description)throws Exception{return waitView(activity,null,description);}

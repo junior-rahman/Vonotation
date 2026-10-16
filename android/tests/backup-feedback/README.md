@@ -4,7 +4,7 @@ Build the exact production preview APK and then run:
 
 ```sh
 ANDROID_SDK_ROOT=/path/to/android-sdk tests/build-backup-feedback-fixture.sh
-adb install -r app/build/outputs/apk/preview/VoiceFlow-1.9.10.apk
+adb install -r app/build/outputs/apk/preview/app-preview.apk
 adb install -r build/tests/backup-feedback/VoiceFlow-backup-feedback-fixture.apk
 adb shell am instrument -w app.voiceflow.backup.feedback.fixture/app.voiceflow.BackupFeedbackTest
 ```
@@ -51,6 +51,14 @@ runs cannot guarantee cleanup, so do not run this on a real-data installation.
    inherit the previous owner's busy state or result.
 7. Automatic backup stays Off, no job is scheduled and no HTTP/HTTPS request is
    made. Executed assertions and physical taps are counted at runtime.
+8. A new operation clears a previous inline Google error, and a blocked Google
+   connection offers a usable pinned recovery action. Missing-services assertions
+   preserve the actionable message while allowing its actual ConnectionResult code.
+9. During a **synthetic** controlled `Restoring…` dispatcher stage, a physical
+   header Back tap opens the stay-on-screen explanation and keeps worker ownership.
+   Stay preserves the operation, and completion releases busy state. No local data
+   is replaced by this scenario; it does not prove restore atomicity or resilience
+   to Home, process death, power loss, or Android task removal.
 
 Screenshots are exported through `UiAutomation.takeScreenshot()` to the target
 app's external-media directory. Names include `1910` and `synthetic`; the runner

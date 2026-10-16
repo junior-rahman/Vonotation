@@ -23,6 +23,7 @@ import java.util.Set;
 
 /** Native disconnected/unsupported-Google-device UI checks; this is not Google sign-in testing. */
 public final class DriveBackupScreenTest extends Instrumentation {
+    private static final String GOOGLE_UNAVAILABLE="Google Play services must be available and up to date to connect Google Drive";
     private Activity screen;private Context context;private int checks,requests;private String captureWarning="";
     @Override public void onCreate(Bundle args){super.onCreate(args);start();}
     @Override public void onStart(){
@@ -41,7 +42,7 @@ public final class DriveBackupScreenTest extends Instrumentation {
             capture("drive-backup-disconnected-195.png");
             runOnMainSync(()->connect.performClick());waitForIdleSync();
             long until=android.os.SystemClock.elapsedRealtime()+10000;View unavailable=null;
-            while(android.os.SystemClock.elapsedRealtime()<until){unavailable=findText("Google Play services must be available and up to date to connect Google Drive.");if(unavailable!=null)break;Thread.sleep(100);}
+            while(android.os.SystemClock.elapsedRealtime()<until){unavailable=findText(GOOGLE_UNAVAILABLE);if(unavailable!=null)break;Thread.sleep(100);}
             require(unavailable!=null,"Unsupported AOSP device did not display an actionable Google Play services message");
             require(!screen.isFinishing() && findText("Connect Google").isEnabled() && disconnected.equals(prefs.getAll()) && BackupSecrets.snapshot(context).isEmpty() && backupJobMissing(),"Unavailable Google sign-in crashed, left controls busy, or changed local backup state");
             require(requests==0,"Unsupported Google device sent an external request");
@@ -56,7 +57,7 @@ public final class DriveBackupScreenTest extends Instrumentation {
     }
     private View findText(String text){View[] found={null};runOnMainSync(()->found[0]=find(screen.getWindow().getDecorView(),text,null));return found[0];}
     private View findDescription(String description){View[] found={null};runOnMainSync(()->found[0]=find(screen.getWindow().getDecorView(),null,description));return found[0];}
-    private View find(View view,String text,String description){if(text!=null && view instanceof TextView && ((TextView)view).getText().toString().equals(text))return view;if(description!=null && description.equals(String.valueOf(view.getContentDescription())))return view;if(view instanceof ViewGroup){ViewGroup group=(ViewGroup)view;for(int i=0;i<group.getChildCount();i++){View found=find(group.getChildAt(i),text,description);if(found!=null)return found;}}return null;}
+    private View find(View view,String text,String description){if(text!=null && view instanceof TextView){String actual=((TextView)view).getText().toString();if(actual.equals(text) || (GOOGLE_UNAVAILABLE.equals(text) && actual.startsWith(text)))return view;}if(description!=null && description.equals(String.valueOf(view.getContentDescription())))return view;if(view instanceof ViewGroup){ViewGroup group=(ViewGroup)view;for(int i=0;i<group.getChildCount();i++){View found=find(group.getChildAt(i),text,description);if(found!=null)return found;}}return null;}
     private boolean backupJobMissing(){return ((JobScheduler)context.getSystemService(Context.JOB_SCHEDULER_SERVICE)).getPendingJob(DriveBackup.JOB_ID)==null;}
     private void require(boolean pass,String message)throws Exception{checks++;if(!pass)throw new Exception(message);}
     private void capture(String name) {

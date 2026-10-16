@@ -3,6 +3,7 @@ package app.voiceflow;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Bundle;
 import android.text.InputFilter;
@@ -32,8 +33,9 @@ public final class BackupActivity extends Activity {
     private ScrollView scroll;
     private TextView status, feedbackTitle, feedbackDetail, feedbackState;
     private ProgressBar feedbackProgress;
-    private Button feedbackDetails;
+    private Button feedbackDetails, feedbackAction;
     private AlertDialog activeDialog;
+    private AlertDialog leaveDialog;
     private DriveAuth.Callback pendingAuth;
     private boolean busy, destroyed, compactFeedback;
     private long operation;
@@ -41,8 +43,32 @@ public final class BackupActivity extends Activity {
     private Button feedbackCancel;
     private boolean backupCancellable, cancelRequested, backupWorkerStarted;
     private String notice = "", noticeTitle = "", progress = "";
+    private Runnable retryOperation;
+    private String retryOperationLabel = "";
     private enum NoticeKind { INFO, SUCCESS, WARNING, ERROR }
     private NoticeKind noticeKind = NoticeKind.INFO;
+    private boolean observingPreferences;
+    private final android.os.Handler ui = new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable refreshSavedStatus = () -> {
+        if (alive() && !busy) {
+            // A job's actual failure must stay visible even if a preference change
+            // had just produced a local acknowledgement in this screen.
+            if (!Store.get(this,"backup_error","").isEmpty()) {
+                notice = "";
+                noticeTitle = "";
+                retryOperation = null;
+            }
+            render();
+        }
+    };
+    private final SharedPreferences.OnSharedPreferenceChangeListener savedStatusChanged = (preferences,key) -> {
+        if (key == null || key.startsWith("backup_")) {
+            // A completed automatic job can change several fields together. Rebuild once,
+            // after that transaction, without interrupting any foreground operation.
+            ui.removeCallbacks(refreshSavedStatus);
+            ui.post(refreshSavedStatus);
+        }
+    };
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -61,7 +87,7 @@ public final class BackupActivity extends Activity {
         });
         LinearLayout header = Ui.row(this);
         header.setPadding(Ui.dp(this,20),Ui.dp(this,12),Ui.dp(this,20),Ui.dp(this,8));
-        Button back = Daybook.button(this,"‹",false,v -> finish());
+        Button back = Daybook.button(this,"‹",false,v -> leaveBackup());
         back.setContentDescription("Back to settings");
         header.addView(back,new LinearLayout.LayoutParams(Ui.dp(this,48),Ui.dp(this,48)));
         TextView title = Daybook.text(this,"Backup",24,Daybook.ink(this),true);
@@ -88,8 +114,47 @@ public final class BackupActivity extends Activity {
 
     @Override protected void onResume() {
         super.onResume();
+        if (!observingPreferences) {
+            Store.prefs(this).registerOnSharedPreferenceChangeListener(savedStatusChanged);
+            observingPreferences = true;
+        }
         DriveBackup.schedule(this);
-        if (!busy) render();
+        if (!busy) refreshSavedStatus.run();
+    }
+
+    @Override protected void onPause() {
+        if (observingPreferences) Store.prefs(this).unregisterOnSharedPreferenceChangeListener(savedStatusChanged);
+        observingPreferences = false;
+        ui.removeCallbacks(refreshSavedStatus);
+        super.onPause();
+    }
+
+    @Override public void onBackPressed() { leaveBackup(); }
+
+    private void leaveBackup() {
+        if (!alive()) return;
+        if (leaveDialog != null && leaveDialog.isShowing()) return;
+        if (busy && (progress.equals("Restoring…") || progress.equals("Importing…"))) {
+            // Replacement has already been confirmed. Do not interrupt its apply/rollback
+            // transaction just because a system Back gesture or the header is touched.
+            leaveDialog = new AlertDialog.Builder(this).setTitle("Restore in progress")
+                    .setMessage("Keep this screen open until your data has finished restoring.")
+                    .setPositiveButton("Stay here",null).create();
+            show(leaveDialog);
+            return;
+        }
+        if (busy && backupCancellable) {
+            leaveDialog = new AlertDialog.Builder(this).setTitle("Leave backup?")
+                    .setMessage("This requests cancellation. If Google Drive has already saved the backup, that saved copy will remain.")
+                    .setNegativeButton("Stay here",null)
+                    .setPositiveButton("Cancel and leave",(dialog,which) -> {
+                        cancelBackup();
+                        finish();
+                    }).create();
+            show(leaveDialog);
+            return;
+        }
+        finish();
     }
 
     @Override public void onConfigurationChanged(android.content.res.Configuration configuration) {
@@ -103,6 +168,7 @@ public final class BackupActivity extends Activity {
         destroyed = true;
         operation++;
         pendingAuth = null;
+        ui.removeCallbacks(refreshSavedStatus);
         if (activeDialog != null) activeDialog.dismiss();
         activeDialog = null;
         worker.shutdownNow();
@@ -147,14 +213,22 @@ public final class BackupActivity extends Activity {
         status = Daybook.text(this,DriveBackup.summary(this),12,Daybook.ink(this),false);
         status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
         account.addView(status);
+        DriveBackup.requestSnapshotNote(this,note -> {
+            if (alive() && !busy && viewVersion == rendered) {
+                status.setText(DriveBackup.summary(this));
+                renderFeedback();
+            }
+        });
         if (authProblem != null && !busy) {
             Ui.space(account,10);
-            TextView problemTitle = Daybook.text(this,authProblemTitle,13,0xffb34c40,true);
+            TextView problemTitle = Daybook.text(this,authProblemTitle,13,Daybook.coral(this),true);
             account.addView(problemTitle);
-            TextView problem = Daybook.text(this,authProblem,12,0xffb34c40,false);
+            TextView problem = Daybook.text(this,authProblem,12,Daybook.coral(this),false);
             problem.setTextIsSelectable(true);
             account.addView(problem);
-            if (retryAuth != null) { Ui.space(account,8); action(account,"Retry",false,true,v -> retryAuth.run()); }
+            if (retryAuth != null && !authSetupProblem()) { Ui.space(account,8); action(account,"Retry",false,true,v -> retryAuth.run()); }
+            if (authSetupProblem())
+                action(account,"Copy setup details",false,true,v -> Ui.copy(this,authProblem));
         }
         Ui.space(account,16);
         if (!connected) {
@@ -193,6 +267,9 @@ public final class BackupActivity extends Activity {
                 Store.prefs(BackupActivity.this).edit().putString("backup_frequency",values[position]).apply();
                 DriveBackup.schedule(BackupActivity.this);
                 status.setText(DriveBackup.summary(BackupActivity.this));
+                feedback(position == 0 ? "Automatic backup off" : "Automatic backup updated",
+                        position == 0 ? "You can still use Back up now whenever you need it."
+                                : "Android will back up " + (position == 1 ? "daily" : "weekly") + " when your selected network is available.",NoticeKind.SUCCESS);
                 renderFeedback();
             }
         });
@@ -213,6 +290,8 @@ public final class BackupActivity extends Activity {
             Store.prefs(this).edit().putBoolean("backup_wifi",checked).apply();
             DriveBackup.schedule(this);
             status.setText(DriveBackup.summary(this));
+            feedback("Network preference saved",checked ? "Automatic backups will wait for an unmetered network, such as Wi-Fi."
+                    : "Automatic backups can use mobile data. Your carrier’s data charges may apply.",NoticeKind.SUCCESS);
             renderFeedback();
         });
         automatic.addView(wifi);
@@ -222,7 +301,7 @@ public final class BackupActivity extends Activity {
         LinearLayout data = backupCard();
         data.addView(Daybook.text(this,"Your data, kept together",15,Daybook.ink(this),true));
         Ui.space(data,8);
-        data.addView(Daybook.text(this,"Encrypted history, dictionary and settings, including provider, model and endpoint choices. API keys, audio and text from password or PIN fields are excluded. Reconnect your provider on a new phone or after an endpoint change.",13,Daybook.muted(this),false));
+        data.addView(Daybook.text(this,"Encrypted dictations, Quick Thoughts, dictionary and settings, including provider, model and endpoint choices. API keys, audio recordings, temporary Clipboard items and text from password or PIN fields are excluded. Reconnect your provider on a new phone or after an endpoint change.",13,Daybook.muted(this),false));
         Ui.space(data,16);
         action(data,"Back up now",true,ready && !reconnect && !recovery,v -> backupNow());
         action(data,"Restore from Google Drive",false,true,v -> discover(connected ? DriveBackup.accountEmail(this) : null,Purpose.RESTORE));
@@ -239,12 +318,7 @@ public final class BackupActivity extends Activity {
             addCard(previous);
         }
         if (connected || !Store.get(this,"backup_uri","").isEmpty()) {
-            action(body,"Disconnect backup",false,true,v -> show(new AlertDialog.Builder(this)
-                    .setTitle("Disconnect backup?")
-                    .setMessage("Stops automatic backups on this phone and forgets the saved backup password. Your backups stay in Google Drive.")
-                    .setNegativeButton("Keep connected",null)
-                    .setPositiveButton("Disconnect",(dialog,which) -> perform("Disconnecting…",() -> { DriveBackup.disconnect(getApplicationContext()); return "Backup disconnected."; }))
-                    .create()));
+            action(body,"Disconnect backup",false,true,v -> confirmDisconnect());
         }
         scroll.post(() -> {
             if (alive() && viewVersion == rendered) scroll.scrollTo(0,previousScroll);
@@ -293,6 +367,12 @@ public final class BackupActivity extends Activity {
         cancelParams.topMargin = Ui.dp(this,8);
         feedbackPanel.addView(feedbackCancel,cancelParams);
         feedbackCancel.setVisibility(View.GONE);
+        feedbackAction = Daybook.button(this,"Try again",true,v -> recoverBackup());
+        feedbackAction.setContentDescription("Resolve backup status");
+        LinearLayout.LayoutParams actionParams = new LinearLayout.LayoutParams(-1,Ui.dp(this,44));
+        actionParams.topMargin = Ui.dp(this,8);
+        feedbackPanel.addView(feedbackAction,actionParams);
+        feedbackAction.setVisibility(View.GONE);
         LinearLayout.LayoutParams panelParams = new LinearLayout.LayoutParams(-1,-2);
         panelParams.setMargins(Ui.dp(this,20),Ui.dp(this,8),Ui.dp(this,20),Ui.dp(this,12));
         root.addView(feedbackPanel,panelParams);
@@ -308,6 +388,11 @@ public final class BackupActivity extends Activity {
 
     private void renderFeedback() {
         if (feedbackPanel == null) return;
+        if (!busy && leaveDialog != null) {
+            leaveDialog.dismiss();
+            if (activeDialog == leaveDialog) activeDialog = null;
+            leaveDialog = null;
+        }
         String savedError = Store.get(this,"backup_error","");
         boolean hasResult = !notice.isEmpty();
         boolean error = !busy && (hasResult ? noticeKind == NoticeKind.ERROR || noticeKind == NoticeKind.WARNING : !savedError.isEmpty());
@@ -327,6 +412,46 @@ public final class BackupActivity extends Activity {
             feedbackCancel.setEnabled(!cancelRequested);
             feedbackCancel.setText(cancelRequested ? "Cancelling…" : "Cancel backup");
         }
+        if (feedbackAction != null) {
+            String action = error ? recoveryLabel() : "";
+            feedbackAction.setText(action);
+            feedbackAction.setVisibility(!busy && !action.isEmpty() ? View.VISIBLE : View.GONE);
+        }
+    }
+
+    private String recoveryLabel() {
+        if (authSetupProblem()) return "Copy setup details";
+        if (authProblem != null && retryAuth != null) return "Retry Google connection";
+        if (retryOperation != null) return retryOperationLabel;
+        if (!DriveBackup.configured(this)) return "Connect Google";
+        if (DriveBackup.needsReconnect(this)) return "Reconnect Google";
+        if (DriveBackup.listingIncomplete(this)) return "Check Drive backups";
+        if (!DriveBackup.passwordReady(this)) return "Set up backup password";
+        return "Try backup again";
+    }
+
+    private void recoverBackup() {
+        if (!alive() || busy) return;
+        if (authSetupProblem()) { Ui.copy(this,authProblem); return; }
+        if (authProblem != null && retryAuth != null) { retryAuth.run(); return; }
+        if (retryOperation != null) { retryOperation.run(); return; }
+        repairOrRetryUpload();
+    }
+
+    private boolean authSetupProblem() {
+        // This is the fixed, known DEVELOPER_ERROR title. Other cancelled or
+        // unsuccessful Google outcomes are never treated as a setup diagnosis.
+        return authProblem != null && "Google sign-in isn’t set up for this build".equals(authProblemTitle);
+    }
+
+    private void repairOrRetryUpload() {
+        if (!alive() || busy) return;
+        if (!DriveBackup.configured(this)) { discover(null,Purpose.SETUP); return; }
+        if (DriveBackup.needsReconnect(this)) { discover(DriveBackup.accountEmail(this),Purpose.RECONNECT); return; }
+        if (DriveBackup.listingIncomplete(this) || !DriveBackup.passwordReady(this)) {
+            discover(DriveBackup.accountEmail(this),Purpose.SETUP); return;
+        }
+        backupNow();
     }
 
     /**
@@ -449,9 +574,13 @@ public final class BackupActivity extends Activity {
     private long begin(String value) {
         if (!alive() || busy) return -1;
         busy = true;
+        authProblemTitle = null;
+        authProblem = null;
         notice = "";
         noticeTitle = "";
         noticeKind = NoticeKind.INFO;
+        retryOperation = null;
+        retryOperationLabel = "";
         progress = value;
         long ticket = ++operation;
         render();
@@ -475,6 +604,7 @@ public final class BackupActivity extends Activity {
                 backupCancellable = false; cancelRequested = false; backupWorkerStarted = false;
                 if (problem instanceof DriveBackup.CancelledException) feedback("Backup cancelled",message(problem),NoticeKind.INFO);
                 else if (problem != null) feedback(failedTitle(value),message(problem),NoticeKind.ERROR);
+                else { retryOperation = null; retryOperationLabel = ""; }
                 render();
                 if (problem == null && done != null) done.accept(completed);
             });
@@ -484,12 +614,34 @@ public final class BackupActivity extends Activity {
     private void perform(String value,Work<String> work) {
         long ticket = begin(value);
         if (ticket < 0) return;
+        if (value.equals("Importing…")) {
+            retryOperation = this::launchLegacy;
+            retryOperationLabel = "Choose previous backup";
+        } else if (value.equals("Disconnecting…")) {
+            retryOperation = this::confirmDisconnect;
+            retryOperationLabel = "Try disconnect again";
+        } else if (value.equals("Reconnecting…")) {
+            retryOperation = () -> discover(DriveBackup.accountEmail(this),Purpose.RECONNECT);
+            retryOperationLabel = "Reconnect Google";
+        }
         task(ticket,value,work,result -> { feedback(completedTitle(value),result,NoticeKind.SUCCESS); render(); });
     }
 
-    private void authorize(String email,String value,Done<String> ready) {
+    private void confirmDisconnect() {
+        if (!alive() || busy) return;
+        show(new AlertDialog.Builder(this).setTitle("Disconnect backup?")
+                .setMessage("Stops automatic backups on this phone and forgets the saved backup password. Your backups stay in Google Drive.")
+                .setNegativeButton("Keep connected",null)
+                .setPositiveButton("Disconnect",(dialog,which) -> perform("Disconnecting…",() -> {
+                    DriveBackup.disconnect(getApplicationContext()); return "Backup disconnected.";
+                })).create());
+    }
+
+    private void authorize(String email,String value,String retryLabel,Done<String> ready) {
         long ticket = begin(value);
         if (ticket < 0) return;
+        retryOperation = retryAuth;
+        retryOperationLabel = retryLabel;
         pendingAuth = new DriveAuth.Callback() {
             @Override public void ready(String token) {
                 if (!owns(ticket)) return;
@@ -518,7 +670,7 @@ public final class BackupActivity extends Activity {
     private void discover(String email,Purpose purpose) {
         retryAuth = () -> discover(email,purpose);
         authProblemTitle = null; authProblem = null;
-        authorize(email,"Connecting Google…",token -> {
+        authorize(email,"Connecting Google…","Check Drive again",token -> {
             long ticket = operation;
             task(ticket,"Checking Google Drive…",() -> {
                 DriveBackup.Connection connection = DriveBackup.discover(getApplicationContext(),token);
@@ -549,7 +701,8 @@ public final class BackupActivity extends Activity {
         if (!DriveBackup.configured(this) || !DriveBackup.passwordReady(this) || DriveBackup.needsReconnect(this)
                 || DriveBackup.listingIncomplete(this)) return;
         final int epoch = DriveBackup.cancelEpoch();
-        authorize(DriveBackup.accountEmail(this),"Connecting Google…",token -> {
+        retryAuth = this::repairOrRetryUpload;
+        authorize(DriveBackup.accountEmail(this),"Connecting Google…","Try backup again",token -> {
             if (DriveBackup.cancelEpoch() != epoch) return;
             long ticket = operation;
             backupWorkerStarted = true;
@@ -611,6 +764,9 @@ public final class BackupActivity extends Activity {
         if (connection.hasRejected) { release(password); feedback("Backups need attention",connection.warning,NoticeKind.ERROR); render(); return; }
         long ticket = begin("Protecting your backup…");
         if (ticket < 0) { release(password); return; }
+        final String account = connection.profile.email;
+        retryOperation = () -> discover(account,Purpose.SETUP);
+        retryOperationLabel = "Try setup again";
         WorkerPassword owned = ownedPassword(password,true);
         task(ticket,"Protecting your backup…",() -> {
             try {
@@ -624,6 +780,9 @@ public final class BackupActivity extends Activity {
     private void checkArchive(DriveBackup.Connection connection,DriveCloudClient.BackupFile file,char[] password,boolean allowKeep) {
         long ticket = begin("Checking backup…");
         if (ticket < 0) { release(password); return; }
+        final String account = connection.profile.email;
+        retryOperation = () -> discover(account,allowKeep ? Purpose.SETUP : Purpose.RESTORE);
+        retryOperationLabel = "Try unlocking again";
         WorkerPassword owned = ownedPassword(password,false);
         worker.execute(() -> {
             JSONObject checked = null;
@@ -679,6 +838,9 @@ public final class BackupActivity extends Activity {
     private void restore(DriveBackup.Connection connection,DriveCloudClient.BackupFile file,char[] password,JSONObject archive) {
         long ticket = begin("Restoring…");
         if (ticket < 0) { release(password); return; }
+        final String account = connection.profile.email;
+        retryOperation = () -> discover(account,Purpose.RESTORE);
+        retryOperationLabel = "Try restore again";
         WorkerPassword owned = ownedPassword(password,true);
         task(ticket,"Restoring…",() -> {
             try {
@@ -691,6 +853,7 @@ public final class BackupActivity extends Activity {
             } finally { owned.close(); }
         },result -> {
             boolean paused = DriveBackup.listingIncomplete(this) || !DriveBackup.passwordReady(this);
+            if (paused) retryOperation = null;
             feedback(paused ? "Restored · uploads paused" : "Restore complete",result,paused ? NoticeKind.WARNING : NoticeKind.SUCCESS);
             render();
         });
@@ -851,6 +1014,8 @@ public final class BackupActivity extends Activity {
     private void unlockLegacy(Uri uri,char[] password) {
         long ticket = begin("Checking previous backup…");
         if (ticket < 0) { release(password); return; }
+        retryOperation = this::launchLegacy;
+        retryOperationLabel = "Choose previous backup";
         WorkerPassword owned = ownedPassword(password,true);
         task(ticket,"Checking previous backup…",() -> {
             try { owned.start(); return DriveBackup.readLegacy(getApplicationContext(),uri,owned.value); }

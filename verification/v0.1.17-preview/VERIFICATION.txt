@@ -1,0 +1,17 @@
+VonoTation 0.1.17-preview / versionCode 89 / app.voiceflow
+Prepared 2026-10-16T05:38:39+00:00
+
+Android :app:assemblePreview: passed (recorded build log).
+Android full :app:lintPreview: passed (recorded build log; warnings may remain).
+Pure Java suites: all 37 passed (recorded test log).
+APK manifest identity and existing preview signing certificate: verified.
+Signer certificate SHA256: 5dca2219fbe89fb885b24c904fd4c57d3b58930922d21d455fc10d7a35f7568a
+Source inventory SHA256: 9f430fa5698dba32deded68d1d3ed5ff503bd99cf143c9fdc9f39314d346ae1b
+
+Phone/device testing: not performed. Backup connection/status isolation, asynchronous backup UI feedback, retry actions, restore with partially transcribed offline thoughts, Google account consent and live backup/restore still need device testing, as do dictation, microphone capture, clipboard access, calls and Android installation. Google OAuth registration for the current signing certificate is not verified. JVM tests cover synthetic logic only.
+
+This is a reliability release. Its reviewed change scope is recorded in RELEASE_NOTES-0.1.17-preview.txt and its exact source delta from 0.1.16-preview is recorded in CHANGES-FROM-0.1.16-preview.patch. The tests above validate the local build and synthetic regression logic; they do not establish microphone, provider, accessibility, call or installer behavior on Android hardware.
+
+Device regression focus: Google connection state remains separate from the current backup operation and status message, slow operations keep the screen responsive, and failure/retry actions match the observed failure without assuming its cause. Restore must retain locally recorded source audio and incomplete transcription progress when the cloud archive contains an older or text-only thought. Google OAuth registration for the current signing certificate is still unverified; this release does not establish that account connection or live backup/restore works. Verify the final release notes for which fixes are included. The broader color and aesthetics refresh is deferred. No iOS implementation is included in this release.
+
+Private signing keys, API keys, recordings, machine configuration and build caches are excluded. The Gradle wrapper JAR is intentionally included. Historical documents describe older versions; app/build.gradle identifies this source version.

@@ -1,0 +1,41 @@
+{
+  "versionName": "0.1.17-preview",
+  "versionCode": 89,
+  "androidAssembly": "passed",
+  "fullLint": {
+    "errors": 0,
+    "warnings": 121
+  },
+  "pureSuites": 37,
+  "cryptoRoundTrips": "300/10,000 thoughts plus 100 dictations; passed",
+  "nativeFixtures": "backup, offline Drive and backup-feedback compiled and signer verified; not executed",
+  "artifacts": [
+    {
+      "name": "app-preview.apk",
+      "size": 6212950,
+      "sha256": "7ba7ecd9423d98dd7c1feb478123f76fd119454194323c02522273a24bd83c29",
+      "signerSha256": "5dca2219fbe89fb885b24c904fd4c57d3b58930922d21d455fc10d7a35f7568a"
+    },
+    {
+      "name": "VoiceFlow-backup-fixture.apk",
+      "size": 53675,
+      "sha256": "094ace1ff75c22b3e3d4c20bf546afcaed0035c4b465bb1edfa4246f263c80fe",
+      "signerSha256": "5dca2219fbe89fb885b24c904fd4c57d3b58930922d21d455fc10d7a35f7568a"
+    },
+    {
+      "name": "VoiceFlow-drive-fixture.apk",
+      "size": 49579,
+      "sha256": "ace3e038d474e4c5e82219f8e6d04248c7a3b85276e649169ba8bed9f7bd8902",
+      "signerSha256": "5dca2219fbe89fb885b24c904fd4c57d3b58930922d21d455fc10d7a35f7568a"
+    },
+    {
+      "name": "VoiceFlow-backup-feedback-fixture.apk",
+      "size": 25003,
+      "sha256": "ba20769f048071d53838595fba455bf26ea91f31c355e0e4fb3f245c748a45a6",
+      "signerSha256": "5dca2219fbe89fb885b24c904fd4c57d3b58930922d21d455fc10d7a35f7568a"
+    }
+  ],
+  "googleOAuthCurrentCertificate": "not verified",
+  "liveGoogleConsentAndDrive": "not performed",
+  "phoneDeviceTesting": "not performed"
+}

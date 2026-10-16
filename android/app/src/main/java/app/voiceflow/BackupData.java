@@ -154,7 +154,7 @@ final class BackupData {
                 JSONObject thought=new JSONObject(restoredThoughts.getJSONObject(i).toString());long id=thought.getLong("id");mergedIds.add(id);
                 thought.put("thought",true).put("audio","").put("pending",false).put("recording",false).put("revision",System.nanoTime());
                 // Source audio is local-only. Never attach a recording merely because an ID collided.
-                for(int j=0;j<existingNotes.length();j++){JSONObject local=existingNotes.optJSONObject(j);if(local!=null&&local.optBoolean("thought")&&local.optLong("id")==id&&!local.optString("raw").isEmpty()&&local.optString("raw").equals(thought.optString("raw"))){thought.put("audio",local.optString("audio"));if(local.has("parts"))thought.put("parts",local.getJSONArray("parts"));if(local.has("wave"))thought.put("wave",local.optString("wave"));attachedSources.add(id);break;}}
+                for(int j=0;j<existingNotes.length();j++){JSONObject local=existingNotes.optJSONObject(j);if(local!=null&&local.optBoolean("thought")&&local.optLong("id")==id&&!local.optString("raw").isEmpty()&&local.optString("raw").equals(thought.optString("raw"))){attachLocalThoughtSource(thought,local);attachedSources.add(id);break;}}
                 mergedNotes.put(thought);
             }
             for(int i=0;i<existingNotes.length();i++){JSONObject note=existingNotes.optJSONObject(i);if(note==null)continue;boolean localSource=!note.optString("audio").isEmpty()||(note.optJSONArray("parts")!=null&&note.optJSONArray("parts").length()>0);boolean retain=!note.optBoolean("thought")||!checked.optBoolean("thoughts_included")||(localSource&&!attachedSources.contains(note.optLong("id")));if(retain){if(mergedIds.contains(note.optLong("id")))note.put("id",Store.nextId(mergedNotes,System.currentTimeMillis()));mergedIds.add(note.optLong("id"));mergedNotes.put(note);}}
@@ -167,6 +167,25 @@ final class BackupData {
             }
             DraftState.set(checked.optString("draft",""));
         }
+    }
+
+    /** Local source work stays local, including successful segments awaiting a later retry. */
+    private static void attachLocalThoughtSource(JSONObject thought,JSONObject local) throws Exception {
+        thought.put("audio",local.optString("audio"));
+        if(local.has("parts"))thought.put("parts",local.getJSONArray("parts"));
+        if(local.has("wave"))thought.put("wave",local.optString("wave"));
+        if(!local.optBoolean("pending"))return;
+        boolean hasSource=!local.optString("audio").isEmpty() || (local.optJSONArray("parts")!=null&&local.optJSONArray("parts").length()>0);
+        if(!hasSource)return;
+        thought.put("pending",true).put("duration",Math.max(thought.optLong("duration"),local.optLong("duration")));
+        String[] workKeys={"partial_transcript","segment_transcripts","transcription_config","retry_after","retry_count","retry_language","replacement_pending","transcription_error","thought_capture_complete","source_interrupted","minimum_thought_lines","capture_error","heard"};
+        for(String key:workKeys)if(local.has(key))thought.put(key,local.get(key));
+        // The cached configuration belongs to the local source's language, even if
+        // the archive's portable language is older. Preserve it for this retry only.
+        if(!local.has("retry_language"))thought.put("retry_language",local.optString("lang","auto"));
+        // A resumed transcription may add missing source words, but cannot replace
+        // an archived edit or a matching local edit with the recognizer's body.
+        if(local.optBoolean("user_edited") || !thought.optString("text").equals(local.optString("text")))thought.put("user_edited",true);
     }
 
     static String describe(JSONObject payload) {

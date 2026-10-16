@@ -1,109 +1,83 @@
-# Google setup and verification status
+# Google Drive backup setup and verification
 
-## Current 0.1.11-preview status
+Updated October 16, 2026. App implementation and signing identity are verified locally; the current Google Cloud configuration and real-account backup are not verified.
 
-Settings → Backup → Open backup now opens the existing encrypted Drive backup and restore flow. The hardcoded On hold screen has been removed. Automatic backup remains opt-in and restoring still requires confirmation.
+## Current preview status
 
-The update retains the installed preview signing identity. Independently inspected certificate:
+Settings → Backup opens the encrypted Google Drive backup and restore flow. The old On hold screen was removed in 0.1.11-preview. Automatic backup is opt-in, and restoring requires confirmation.
 
-- Package: `app.voiceflow`
-- SHA-1: `A7:80:92:53:A2:9D:DD:19:16:F9:B4:B2:98:92:31:95:DA:58:EB:3F`
-- SHA-256: `5D:CA:22:19:FB:E8:9F:B8:85:B2:4C:90:4F:D4:C5:7D:3B:58:93:09:22:D2:1D:45:5F:C1:0D:7A:35:F7:56:8A`
+The published 0.1.16-preview APK was independently inspected with Android build-tools 35.0.0 `apksigner verify --print-certs`:
 
-The historical Android OAuth registration below used a different certificate. Current registration in [the existing Google project](https://console.cloud.google.com/apis/credentials?project=voiceflow-37d9d), native Google consent, and live Drive backup/restore have not been verified from this environment. If the current package/certificate pair is absent, add an Android OAuth client for it in that existing project while preserving the previous clients. Do not rotate the app signing key, replace the Google project, publish the OAuth app, or enable billing. This AuthorizationClient implementation does not need the Web client secret or an embedded client ID.
+| Android registration detail | Current published preview |
+|---|---|
+| Package | `app.voiceflow` |
+| Certificate SHA-1 | `A7:80:92:53:A2:9D:DD:19:16:F9:B4:B2:98:92:31:95:DA:58:EB:3F` |
+| Certificate SHA-256 | `5D:CA:22:19:FB:E8:9F:B8:85:B2:4C:90:4F:D4:C5:7D:3B:58:93:09:22:D2:1D:45:5F:C1:0D:7A:35:F7:56:8A` |
 
-Thought text and summaries can be included in encrypted backups. Source recordings remain local and are excluded. Source-only pending thoughts do not prevent a text backup; existing local sources are preserved during text restore with matching-source checks. Restoring waits for recording, audio finalization and note processing to finish.
+The previous setup handoff records an Android OAuth client for a different, older signing certificate. There is no current evidence that the package and SHA-1 above have been registered in [the existing Google project](https://console.cloud.google.com/apis/credentials?project=voiceflow-37d9d). This is a registration check that remains necessary, not proof of the cause of every failed or closed Google screen.
 
-The sections below are historical setup evidence, not proof of the current Google configuration.
+If that exact package/certificate pair is absent, add an Android OAuth client for it in the existing project while preserving the previous clients. Keep the current APK signing identity so installed previews can update. Do not rotate the signing key, replace the Google project, publish the OAuth app, or enable billing as part of this repair.
 
-Updated October 4, 2026 UTC. This is integration setup evidence, not a production sign-in approval.
+The authorization-only implementation does not need an embedded client ID, a Web client secret, Firebase Authentication or a new API key. Supplying one of those does not register the APK's signing certificate.
 
-## Eva's handoff
+## App integration
 
-Project identity is reported independently verified in the supplied handoff:
+- Google Identity Services `play-services-auth:22.0.0`, using `AuthorizationClient`.
+- Requested scope: `https://www.googleapis.com/auth/drive.appdata` only. Google classifies this as non-sensitive; it grants access to this app's hidden data, not the user's whole Drive.
+- Initial connection and Change Google account use Google's account chooser. Reconnect and background backup request the saved Google account.
+- Drive v3 REST uses `https://www.googleapis.com` with redirects disabled.
+- The account returned by Drive `about.get` is pinned by email and permission ID before connected-account operations.
+- Access tokens stay in memory. A rejected HTTP 401 token is invalidated in Google's cache before reconnection.
+- Background authorization never launches account or consent UI. If consent is required, automatic backup pauses until foreground reconnection.
+- No Credential Manager ID-token sign-in, backend auth-code exchange or device-stored refresh token is used.
 
-| Registration detail | Value |
+Thought text and summaries may be included in encrypted text backups. Source audio and temporary clipboard history remain local and are excluded. Source-only pending thoughts do not block a text backup; matching existing local sources are preserved during restore. Restoring waits for recording, audio finalization and note processing to finish.
+
+Google status `10 DEVELOPER_ERROR` identifies a setup problem and is shown with the installed package and certificate. A generic `12500 SIGN_IN_FAILED` or a canceled Activity without a Google status does not establish a cause. These outcomes offer retry and account/registration checks without claiming that the user canceled or that the certificate is definitely missing.
+
+## Last reported Google project setup
+
+These details come from the earlier phone-guided handoff. They have not been independently checked in the current Cloud Console.
+
+| Detail | Last reported value |
 |---|---|
 | Project name | VoiceFlow |
 | Project ID | `voiceflow-37d9d` |
 | Project number | `1032987083442` |
-| Owner account | `jrrahman01@gmail.com` |
-| Firebase plan | Spark; no billing linked |
-| Optional creation features | Analytics and Gemini switched off |
+| Owner and test-user account | `jrrahman01@gmail.com` |
+| Billing | Firebase Spark; no billing linked |
+| Drive API | Enabled |
+| OAuth audience / publishing | External / Testing |
+| Requested scope | `https://www.googleapis.com/auth/drive.appdata` |
+| Historical Android OAuth client | `1032987083442-oe6olqiem3q4qerjc8ur7kgk07jgg9s5.apps.googleusercontent.com` |
+| Historical registered SHA-1 | `68:24:BC:2C:9F:CF:54:26:6D:DB:53:DA:B1:05:7D:00:17:82:3F:FC` |
 
-Console settings are user-reported from phone-guided steps, not independently checked by this integration:
+A Web client was also reportedly created; this app does not use it. Its secret belongs only in Console.
 
-- Google Drive API enabled.
-- OAuth app name VoiceFlow; support/contact email `jrrahman01@gmail.com`.
-- Audience External; publishing status Testing.
-- Test user `jrrahman01@gmail.com` added after the reported eligibility error was resolved.
-- `https://www.googleapis.com/auth/drive.appdata` selected, updated and saved.
-- Both OAuth clients created in `voiceflow-37d9d`; their types below are supplied by the user and have not been independently checked in Console.
+The old certificate was verified on historical 1.9.x APKs. The current certificate was introduced by the historical 1.9.15 preview after the old signing key was unavailable. Later 0.1.x previews retain the current certificate. Historical statements that the old OAuth registration “matches the APK” refer only to those older APKs; they do not establish registration for the published 0.1.16-preview.
 
-| Client type, user-reported | Public client ID |
-|---|---|
-| Android | `1032987083442-oe6olqiem3q4qerjc8ur7kgk07jgg9s5.apps.googleusercontent.com` |
-| Web, unused by this implementation | `1032987083442-40bf4bfkau7lb6ahg1d5142v9pbq5up2.apps.googleusercontent.com` |
+## Testing-mode warning and reconnection
 
-The supplied Android package and SHA-1 match the inspected preview APK. The Web client reportedly has no JavaScript origins or redirect URIs. Its existence does not change the AuthorizationClient-only implementation. Its secret stays in Console and is not required in the app or this handoff.
+Google documents that External apps in Testing allow only listed test users, show a testing warning and expire authorizations seven days after consent unless the request is limited to basic identity scopes. Drive app-data access is outside that exception even though the scope is non-sensitive.
 
-The handoff says Google configuration is ready for integration and testing. OAuth configuration, sign-in, backup, restore and production readiness have not been independently or end-to-end verified. No Console or Firebase setting was changed by the native app implementation.
+The app cannot remove Google's testing warning or make a Testing authorization permanent. Keep the project in Testing for the current repair. Publishing, branding verification and a public production rollout are separate decisions.
 
-## Android registration
+## Remaining real-account checks
 
-Package: `app.voiceflow`.
-
-Full signing certificate SHA-1, independently verified from Signer #1 of the fresh 1.9.9 APK at `prebuilt/VoiceFlow.apk` with Android build-tools 35.0.0 `apksigner verify --verbose --print-certs`. Its APK SHA-256 is `2bdb49cefdd5235de2670eab04bfe0b73fee51ca73a43df42bbf69e582af0270`. It matches the preserved 1.9.7/1.9.6/1.9.5 and earlier 1.9.4 APKs and the project Preview certificate:
-
-`68:24:BC:2C:9F:CF:54:26:6D:DB:53:DA:B1:05:7D:00:17:82:3F:FC`
-
-This is the custom development/preview signing certificate, `CN=VoiceFlow Preview, OU=Development, O=VoiceFlow, C=US`. It is not the automatically generated Gradle debug certificate. No production release, upload or Play app-signing certificate was available in this project. The included preview key is for personal testing, not public production distribution.
-
-The Android OAuth client must register this exact package and certificate in the same Google project. A normal Gradle debug build has a different certificate and needs its own Android registration. The supplied client types remain user-reported; neither ID is hardcoded into the APK.
-
-## Current integration
-
-- Google Identity Services `play-services-auth:22.0.0`, `AuthorizationClient`.
-- Scope: `https://www.googleapis.com/auth/drive.appdata` only.
-- Drive v3 REST to `https://www.googleapis.com` with redirects disabled.
-- Account identity comes from Drive `about.get` and is pinned by email plus permission ID.
-- No Credential Manager Google ID-token sign-in, Firebase Authentication, Web client ID, backend auth-code exchange or device-stored refresh token.
-- This authorization-only on-device path uses Android registration. Adding Credential Manager Google sign-in would require a Web OAuth client ID as its `serverClientId`.
-- No API key, password, token or client secret belongs in this registration handoff.
-
-## Required real-account checks
-
-Google documents a seven-day expiration for Testing authorizations outside the basic identity-scope exception. Drive app-data access is outside that exception. Background resolution/authorization failures pause automatic backup and require foreground reconnection; expired/revoked HTTP 401 tokens are invalidated before reconnect. This behavior still needs live Google testing. Keep the OAuth app in Testing with billing off; publishing and release review are separate future work.
-
-1. Install the signed preview as an update and open Settings → Google Drive backup → Connect Google.
-2. Confirm the configured test account is eligible and the native consent grants only VoiceFlow app-data access.
+1. In project `voiceflow-37d9d`, confirm the Android OAuth client registers `app.voiceflow` with the current SHA-1 above. Confirm Drive API is enabled, the app-data scope is configured and the intended account is an allowed test user.
+2. Install the signed preview as an update and open Settings → Backup → Connect Google. Confirm native consent requests only this app's Drive app-data access.
 3. Create a backup password, save a backup and confirm last-success status.
-4. Change local sample data and explicitly restore; check history, dictionary and settings.
-5. On another compatible installation/device, sign into the same Google account, discover the existing backup, enter its password and confirm restore.
-6. Check cancelled account changes, revoked permission/reconnection, offline retry and opted-in scheduled backup on Google Play services.
+4. Change local sample data, explicitly restore and check history, dictionary, settings and thought text.
+5. On another compatible installation/device, connect the same Google account, discover the backup, enter its password and explicitly confirm restore.
+6. Check canceled account changes, revoked permission, expired authorization, offline retry and opted-in scheduled backup on a device with Google Play services.
 
-The available isolated emulator uses an AOSP system image without Google Play services. Offline HTTPS/native tests can verify implementation and error handling, but cannot prove real Console registration, Google sign-in, Drive persistence, production eligibility or second-device restore.
+No live Google sign-in, Drive persistence, production eligibility or second-device restore has been established by local/offline fixture tests. No Console or Firebase setting was changed by the native implementation or this audit.
 
-Official references:
+## Official references
 
 - https://developer.android.com/identity/authorization
-- https://developer.android.com/identity/sign-in/credential-manager-siwg-implementation
+- https://developers.google.com/android/guides/client-auth
 - https://developers.google.com/workspace/drive/api/guides/appdata
 - https://developers.google.com/workspace/drive/api/reference/rest/v3/about/get
-- https://support.google.com/cloud/answer/15549945?hl=en
-
-## 1.9.15 preview build (October 11–12, 2026)
-
-What Juel needs to do: in Google Cloud Console, open project `voiceflow-37d9d` and go to APIs & Services → Credentials → **Create credentials → OAuth client ID** → Application type **Android**. Enter package name `app.voiceflow` and the SHA-1 below, then Create. Keep the OAuth consent screen in Testing with `jrrahman01@gmail.com` as a test user. The existing Android client for the original key can stay. Alternatively, re-sign the APK with the original `voiceflow.keystore` if it is found.
-
-In 1.9.15 the app is otherwise unchanged in how it uses Google: `AuthorizationClient` with the drive.appdata scope only, no serverClientId or Web client, and no Firebase. Cloud transcription, the always-on bubble, the notification fallback and the reboot handling do not involve Google.
-
-The 1.9.15 APK is signed with a new preview key because the original `preview-signing/voiceflow.keystore` was not in the 1.9.13 source package:
-
-- SHA-1 `A7:80:92:53:A2:9D:DD:19:16:F9:B4:B2:98:92:31:95:DA:58:EB:3F`
-- SHA-256 `5D:CA:22:19:FB:E8:9F:B8:85:B2:4C:90:4F:D4:C5:7D:3B:58:93:09:22:D2:1D:45:5F:C1:0D:7A:35:F7:56:8A`
-
-The Android OAuth client above is registered for SHA-1 `68:24:BC:…:3F:FC`. Google authorization from this build therefore fails until one of these is done: an Android OAuth client is added for `app.voiceflow` with the new SHA-1 in project `voiceflow-37d9d`, or the APK is re-signed with the original key. Failures now log `VoiceFlowDrive` with the exact status and resultCode, and they show the specific reason, including this build's SHA-1, in the Google Drive card with Retry.
-
-## Status (round4)
-Drive backup is deferred: the OAuth Android client is registered to the old SHA-1 68:24:BC:2C:…; preview builds are signed with A7:80:92:53:A2:9D:DD:19:16:F9:B4:B2:98:92:31:95:DA:58:EB:3F, so sign-in reports "cancelled" until that SHA-1 is added in project voiceflow-37d9d. Haptics and reboot handling don't involve Google.
+- https://support.google.com/cloud/answer/15549945
+- https://developers.google.com/identity/protocols/oauth2/production-readiness/overview

@@ -345,9 +345,15 @@ public final class MainActivity extends Activity {
             }
             Ui.space(thoughts,10);
         }
-        LinearLayout backup=card("backup","Backup",DriveBackup.configured(this)?"Google Drive":"Set up");
+        String backupState=!DriveBackup.configured(this)?"Set up":DriveBackup.needsReconnect(this)?"Reconnect":DriveBackup.listingIncomplete(this)?"Needs attention":!DriveBackup.passwordReady(this)?"Set password":!Store.get(this,"backup_error","").isEmpty()?"Needs attention":"Google Drive";
+        LinearLayout backup=card("backup","Backup",backupState);
         if(backup!=null){
-            hint(backup,DriveBackup.summary(this));Ui.space(backup,10);
+            Ui.space(backup,10);
+            TextView backupStatus=Daybook.text(this,DriveBackup.summary(this),11,Daybook.muted(this),false);
+            backupStatus.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+            backup.addView(backupStatus);
+            DriveBackup.requestSnapshotNote(this,note->{if(!isFinishing()&&!isDestroyed()&&backupStatus.isAttachedToWindow())backupStatus.setText(DriveBackup.summary(this));});
+            Ui.space(backup,10);
             backup.addView(Daybook.button(this,"Open backup",true,v->{
                 backupReturnFocus=true;
                 startActivity(new Intent(this,BackupActivity.class));

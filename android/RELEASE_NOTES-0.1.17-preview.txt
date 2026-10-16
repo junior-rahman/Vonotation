@@ -1,0 +1,21 @@
+VonoTation 0.1.17-preview
+Android package: app.voiceflow
+Version code: 89
+
+Backup reliability
+- Disconnecting or adopting a different Google account clears the previous account’s saved-backup freshness status. Failed connection changes restore their previous status during rollback.
+- Backup freshness checks run outside the interface thread, share cached work and reject results made stale by new dictations, thoughts, draft edits or settings. Unknown freshness is shown as unknown instead of being called an outdated backup.
+- Backup controls provide visible schedule/network confirmation, contextual retry or setup actions, and a confirmation before leaving an upload. Back navigation cannot interrupt a confirmed restore/import; Android Home or process termination are separate system events.
+- Restore preserves locally available thought source recordings and incomplete offline transcription progress when an archive contains an older or text-only copy of the thought. A restore must not silently replace pending local source work with a completed cloud text snapshot.
+- Google and backup failures use neutral descriptions of the observed problem and relevant retry actions. A failed request alone is not presented as proof that the signing certificate, account or OAuth setup is incorrect.
+
+Existing dictation, Quick thoughts and Clipboard behavior is retained. Text backups exclude recordings and clipboard history; locally retained source audio remains on this phone. The broader color and aesthetics refresh follows the reliability work.
+
+Verification
+Release preparation records the final Android assembly, full lint, JVM regression suites, APK identity/signing and source-exclusion checks in verification/v0.1.17-preview/VERIFICATION.txt. The publication workflow validates artifact hashes, sizes and manifest identity. Public APK and source downloads are verified before the update feed advances.
+
+Phone/device testing: not performed.
+
+Google OAuth registration for the current signing certificate is still unverified. Account consent, Google connection and live Drive backup/restore have not been validated on an Android device; this release does not establish that a reported connection problem is resolved. Backup status transitions, responsiveness, retry actions and restore with partially transcribed offline thoughts still need device testing. Existing microphone capture, accessibility insertion, clipboard access, call behavior and installer handoff also remain unverified on Android hardware. Source review and JVM checks do not establish device or provider behavior.
+
+Install through Settings > Update and confirm Android's installer. Private signing keys, API keys, recordings, caches and machine configuration are excluded from the source archive. Retained thought source recordings stay on this phone; transcription sends audio to the configured Notes provider when connected.

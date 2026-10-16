@@ -68,12 +68,65 @@ public final class ThoughtStorageTest extends Instrumentation {
             BackupData.restore(app,conflict);require(find(app,ready).optString("audio").isEmpty(),"An ID collision attached unrelated local audio to imported text.");
             boolean retainedSeparate=false;JSONArray merged=notes(app);for(int i=0;i<merged.length();i++){JSONObject item=merged.getJSONObject(i);if(item.optString("raw").equals(raw)&&item.optString("audio").equals(retained.getName())&&item.optLong("id")!=ready)retainedSeparate=true;}
             require(retainedSeparate,"Conflicting text restore orphaned the original local source.");
+            partialPendingRestore(app,cleanup);
             Notes.discardThoughtCapture(app,pendingId);require(find(app,pendingId)==null&&!segment.exists()&&Notes.thoughtDeleted(app,pendingId),"Deleting a pending thought did not remove its source and remember deletion.");
             require(Notes.keepThoughtAudio(app,pendingId,Collections.singletonList(segment),1000,true)<0&&find(app,pendingId)==null,"Late source callback recreated a deleted thought.");
-            result.putString("result","PASS: "+checks+" no-key source, idempotent completion, retry copy, original/edit revision, concise legacy-summary upgrades, stale/deleted/restored response guards, text-only backup, source-safe restore and deletion checks.");
+            result.putString("result","PASS: "+checks+" no-key source, idempotent completion, retry copy, original/edit revision, concise legacy-summary upgrades, stale/deleted/restored response guards, text-only backup, source-safe and partial-pending restore, cached-segment retry, restored-edit protection and deletion checks.");
         }catch(Throwable error){result.putString("failure",error.toString());}
         finally{for(File file:cleanup)file.delete();if(mutated){restore(Store.prefs(app),before);ThoughtJob.schedule(app);}}
         finish(result.containsKey("failure")?Activity.RESULT_CANCELED:Activity.RESULT_OK,result);
+    }
+    /** A saved partial transcript must not turn its unfinished local audio into a completed note. */
+    private void partialPendingRestore(Context app,ArrayList<File> cleanup)throws Exception{
+        long id=Notes.nextThoughtId(app);File first=new File(Notes.sourceDirectory(app),id+"-partial-0.wav"),second=new File(Notes.sourceDirectory(app),id+"-partial-1.wav");
+        wave(first);wave(second);cleanup.add(first);cleanup.add(second);
+        String raw="First retained source segment.",configuration="en\nwhisper-large-v3\n"+CloudApi.DEFAULT_BASE;
+        long retryAfter=System.currentTimeMillis()+60000L;
+        JSONArray sources=new JSONArray().put(first.getName()).put(second.getName());
+        JSONArray segments=new JSONArray().put(new JSONObject().put("source",first.getName()).put("bytes",first.length()).put("text",raw).put("heard","en").put("complete",true))
+            .put(new JSONObject().put("source",second.getName()).put("text","").put("complete",false).put("error","Fixture second segment offline"));
+        JSONObject partial=new JSONObject().put("id",id).put("created",id).put("thought",true).put("raw",raw).put("text",raw).put("title","Partial source")
+            .put("summary","First segment").put("audio",first.getName()).put("parts",sources).put("wave","2,3,4").put("duration",2000L).put("lang","en")
+            .put("recording",false).put("pending",true).put("partial_transcript",true).put("segment_transcripts",segments).put("transcription_config",configuration)
+            .put("retry_after",retryAfter).put("retry_count",3).put("replacement_pending",false).put("transcription_error","Fixture second segment offline")
+            .put("thought_capture_complete",true).put("source_interrupted",false).put("minimum_thought_lines",2).put("heard","en").put("revision",7L);
+        JSONArray staged=notes(app).put(partial);require(Store.prefs(app).edit().putString("notes",staged.toString()).commit(),"Could not stage partial thought.");
+        JSONObject archive=BackupData.snapshot(app),portable=null;JSONArray exported=archive.getJSONArray("thoughts");
+        for(int i=0;i<exported.length();i++)if(exported.getJSONObject(i).getLong("id")==id)portable=exported.getJSONObject(i);
+        require(portable!=null&&portable.getString("raw").equals(raw),"Partial transcript did not enter its text-only archive.");
+        require(!portable.has("parts")&&!portable.has("segment_transcripts")&&!portable.has("transcription_config"),"Local retry/source state entered the portable archive.");
+        BackupData.restore(app,archive);JSONObject restored=find(app,id);
+        require(restored.optBoolean("pending")&&restored.optBoolean("partial_transcript")&&!restored.optBoolean("recording"),"Restoring its own partial thought stopped pending source work.");
+        require(restored.getString("raw").equals(raw)&&restored.getString("text").equals(raw)&&restored.getString("title").equals("Partial source")&&restored.getString("summary").equals("First segment"),"Partial restore rewrote archived text.");
+        require(restored.getJSONArray("parts").toString().equals(sources.toString())&&restored.getString("audio").equals(first.getName())&&restored.getString("wave").equals("2,3,4")&&first.isFile()&&second.isFile(),"Partial restore changed local source references.");
+        require(restored.getJSONArray("segment_transcripts").toString().equals(segments.toString())&&restored.getString("transcription_config").equals(configuration),"Partial restore lost successful segment cache/configuration.");
+        require(restored.getLong("retry_after")==retryAfter&&restored.getInt("retry_count")==3&&restored.getString("retry_language").equals("en")&&restored.getString("transcription_error").equals("Fixture second segment offline"),"Partial restore changed retry language, cooldown or diagnostic state.");
+        require(restored.optBoolean("thought_capture_complete")&&!restored.optBoolean("source_interrupted")&&restored.getInt("minimum_thought_lines")==2,"Partial restore lost source completeness safeguards.");
+        require(NoteWorkPolicy.eligible(restored.optBoolean("pending"),restored.optBoolean("recording"),restored.optLong("retry_after"),retryAfter),"Restored partial source cannot become eligible for catch-up.");
+
+        // With no key, an attempted ASR request fails before opening any connection.
+        // The first successful cache entry must survive while only the second fails.
+        require(Vault.get(app).isEmpty(),"Partial retry fixture must not use a provider key.");
+        java.lang.reflect.Method transcribe=Notes.class.getDeclaredMethod("transcribeNote",Context.class,JSONObject.class,String.class);transcribe.setAccessible(true);
+        Object attempt=transcribe.invoke(null,app,restored,restored.getString("retry_language"));Class<?> transcription=attempt.getClass();
+        java.lang.reflect.Field rawField=transcription.getDeclaredField("raw"),completeField=transcription.getDeclaredField("complete"),segmentsField=transcription.getDeclaredField("segments");
+        rawField.setAccessible(true);completeField.setAccessible(true);segmentsField.setAccessible(true);JSONArray retried=(JSONArray)segmentsField.get(attempt);
+        require(rawField.get(attempt).equals(raw)&&!completeField.getBoolean(attempt)&&retried.getJSONObject(0).getBoolean("complete")&&!retried.getJSONObject(1).getBoolean("complete"),"Restored retry re-requested or lost the successful source segment.");
+
+        // An archive can contain an edited body for the same original transcript.
+        // Resuming the local partial source must keep that explicitly restored body.
+        String edited="Keep this restored thought edit.";portable.put("text",edited).put("title","Restored edited title").put("summary","Restored edited summary");
+        BackupData.restore(app,archive);restored=find(app,id);
+        require(restored.getString("text").equals(edited)&&restored.optBoolean("user_edited")&&restored.optBoolean("pending"),"A restored edited body was not protected during pending source recovery.");
+        String completeRaw=raw+"\nSecond recovered source segment.";
+        rawField.set(attempt,completeRaw);completeField.setBoolean(attempt,true);
+        java.lang.reflect.Field errorField=transcription.getDeclaredField("error");errorField.setAccessible(true);errorField.set(attempt,"");
+        retried.getJSONObject(1).put("bytes",second.length()).put("text","Second recovered source segment.").put("complete",true).remove("error");
+        java.lang.reflect.Method save=Notes.class.getDeclaredMethod("saveThoughtTranscript",Context.class,JSONObject.class,transcription);save.setAccessible(true);
+        require(((Integer)save.invoke(null,app,restored,attempt))==1,"Completed retry could not update the restored pending thought.");
+        restored=find(app,id);
+        require(restored.getString("raw").equals(completeRaw)&&restored.getString("text").equals(edited)&&restored.getString("title").equals("Restored edited title")&&restored.getString("summary").equals("Restored edited summary"),"Completed retry replaced restored edits instead of extending only the original transcript.");
+        require(!restored.optBoolean("pending")&&!restored.optBoolean("partial_transcript")&&first.isFile()&&second.isFile(),"Completed retry lost audio or remained pending.");
     }
     private static JSONArray notes(Context app)throws Exception{return new JSONArray(Store.get(app,"notes","[]"));}
     private static JSONObject find(Context app,long id)throws Exception{JSONArray notes=notes(app);for(int i=0;i<notes.length();i++){JSONObject note=notes.getJSONObject(i);if(note.optLong("id")==id)return note;}return null;}

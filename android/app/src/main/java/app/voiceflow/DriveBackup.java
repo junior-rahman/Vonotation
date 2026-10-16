@@ -19,6 +19,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.FutureTask;
@@ -41,18 +42,166 @@ final class DriveBackup {
         checkInterrupted();
         if (epoch >= 0 && CANCEL_EPOCH.get() != epoch) throw new CancelledException();
     }
-    /** Fingerprint of the data a backup captures, to tell whether newer local changes exist. */
+    /** Worker only: parsing and hashing portable history can be expensive. */
     static String dataFingerprint(Context context) {
         try { return BackupData.fingerprint(BackupData.snapshot(context)); }
         catch (Exception unavailable) { return ""; }
     }
-    /** Non-empty when the last saved backup holds an older snapshot than the phone's current data. */
+    private static final String FRESHNESS_UNAVAILABLE = "This phone’s current backup data could not be checked. Your saved backup is unchanged.";
+    private static final long FRESHNESS_RETRY_MS = 30_000;
+    private static final Map<SharedPreferences, SnapshotState> SNAPSHOT_STATES = new IdentityHashMap<>();
+    private static final java.util.concurrent.ExecutorService SNAPSHOT_WORKER = java.util.concurrent.Executors.newSingleThreadExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "VonoTation-backup-status");
+        thread.setDaemon(true);
+        return thread;
+    });
+
+    interface SnapshotNoteCallback { void ready(String note); }
+
+    private static final class SnapshotState {
+        final SharedPreferences preferences;
+        final java.util.concurrent.atomic.AtomicLong revision = new java.util.concurrent.atomic.AtomicLong();
+        final List<SnapshotNoteCallback> callbacks = new ArrayList<>();
+        final SharedPreferences.OnSharedPreferenceChangeListener listener;
+        boolean running;
+        SnapshotStamp cachedStamp;
+        String cachedNote;
+        long retryAt;
+        SnapshotState(SharedPreferences preferences) {
+            this.preferences = preferences;
+            listener = (changed, key) -> {
+                // Status-only writes must not cause another parse of the user's history.
+                if (key == null || freshnessRelevant(key)) revision.incrementAndGet();
+            };
+            preferences.registerOnSharedPreferenceChangeListener(listener);
+        }
+    }
+
+    /** Cheap immutable identity for a requested calculation; no history text is parsed here. */
+    private static final class SnapshotStamp {
+        final long revision, at;
+        final String fingerprint, draft;
+        final Map<String, Object> sourceReferences = new HashMap<>();
+        SnapshotStamp(SnapshotState state) {
+            revision = state.revision.get();
+            at = snapshotAt(state.preferences);
+            fingerprint = snapshotFingerprint(state.preferences);
+            draft = MainActivity.currentDraft;
+            for (Map.Entry<String, ?> item : state.preferences.getAll().entrySet())
+                if (freshnessRelevant(item.getKey())) sourceReferences.put(item.getKey(), item.getValue());
+        }
+        boolean matches(SnapshotState state) {
+            if (revision != state.revision.get() || at != snapshotAt(state.preferences)
+                    || !fingerprint.equals(snapshotFingerprint(state.preferences)) || draft != MainActivity.currentDraft) return false;
+            // Android posts background preference notifications to main. Values may already have
+            // changed before their listener callback arrives, so compare immutable value identities
+            // as well. This scans the small settings map, never the large history/notes strings.
+            int matched = 0;
+            for (Map.Entry<String, ?> item : state.preferences.getAll().entrySet()) if (freshnessRelevant(item.getKey())) {
+                if (!sourceReferences.containsKey(item.getKey()) || sourceReferences.get(item.getKey()) != item.getValue()) return false;
+                matched++;
+            }
+            return matched == sourceReferences.size();
+        }
+    }
+
+    private static boolean freshnessRelevant(String key) {
+        return !key.startsWith("backup_") || "backup_frequency".equals(key) || "backup_wifi".equals(key)
+                || "backup_account_id".equals(key) || "backup_snapshot_at".equals(key)
+                || "backup_snapshot_fingerprint".equals(key);
+    }
+
+    private static SnapshotState snapshotState(Context context) {
+        SharedPreferences preferences = Store.prefs(context.getApplicationContext());
+        synchronized (SNAPSHOT_STATES) {
+            SnapshotState state = SNAPSHOT_STATES.get(preferences);
+            if (state == null) { state = new SnapshotState(preferences); SNAPSHOT_STATES.put(preferences, state); }
+            return state;
+        }
+    }
+
+    /** UI-safe freshness check. Concurrent requests share one worker and cached results survive
+     * ordinary renders. The callback is delivered on main and never receives a stale result. */
+    static void requestSnapshotNote(Context context, SnapshotNoteCallback callback) {
+        if (callback == null) return;
+        Context app = context.getApplicationContext();
+        SnapshotState state = snapshotState(app);
+        synchronized (state) {
+            if (state.cachedStamp != null && state.cachedStamp.matches(state)
+                    && (state.retryAt == 0 || android.os.SystemClock.elapsedRealtime() < state.retryAt)) {
+                SnapshotStamp cachedStamp = state.cachedStamp;
+                String cached = state.cachedNote;
+                new Handler(Looper.getMainLooper()).post(() -> {
+                    // A preference or draft edit between queuing and delivery invalidates the result too.
+                    synchronized (state) {
+                        if (state.cachedStamp != cachedStamp || !cachedStamp.matches(state)) {
+                            requestSnapshotNote(app, callback);
+                            return;
+                        }
+                    }
+                    callback.ready(cached);
+                });
+                return;
+            }
+            state.callbacks.add(callback);
+            if (state.running) return;
+            state.running = true;
+        }
+        calculateSnapshotNote(app, state, 0);
+    }
+
+    private static void calculateSnapshotNote(Context app, SnapshotState state, int attempt) {
+        SnapshotStamp stamp = new SnapshotStamp(state);
+        SNAPSHOT_WORKER.execute(() -> {
+            String result = calculateSnapshotNote(app, stamp.at, stamp.fingerprint);
+            new Handler(Looper.getMainLooper()).post(() -> {
+                List<SnapshotNoteCallback> callbacks;
+                String delivered = result;
+                synchronized (state) {
+                    if (!stamp.matches(state)) {
+                        if (attempt == 0) { calculateSnapshotNote(app, state, 1); return; }
+                        // Continuous edits get one bounded retry; do not create a hashing/polling loop.
+                        delivered = FRESHNESS_UNAVAILABLE;
+                        state.cachedStamp = new SnapshotStamp(state);
+                    } else {
+                        state.cachedStamp = stamp;
+                    }
+                    state.cachedNote = delivered;
+                    // Keep uncertainty visible, but allow a future explicit/resume request to retry.
+                    state.retryAt = FRESHNESS_UNAVAILABLE.equals(delivered)
+                            ? android.os.SystemClock.elapsedRealtime() + FRESHNESS_RETRY_MS : 0;
+                    state.running = false;
+                    callbacks = new ArrayList<>(state.callbacks);
+                    state.callbacks.clear();
+                }
+                for (SnapshotNoteCallback callback : callbacks) callback.ready(delivered);
+            });
+        });
+    }
+
+    private static String cachedSnapshotNote(Context context) {
+        SnapshotState state = snapshotState(context);
+        synchronized (state) { return state.cachedStamp != null && state.cachedStamp.matches(state) ? state.cachedNote : ""; }
+    }
+
+    private static long snapshotAt(SharedPreferences preferences) {
+        try { return preferences.getLong("backup_snapshot_at", 0); }
+        catch (ClassCastException malformed) { return 0; }
+    }
+    private static String snapshotFingerprint(SharedPreferences preferences) {
+        try { return preferences.getString("backup_snapshot_fingerprint", ""); }
+        catch (ClassCastException malformed) { return ""; }
+    }
+
+    /** Non-empty when the saved snapshot is older. Main-thread callers read the async cache. */
     static String snapshotNote(Context context) {
-        long at = Store.prefs(context).getLong("backup_snapshot_at", 0);
-        String saved = text(context, "backup_snapshot_fingerprint");
+        if (Looper.myLooper() == Looper.getMainLooper()) return cachedSnapshotNote(context);
+        return calculateSnapshotNote(context, snapshotAt(Store.prefs(context)), snapshotFingerprint(Store.prefs(context)));
+    }
+    private static String calculateSnapshotNote(Context context, long at, String saved) {
         if (at == 0 || saved.isEmpty()) return "";
         String current=dataFingerprint(context);
-        if(current.isEmpty())return "This phone’s current backup data could not be checked. Your saved backup is unchanged.";
+        if(current.isEmpty())return FRESHNESS_UNAVAILABLE;
         if(saved.equals(current))return "";
         return "The saved backup is a snapshot from " + DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(new Date(at))
                 + ". Newer dictations, Quick Thoughts or settings are not in it yet.";
@@ -61,6 +210,7 @@ final class DriveBackup {
     private static final String[] CONFIG_KEYS = {
         "backup_account", "backup_account_id", "backup_account_name", "backup_cloud_ready",
         "backup_remote_id", "backup_reconnect", "backup_last_success", "backup_error",
+        "backup_snapshot_at", "backup_snapshot_fingerprint",
         "backup_listing_incomplete", "backup_listing_warning",
         "backup_frequency", "backup_wifi", "backup_uri", "backup_name"
     };
@@ -115,9 +265,11 @@ final class DriveBackup {
         String cadence = "daily".equals(frequency(context)) ? "Daily" : "weekly".equals(frequency(context)) ? "Weekly" : "Automatic backup off";
         String network = flag(context, "backup_wifi", true) ? " · Wi-Fi only" : " · Any network";
         long last = lastSuccess(context);
+        String freshness = cachedSnapshotNote(context);
         return cadence + network + (last == 0 ? " · No backup saved yet" : " · Saved "
                 + DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(new Date(last))
-                + (snapshotNote(context).isEmpty() ? "" : " · Newer changes are not backed up yet"));
+                + (freshness.isEmpty() ? "" : FRESHNESS_UNAVAILABLE.equals(freshness)
+                ? " · Backup freshness could not be checked" : " · Newer changes are not backed up yet"));
     }
 
     /** Identical pending jobs keep their original schedule; connection alone never opts in. */
@@ -183,7 +335,8 @@ final class DriveBackup {
                     .putBoolean("backup_reconnect", false).putBoolean("backup_listing_incomplete", false)
                     .remove("backup_listing_warning");
             if (!same) edit.putBoolean("backup_cloud_ready", false).putString("backup_frequency", "off")
-                    .remove("backup_last_success").remove("backup_remote_id");
+                    .remove("backup_last_success").remove("backup_remote_id")
+                    .remove("backup_snapshot_at").remove("backup_snapshot_fingerprint");
             if (!edit.commit()) throw new ConfigurationException("Could not save the Google Drive connection.");
         } catch (Exception failure) {
             invalidateRejectedToken(app, connection, failure);
@@ -505,7 +658,8 @@ final class DriveBackup {
                 .putBoolean("backup_reconnect", false).putBoolean("backup_listing_incomplete", fresh.hasRejected)
                 .remove("backup_error").remove("backup_uri").remove("backup_name");
         if (fresh.hasRejected) edit.putString("backup_listing_warning", fresh.warning); else edit.remove("backup_listing_warning");
-        if (!same) edit.putString("backup_frequency", "off").remove("backup_last_success");
+        if (!same) edit.putString("backup_frequency", "off").remove("backup_last_success")
+                .remove("backup_snapshot_at").remove("backup_snapshot_fingerprint");
         if (!latestUnlocked) edit.putString("backup_frequency", "off");
         if (existing != null) {
             edit.putString("backup_remote_id", existing.id);

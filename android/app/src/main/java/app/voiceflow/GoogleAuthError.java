@@ -40,9 +40,12 @@ final class GoogleAuthError {
     static GoogleAuthError of(int status, int resultCode, String packageName, String certificateSha1) {
         String cert = "package " + packageName + ", SHA-1 " + (certificateSha1 == null || certificateSha1.isEmpty() ? "unknown" : certificateSha1);
         String code = status == NO_STATUS ? "resultCode " + resultCode + ", no status" : "code " + status + " " + codeName(status) + (resultCode == RESULT_OK ? "" : ", resultCode " + resultCode);
-        if (status == DEVELOPER_ERROR || status == SIGN_IN_FAILED)
+        if (status == DEVELOPER_ERROR)
             return new GoogleAuthError("Google sign-in isn’t set up for this build",
                     "Google rejected this app’s sign-in setup (" + code + "). The Android OAuth client must list " + cert + ".", false, false, true);
+        if (status == SIGN_IN_FAILED)
+            return new GoogleAuthError("Google connection did not finish",
+                    "Google could not complete the connection (" + code + "). Try again. If it keeps failing, check that your account is allowed to use this app and that its Android OAuth registration matches " + cert + ".", true, false, false);
         if (status == SIGN_IN_CANCELLED || status == CANCELED)
             return new GoogleAuthError("Google connection cancelled", "Sign-in was closed before it finished (" + code + "). Your previous connection is unchanged.", true, true, false);
         if (status == NETWORK_ERROR || status == TIMEOUT || status == INTERRUPTED || status == INTERNAL_ERROR || status == API_NOT_CONNECTED || status == SIGN_IN_CURRENTLY_IN_PROGRESS)
@@ -51,7 +54,7 @@ final class GoogleAuthError {
             return new GoogleAuthError("Reconnect Google", "Google needs you to sign in again (" + code + ").", true, false, false);
         if (status == NO_STATUS && resultCode == RESULT_CANCELED)
             return new GoogleAuthError("Google sign-in closed without a result",
-                    "Google returned no result (" + code + "). If you didn’t cancel, this build’s certificate is probably not registered: the Android OAuth client must list " + cert + ".", true, false, true);
+                    "Google returned no result (" + code + "). VonoTation did not complete a connection. Tap Connect Google again. If it keeps closing, check your account’s access and the Android OAuth registration for " + cert + ".", true, false, false);
         return new GoogleAuthError("Google connection needs attention", "Could not connect Google Drive (" + code + ").", true, false, false);
     }
 }
