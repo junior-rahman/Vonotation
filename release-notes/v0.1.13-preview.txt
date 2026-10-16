@@ -1,0 +1,22 @@
+VonoTation 0.1.13-preview
+Android package: app.voiceflow
+Version code: 85
+
+Quick thoughts daily timeline
+- Saved thoughts follow the existing Daybook daily timeline and Dictation date grouping, preserving the current design.
+- Each thought includes a detailed summary and full transcript. Source audio playback stays hidden until Source audio is tapped.
+- Daily recaps are optional and use the connected Notes model. They summarize the day's saved thoughts when enabled.
+- Source recording remains available offline. AI transcription, organization and optional recaps run after a connection and the Notes provider are available. Original words and source recordings are retained if processing fails; Android may defer background retries.
+- Tap the idle dot to record in place, hold it to open saved thoughts, or drag it freely. Hold and drag do not start a recording. Existing Finish/Cancel controls, recording continuity and the shared saved position remain included.
+- Turning Quick thoughts off hides its card and idle dot while retaining saved thoughts. The idle dot keeps the microphone closed. Retained source audio is stored locally and excluded from text backups; transcription sends audio to the configured Notes provider when connected.
+
+Existing compact clipboard, cursor-aware deletion, quiet Call Notes recovery, backup controls and verified in-app updates remain included. Reminders remain a future feature.
+
+Verification
+Release preparation records the actual Android build, JVM-suite, APK identity/signing and source-exclusion results in verification/v0.1.13-preview/VERIFICATION.txt. The release workflow validates prepared artifacts before publication. Public downloads are verified before the update feed advances.
+
+Phone/device testing: not performed.
+
+Actual timeline/recap interactions, tap/hold/drag, folding/rotation, microphone capture, live Notes-provider responses, installation, notifications and input compatibility remain unverified. Google Drive OAuth registration, Google account consent and live Drive backup/restore remain unverified. Source review and JVM checks do not establish device or provider behavior.
+
+Install through Settings > Update and confirm Android's installer. Package and preview signing identity are retained. Private signing keys, API keys, recordings, caches and machine configuration are excluded from source.

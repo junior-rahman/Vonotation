@@ -1,31 +1,33 @@
 # VonoTation
 
-Current signed preview: **0.1.12-preview**, version code **84**, package `app.voiceflow`.
+Preview: **0.1.13-preview**, version code **85**, package `app.voiceflow`.
 
-[Download APK, source and checksums](https://github.com/JuelHossain/Vonotation/releases/tag/v0.1.12-preview) · [Android source](android/) · [Changes and validation](release-notes/v0.1.12-preview.txt)
+[Download APK, source and checksums](https://github.com/JuelHossain/Vonotation/releases/tag/v0.1.13-preview) · [Android source](android/) · [Changes and validation](release-notes/v0.1.13-preview.txt)
 
 ## Quick thoughts
 
-Enable **Settings → Quick thoughts** and connect **Floating microphone** under Permissions. Outside VonoTation, tap the faint dot when no input is active. Hold it to open Quick thoughts in the app. Drag it anywhere within the usable screen; the idle and active controls share its saved position. Recording uses the existing floating controls on your current screen. Changing apps, focusing a field or tapping elsewhere does not end it. Use the physical **Finish** or **Cancel** control; a system interruption can finalize a recording. A tap does not open the app or a capture popup. Normal input dictation keeps its selected engine and writes into the active field.
+Quick thoughts now follows the existing **Daybook daily timeline**, with the same date grouping used by Dictation. Open a saved thought for its detailed summary and full transcript. Playback stays hidden until **Source audio** is tapped. Optional daily recaps use the connected **Notes model** to summarize that day's thoughts; enable them only if you want them. The existing colors, typography and card design are retained.
 
-A thought uses the existing Voice Notes recording pipeline: source audio is saved locally even without a connection or API key. Once finished, it waits for the connected Notes provider to transcribe it, organize the note and produce a grounded summary and title. Original words remain available. Pending completed thoughts retry when a connection returns, including a persisted background job; Android may defer that job. Still-recording segments are excluded from transcription. Unsupported organization keeps the original safely.
+Enable **Settings → Quick thoughts** and connect **Floating microphone** under Permissions. Outside VonoTation, tap the faint dot when no input is active to record on the current screen. Hold it to open saved Quick thoughts. Drag it freely within the usable screen; the idle and active controls share the saved position. A hold or drag does not start recording. Use **Finish** or **Cancel** to end capture. Changing apps, focusing a field or tapping elsewhere does not end it; system interruptions may finalize a recording. Normal input dictation still writes into the active field.
 
-Inside the app, the Thoughts card displays saved notes, summaries and titles for viewing, editing and deleting. It has no recording button or recording popup. Source audio stays hidden until **Source audio** is tapped, which reveals playback. Retained audio is stored on this phone and excluded from backups; transcription uses your connected Notes provider. Turning Quick thoughts off hides both the card and idle dot while retaining saved notes. The microphone is closed while idle, and expanded idle controls shrink after 60 seconds. Reminders remain a future feature. Existing colors, typography and layout are retained.
+Source audio is saved locally even without a connection or API key. AI transcription, note organization and optional recaps wait for the Notes provider and a connection. Completed pending recordings retry after connectivity returns; Android may defer background work. Original transcripts remain available, and failed organization keeps the original. Retained audio is stored on this phone and excluded from text backups; transcription sends audio to your configured Notes provider when connected.
 
-## Delete, settings and updates
+Turning Quick thoughts off hides both its card and idle dot while retaining saved thoughts. The microphone is closed while idle, and expanded idle controls shrink after 60 seconds. Reminders remain a future feature.
 
-Delete reads the current cursor or selection from the active editor. A selection is deleted in place; otherwise Delete removes the preceding word. Relative editor context supports fields that do not supply absolute cursor offsets. Repeated deletion waits for the editor to acknowledge each change and stops if the cursor, text or field changes. Editors that reject or cannot report a safe edit show feedback instead of deleting from a guessed position.
+## Retained features
 
-The Settings **Clear history** action has been removed. **Backup** now opens the backup flow rather than displaying the hardcoded “On hold” state. The encrypted backup/restore controls is restored, and restore is guarded while recording or audio processing is active. This is a source-level repair: Google account consent, OAuth registration for the current signing certificate and live Drive backup/restore still require phone verification.
+The compact latest-copy pill and scrollable clipboard popup remain included. Delete uses the editor's current cursor or selection and stops when it cannot safely confirm an edit. Quiet Call Notes recovery is retained; Android and wireless-debugging changes can still disconnect it.
 
-Open **Settings → Update**, allow installation if Android asks, then confirm Android's installer. An older build may need Update tapped again after returning from permission settings. The public `latest.json` feed advances only after its public APK is verified. The updater verifies hash, size, package, version and installed signing identity, and defers while audio work is active.
+Open **Settings → Update**, allow installation if Android asks, then confirm Android's installer. An older build may need Update tapped again after returning from permission settings. The updater verifies hash, size, package, version and installed signing identity, and defers while audio work is active. The public update feed advances only after its public APK is verified.
 
-The compact clipboard and quiet Call Notes recovery changes remain included. Android, device and network changes can still disconnect wireless debugging; automatic recovery cannot guarantee a permanent connection.
+Backup controls remain available. Google Drive OAuth registration, Google account consent and live backup/restore remain unverified for this preview.
 
 ## Verification and source
 
-Per-artifact hashes, signing identity and final build/test results are recorded during release preparation in `verification/v0.1.12-preview/VERIFICATION.txt`. Preparation checks APK identity/signature and the source archive and requires successful Android preview build and passing pure Java suite evidence. The release workflow performs separate validation before publishing. The final suite count is generated from the actual test files and recorded passing results.
+Release preparation records actual build, test, APK identity, signing and source-exclusion results in `verification/v0.1.13-preview/VERIFICATION.txt`. The release workflow separately validates prepared artifacts before publication. Historical documents under `android/` describe older versions; `android/app/build.gradle` identifies this preview.
 
-**Phone/device testing: not performed.** Samsung/Niagara behavior, actual input-field deletion, microphone capture, live provider responses, installation, notification behavior, wireless debugging, Google consent and backup/restore remain unverified. Synthetic JVM tests and source review do not establish native UI or backend behavior.
+Phone/device testing: not performed.
 
-Private signing keys, API keys, recordings, caches and machine configuration are excluded. Historical documents under `android/` describe older builds; `android/app/build.gradle` identifies this preview. Use JDK 17, Android SDK 35 and Build Tools 35.0.0; run `bash gradlew :app:assembleDebug` inside `android`. Compatible preview signing needs the existing private key through `VOICEFLOW_KEYSTORE`; it is not included. Release preparation checks the APK against the verified preview signing identity.
+Actual Samsung/Niagara behavior, timeline interactions, gestures, input deletion, microphone capture, live Notes-provider transcription/recaps, installation, notifications, wireless debugging, Google sign-in and Drive backup/restore remain unverified. Source review and JVM checks do not establish phone or provider behavior.
+
+Private signing keys, API keys, recordings, caches and machine configuration are excluded. Use JDK 17, Android SDK 35 and Build Tools 35.0.0; run `bash gradlew :app:assembleDebug` inside `android`. Compatible preview signing requires the existing private key through `VOICEFLOW_KEYSTORE`; it is not included.

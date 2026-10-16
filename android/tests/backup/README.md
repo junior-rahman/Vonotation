@@ -6,7 +6,7 @@ Build the app with `./build-apk.sh`, then build the fixture with Java 17 and And
 ANDROID_SDK_ROOT=/path/to/android-sdk ./tests/build-backup-fixture.sh
 ```
 
-The builder uses the app's compiled preview classes as a classpath, and packages only the three tests in the fixture APK. Both APKs must use the same development signing certificate. You can override the fixture keystore path with `VOICEFLOW_KEYSTORE`; this builder uses the existing preview alias and development password, just like the preview app.
+The builder uses the app's compiled preview classes as a classpath and packages only the test classes in the fixture APK. Both APKs must use the same development signing certificate. You can override the fixture keystore path with `VOICEFLOW_KEYSTORE`; this builder uses the existing preview alias and development password, just like the preview app.
 
 Install the APKs on a disposable test device or emulator:
 
@@ -17,6 +17,8 @@ adb shell am instrument -w app.voiceflow.backup.fixture/app.voiceflow.BackupCred
 adb shell am instrument -w app.voiceflow.backup.fixture/app.voiceflow.BackupArchiveTest
 adb shell am instrument -w app.voiceflow.backup.fixture/app.voiceflow.BackupHistoryDeletionTest
 adb shell am instrument -w app.voiceflow.backup.fixture/app.voiceflow.BackupRestoreBusyTest
+adb shell am instrument -w app.voiceflow.backup.fixture/app.voiceflow.ThoughtStorageTest
+adb shell am instrument -w app.voiceflow.backup.fixture/app.voiceflow.ThoughtDailySummaryCacheTest
 ```
 
 `BackupCredentialPolicyTest` uses a separate preferences file, synthetic credential envelopes and a temporary draft. It checks that snapshots exclude secrets, legacy schema 1 keys are discarded, provider/model/endpoint settings remain portable, same-endpoint device credentials remain, changed endpoints (including changed paths) and invalid local endpoints clear device credentials, a fresh phone never imports an archived key, and failed preference commits roll back data and credentials together. Its commit failure is injected after the first write, then the rollback is allowed to complete; it is not a physical storage failure test.
@@ -27,4 +29,6 @@ adb shell am instrument -w app.voiceflow.backup.fixture/app.voiceflow.BackupRest
 
 `BackupRestoreBusyTest` uses isolated preferences and temporary synthetic busy counters to check that active note processing, audio/call finalization and queued thought saves refuse restore without replacing local data. Run it only on an idle disposable installation with no configured Google backup.
 
-These tests do not use real API credentials, call an API provider, exercise Google sign-in, upload to Drive, restore from Drive, or prove physical power-loss recovery. Report build success separately from instrumentation success.
+`ThoughtDailySummaryCacheTest` uses its own preferences file and synthetic UTC/calendar-day entries. It checks that identical same-date history and thought inputs keep independent recaps; text, added entries, model, endpoint, timezone and date changes miss the stale cache; original-source changes invalidate thought recaps while retaining default history compatibility; pruning and entry deletion affect only the requested scope; and concurrent writes retain every day in both scopes. The default history API is checked alongside the scope overloads. It does not change the device timezone, record audio, or call a provider.
+
+These tests do not use real API credentials, call an API provider, exercise Google sign-in, upload to Drive, restore from Drive, or prove physical power-loss recovery. Report build success separately from instrumentation success. If no disposable Android device or emulator is available, report these fixtures as compiled only; compilation does not establish a runtime pass.

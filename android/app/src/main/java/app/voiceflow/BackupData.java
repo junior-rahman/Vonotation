@@ -127,7 +127,7 @@ final class BackupData {
                 if(key.equals("typing_keyboard") && !enabledKeyboard(context,(String)value))continue;
                 if(value instanceof String)editor.putString(key,(String)value);else if(value instanceof Boolean)editor.putBoolean(key,(Boolean)value);else editor.putInt(key,((Number)value).intValue());
             }
-            editor.putString("history",checked.getJSONArray("history").toString()).remove("history_summaries");
+            editor.putString("history",checked.getJSONArray("history").toString()).remove("history_summaries").remove("thought_summaries");
             // Restore portable thought text; retain this phone's unrelated recordings.
             JSONArray restoredThoughts=checked.getJSONArray("thoughts"),mergedNotes=new JSONArray(),existingNotes=new JSONArray(prefs.getString("notes","[]"));
             HashSet<Long> mergedIds=new HashSet<>(),attachedSources=new HashSet<>();

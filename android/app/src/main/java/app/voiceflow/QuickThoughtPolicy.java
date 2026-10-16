@@ -3,6 +3,7 @@ package app.voiceflow;
 /** Pure rules for opt-in thought capture. No commands, translation or AI replies. */
 final class QuickThoughtPolicy {
     static final long IDLE_MS=60_000L;
+    static final int SUMMARY_VERSION=2;
     static boolean visible(boolean enabled,boolean interactive,boolean locked,boolean appOpen,boolean captureOpen,boolean inputActive,boolean recording){
         return enabled && interactive && !locked && !appOpen && !captureOpen && !inputActive && !recording;
     }
@@ -28,37 +29,62 @@ final class QuickThoughtPolicy {
         String source=raw==null?"":raw.trim();
         if(!bodyAccepted(source,proposedBody))return fallback(raw);
         String title=titleAccepted(source,proposedTitle)?proposedTitle.trim():title(source,"Quick thought");
-        String summary=summaryAccepted(source,proposedSummary)?proposedSummary.trim():summary(source);
+        String summary=detailedSummary(source,proposedSummary);
         return new Organized(title,proposedBody.trim(),summary,true);
     }
     private static Organized fallback(String raw){String source=raw==null?"":raw.trim();return new Organized(title(source,"Quick thought"),source,summary(source),false);}
-    /** Excerpts only: never delete words within a sentence, reorder facts, or invent a paraphrase. */
+    /** Detailed excerpts: complete source sentences, with coverage across the note and no lost caveats. */
     static boolean summaryAccepted(String raw,String candidate){
         if(raw==null||candidate==null||candidate.trim().isEmpty()||candidate.length()>raw.length()*4L+1024)return false;
-        java.util.List<String> source=sentences(raw),chosen=sentences(candidate);
-        if(chosen.isEmpty()||chosen.size()>3)return false;
-        int next=0;
-        for(String excerpt:chosen){
+        java.util.List<SummarySentence> source=summarySentences(raw),chosen=summarySentences(candidate);
+        if(chosen.isEmpty()||chosen.size()<summaryCount(source.size())||chosen.size()>source.size())return false;
+        int sourceWords=0,chosenWords=0;for(SummarySentence sentence:source)sourceWords+=sentence.words;for(SummarySentence sentence:chosen)chosenWords+=sentence.words;
+        if(chosenWords<(sourceWords+1)/2)return false;
+        int next=0,bands=source.size()>4?4:1,coverage=0;StringBuilder matched=new StringBuilder();
+        for(SummarySentence excerpt:chosen){
             boolean found=false;
             for(;next<source.size();next++){
-                String original=source.get(next);
-                if(bodyAccepted(original,excerpt)&&questionMark(original)==questionMark(excerpt)){found=true;next++;break;}
+                SummarySentence original=source.get(next);
+                if(bodyAccepted(original.text,excerpt.text)&&questionMark(original.text)==questionMark(excerpt.text)){found=true;matched.append(original.text).append('\n');coverage|=1<<Math.min(bands-1,next*bands/source.size());next++;break;}
+                if(original.required)return false;
             }
             if(!found)return false;
         }
-        return true;
+        for(;next<source.size();next++)if(source.get(next).required)return false;
+        return coverage==(1<<bands)-1&&bodyAccepted(matched.toString(),candidate);
     }
-    /** A complete first sentence is useful even when the recognizer supplied no sentence boundaries. */
+    static String detailedSummary(String raw,String candidate){return summaryAccepted(raw,candidate)?candidate.trim():summary(raw);}
+    private static int summaryCount(int size){return size<=4?size:(2*size+2)/3;}
+    private static final class SummarySentence {
+        final String text;final int words;final boolean required;
+        SummarySentence(String text){this.text=text;java.util.List<Token> parts=tokens(text);words=parts.size();boolean keep=questionMark(text);for(Token word:parts)if(listed(PROTECTED,word.word)||listed(" correction corrected actually ",word.word))keep=true;required=keep;}
+    }
+    private static java.util.List<SummarySentence> summarySentences(String raw){
+        java.util.ArrayList<SummarySentence> result=new java.util.ArrayList<>();for(String part:sentences(raw)){SummarySentence sentence=new SummarySentence(part);if(sentence.words>0)result.add(sentence);}return result;
+    }
+    /** Proportionate local fallback keeps the beginning, middle, ending, and every stated caveat. */
     static String summary(String raw){
-        java.util.List<String> source=sentences(raw==null?"":raw);
-        StringBuilder excerpt=new StringBuilder();
-        for(int i=0;i<source.size()&&i<2;i++){
-            String sentence=source.get(i);
-            if(excerpt.length()>0&&excerpt.length()+sentence.length()+1>360)break;
-            if(excerpt.length()>0)excerpt.append(' ');
-            excerpt.append(sentence);
+        String text=raw==null?"":raw.trim();java.util.List<SummarySentence> source=summarySentences(text);int size=source.size();
+        if(size==0)return text;
+        boolean[] selected=new boolean[size];int target=summaryCount(size),totalWords=0,keptWords=0;
+        for(int i=0;i<size;i++){totalWords+=source.get(i).words;if(source.get(i).required)selected[i]=true;}
+        for(int i=0;i<target;i++)selected[target==1?0:(int)Math.round((double)i*(size-1)/(target-1))]=true;
+        int bands=size>4?4:1;
+        for(int band=0;band<bands;band++){
+            int first=(size*band+bands-1)/bands,end=(size*(band+1)+bands-1)/bands;boolean covered=false;
+            for(int i=first;i<end;i++)if(selected[i]){covered=true;break;}
+            if(!covered)selected[(first+end-1)/2]=true;
         }
-        return excerpt.toString();
+        java.util.ArrayList<Integer> omitted=new java.util.ArrayList<>();for(int i=0;i<size;i++)if(selected[i])keptWords+=source.get(i).words;else omitted.add(i);
+        java.util.Collections.sort(omitted,(a,b)->Integer.compare(source.get(b).words,source.get(a).words));
+        for(int at:omitted){if(keptWords>=(totalWords+1)/2)break;selected[at]=true;keptWords+=source.get(at).words;}
+        String excerpt=joinSummary(source,selected);
+        // Repeated identical sentences can make the conservative source alignment ambiguous.
+        // Keep the complete source in that case rather than guess which occurrence was selected.
+        return summaryAccepted(text,excerpt)?excerpt:joinSummary(source,null);
+    }
+    private static String joinSummary(java.util.List<SummarySentence> source,boolean[] selected){
+        StringBuilder out=new StringBuilder();int count=0;for(int i=0;i<source.size();i++)if(selected==null||selected[i]){if(count>0)out.append(count%3==0?"\n\n":" ");out.append(source.get(i).text);count++;}return out.toString();
     }
     private static final String ABBREVIATIONS=" mr mrs ms dr prof sr jr st vs etc eg ie fig no approx inc ltd ";
     private static boolean questionMark(String text){return text.indexOf('?')>=0||text.indexOf('？')>=0||text.indexOf('؟')>=0;}

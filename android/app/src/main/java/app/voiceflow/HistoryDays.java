@@ -27,7 +27,12 @@ final class HistoryDays {
         return new ArrayList<>(days.values());
     }
     static String fingerprint(Day day,String model,String endpoint){
-        try{MessageDigest digest=MessageDigest.getInstance("SHA-256");for(String part:new String[]{"daily-recap-v1",day.key,day.zone.getID(),model,endpoint}){digest.update(part.getBytes(StandardCharsets.UTF_8));digest.update((byte)0);}for(Entry entry:chronological(day.entries)){digest.update(Long.toString(entry.id).getBytes(StandardCharsets.UTF_8));digest.update((byte)0);digest.update(entry.text.getBytes(StandardCharsets.UTF_8));digest.update((byte)0);}StringBuilder result=new StringBuilder();for(byte b:digest.digest())result.append(String.format(Locale.US,"%02x",b&255));return result.toString();}catch(Exception e){throw new IllegalStateException(e);}
+        return fingerprint(day,model,endpoint,"");
+    }
+    /** Thought recaps include both the current transcript and its original source. */
+    static String fingerprint(Day day,String model,String endpoint,String scope){
+        boolean thought="thought".equals(scope);
+        try{MessageDigest digest=MessageDigest.getInstance("SHA-256");for(String part:new String[]{thought?"thought-daily-recap-v1":"daily-recap-v1",day.key,day.zone.getID(),model,endpoint}){digest.update(part.getBytes(StandardCharsets.UTF_8));digest.update((byte)0);}for(Entry entry:chronological(day.entries)){digest.update(Long.toString(entry.id).getBytes(StandardCharsets.UTF_8));digest.update((byte)0);digest.update(entry.text.getBytes(StandardCharsets.UTF_8));digest.update((byte)0);if(thought){digest.update(entry.raw.getBytes(StandardCharsets.UTF_8));digest.update((byte)0);}}StringBuilder result=new StringBuilder();for(byte b:digest.digest())result.append(String.format(Locale.US,"%02x",b&255));return result.toString();}catch(Exception e){throw new IllegalStateException(e);}
     }
     private static List<Entry> chronological(List<Entry> entries){List<Entry> sorted=new ArrayList<>(entries);Collections.sort(sorted,(a,b)->Long.compare(a.id,b.id));return sorted;}
     static List<String> chunks(String text,int limit){

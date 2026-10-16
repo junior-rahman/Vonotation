@@ -30,6 +30,8 @@ final class Notes {
     private static String pick="auto";
     private static boolean fixing,original,choosing;
     private static long thoughtSourceShown=-1;
+    private static final java.util.Set<String> thoughtDaysOpen=new java.util.HashSet<>(),thoughtDaysClosed=new java.util.HashSet<>();
+    private static final java.util.Set<Long> thoughtSummaryUpgrades=new java.util.HashSet<>();
     private static android.net.ConnectivityManager.NetworkCallback thoughtNetwork;
     private static android.content.SharedPreferences.OnSharedPreferenceChangeListener thoughtRetryPrefs;
     private static volatile Runnable thoughtRetryAction;
@@ -62,6 +64,9 @@ final class Notes {
 
     static boolean back(){if(open<0)return false;stopPlayback();fixing=false;original=false;translating=false;thoughtSourceShown=-1;open=-1;return true;}
     static void stop(){stopPlayback();}
+    static void resumeThoughtSummaries(Context context){ThoughtDailySummaries.resume(context);}
+    static void pauseThoughtSummaries(){ThoughtDailySummaries.pause();}
+    static void refreshThoughtSummaries(){if(ThoughtDailySummaries.active())poke();}
 
     static void show(Activity activity,LinearLayout body,Runnable refresh) { show(activity,body,null,refresh); }
     static void show(Activity activity,LinearLayout body,android.widget.FrameLayout dock,Runnable refresh) {
@@ -484,7 +489,7 @@ final class Notes {
     }
     static String name(String code){for(int i=0;i<CODES.length;i++)if(CODES[i].equals(code))return NAMES[i];return code==null||code.isEmpty()?"Auto":code;}
     private static String titleOf(JSONObject note){
-        if(note.optBoolean("thought")){String saved=note.optString("title","").trim();return saved.isEmpty()?QuickThoughtPolicy.title(note.optString("text"),"Quick thought"):saved;}
+        if(note.optBoolean("thought")){String saved=note.optString("title","").trim();return saved.isEmpty()?QuickThoughtPolicy.title(thoughtBody(note),"Quick thought"):saved;}
         if(note.optBoolean("call") && note.optString("text","").isEmpty() && note.optString("summary","").isEmpty()){String who=note.optString("who","");return who.isEmpty()?"Phone call":who;}
         String summary=note.optString("summary","").replace('\n',' ').trim();
         if(!summary.isEmpty()){int dot=summary.indexOf('.');String line=dot>20 && dot<90?summary.substring(0,dot):summary;return line.length()>80?line.substring(0,80).trim():line;}
@@ -695,7 +700,7 @@ final class Notes {
                 long id=captured.optLong("id"),revision=captured.optLong("revision",1);JSONObject current=find(context,id);
                 if(current==null||!current.optBoolean("thought")||current.optBoolean("recording")||!current.optBoolean("pending")||current.optLong("revision",1)!=revision||!current.optString("raw").equals(captured.optString("raw"))||!String.valueOf(current.opt("parts")).equals(String.valueOf(captured.opt("parts"))))return false;
                 String before=Store.get(context,"notes","[]");JSONArray notes=new JSONArray(before);
-                for(int i=0;i<notes.length();i++){JSONObject note=notes.optJSONObject(i);if(note!=null&&note.optLong("id")==id)note.put("raw",raw).put("text",raw.trim()).put("title",QuickThoughtPolicy.title(raw,"Quick thought")).put("summary",QuickThoughtPolicy.summary(raw)).put("heard",heard==null?"":heard).put("pending",false).put("revision",revision+1);}
+                for(int i=0;i<notes.length();i++){JSONObject note=notes.optJSONObject(i);if(note!=null&&note.optLong("id")==id)note.put("raw",raw).put("text",raw.trim()).put("title",QuickThoughtPolicy.title(raw,"Quick thought")).put("summary",QuickThoughtPolicy.summary(raw)).put("summary_version",QuickThoughtPolicy.SUMMARY_VERSION).put("heard",heard==null?"":heard).put("pending",false).put("revision",revision+1);}
                 if(Store.prefs(context).edit().putString("notes",notes.toString()).commit())return true;
                 Store.prefs(context).edit().putString("notes",before).commit();return false;
             }catch(Exception unavailable){return false;}
@@ -858,6 +863,7 @@ final class Notes {
         String previousDeleted=Store.get(activity,"thought_deletions","[]");android.content.SharedPreferences.Editor edit=Store.prefs(activity).edit().putString("notes",next.toString());
         if(thought)edit.putString("thought_deletions",deletedThoughts(activity,id).toString());
         if(!edit.commit()){Store.prefs(activity).edit().putString("notes",notes.toString()).putString("thought_deletions",previousDeleted).commit();toast(activity,"Could not delete this note. Check available phone storage.");return;}
+        if(thought)DailySummaryCache.invalidateEntry(activity,"thought",id);
         for(File audio:removedFiles)if(audio.isFile())audio.delete();
             }
     }
@@ -904,7 +910,7 @@ final class Notes {
             JSONObject thought=new JSONObject().put("id",id).put("created",id).put("thought",true)
                 .put("text",text).put("raw",raw).put("title",QuickThoughtPolicy.title(text,"Quick thought"))
                 .put("duration",Math.max(Math.max(0,duration),durations(audio))).put("lang",Store.language(context)).put("heard",Store.language(context))
-                .put("audio",audio.isEmpty()?"":audio.get(0).getName()).put("parts",names(audio)).put("summary",QuickThoughtPolicy.summary(raw)).put("pending",false).put("revision",1L);
+                .put("audio",audio.isEmpty()?"":audio.get(0).getName()).put("parts",names(audio)).put("summary",QuickThoughtPolicy.summary(raw)).put("summary_version",QuickThoughtPolicy.SUMMARY_VERSION).put("pending",false).put("revision",1L);
             next.put(thought);
             appendRetained(next,notes,-1);
             // Commit so the UI only says Saved when storage has accepted the words.
@@ -970,7 +976,7 @@ final class Notes {
                     String before=Store.get(app,"notes","[]");JSONArray old=new JSONArray(before),next=new JSONArray();
                     for(int i=0;i<old.length();i++){
                         JSONObject note=old.optJSONObject(i);if(note==null)continue;
-                        if(note.optLong("id")==id){note.put("text",organized.body).put("title",organized.title).put("summary",organized.summary).put("revision",revision+1);}
+                        if(note.optLong("id")==id){note.put("text",organized.body).put("title",organized.title).put("summary",organized.summary).put("summary_version",QuickThoughtPolicy.SUMMARY_VERSION).put("revision",revision+1);}
                         next.put(note);
                     }
                     if(!Store.prefs(app).edit().putString("notes",next.toString()).commit())Store.prefs(app).edit().putString("notes",before).commit();
@@ -989,50 +995,115 @@ final class Notes {
             String before=Store.get(context,"notes","[]");JSONArray old=new JSONArray(before),next=new JSONArray();
             for(int i=0;i<old.length();i++){
                 JSONObject note=old.optJSONObject(i);if(note==null)continue;
-                if(note.optLong("id")==id)note.put("text",text.trim()).put("title",QuickThoughtPolicy.title(text,"Quick thought")).put("summary",QuickThoughtPolicy.summary(text)).put("revision",note.optLong("revision",1)+1);
+                if(note.optLong("id")==id)note.put("text",text.trim()).put("title",QuickThoughtPolicy.title(text,"Quick thought")).put("summary",QuickThoughtPolicy.summary(text)).put("summary_version",QuickThoughtPolicy.SUMMARY_VERSION).put("revision",note.optLong("revision",1)+1);
                 next.put(note);
             }
-            boolean saved=Store.prefs(context).edit().putString("notes",next.toString()).commit();if(saved)poke();else Store.prefs(context).edit().putString("notes",before).commit();return saved;
+            boolean saved=Store.prefs(context).edit().putString("notes",next.toString()).commit();if(saved){DailySummaryCache.invalidateEntry(context,"thought",id);poke();}else Store.prefs(context).edit().putString("notes",before).commit();return saved;
         } catch(Exception ignored){return false;}
             }
     }
 
     private static void thoughtList(Activity activity,LinearLayout body,Runnable refresh) {
         if(!Store.quickThoughts(activity))return;
-        body.addView(Daybook.text(activity,"Ideas captured when no input is active.",13,Daybook.muted(activity),false));Ui.space(body,8);
-        JSONArray notes=all(activity);String bucket="";int shown=0;
-        for(int i=0;i<notes.length();i++){
-            JSONObject note=notes.optJSONObject(i);if(note==null || !note.optBoolean("thought"))continue;
-            shown++;
-            String group=bucketOf(note);
-            if(!group.equals(bucket)){bucket=group;if(shown>1)Ui.space(body,8);body.addView(Daybook.text(activity,group,13,Daybook.muted(activity),true));Ui.space(body,6);}
-            LinearLayout card=Daybook.card(activity);card.setPadding(Ui.dp(activity,14),Ui.dp(activity,12),Ui.dp(activity,14),Ui.dp(activity,12));
-            TextView title=Daybook.text(activity,titleOf(note),16,Daybook.ink(activity),false);title.setMaxLines(2);title.setEllipsize(android.text.TextUtils.TruncateAt.END);card.addView(title);Ui.space(card,4);
-            card.addView(Daybook.text(activity,when(note),12,Daybook.muted(activity),false));Ui.space(card,8);
-            String previewText=note.optString("text");if(previewText.isEmpty())previewText=note.optBoolean("recording")?"Recording…":note.optBoolean("pending")?"Source saved. Waiting for transcription.":note.optBoolean("source_interrupted")?"Recording interrupted.":"Source audio saved.";
-            TextView preview=Daybook.text(activity,previewText,14,Daybook.muted(activity),false);preview.setMaxLines(2);preview.setEllipsize(android.text.TextUtils.TruncateAt.END);card.addView(preview);
-            long id=note.optLong("id");card.setOnClickListener(v->{Daybook.feedback(v);open=id;original=false;thoughtSourceShown=-1;refresh.run();});body.addView(card);Ui.space(body,8);
+        List<ThoughtTimeline.Day> days=thoughtDays(activity);List<HistoryDays.Day> completed=new ArrayList<>();for(ThoughtTimeline.Day day:days)if(day.recap!=null)completed.add(day.recap);
+        DailySummaryCache.prune(activity,"thought",completed);
+        if(days.isEmpty()){Ui.space(body,4);body.addView(Daybook.text(activity,"Thoughts captured with the floating control show up here.",13,Daybook.muted(activity),false));return;}
+        String model=ThoughtDailySummaries.model(activity),endpoint=ThoughtDailySummaries.endpoint(activity);
+        boolean enabled=Store.bool(activity,"daily_recaps_opt_in",false),keyed=!Vault.get(activity).isEmpty(),online=ThoughtDailySummaries.online(activity);
+        String today=HistoryDays.key(System.currentTimeMillis(),java.util.TimeZone.getDefault());java.util.Calendar yesterday=java.util.Calendar.getInstance();yesterday.add(java.util.Calendar.DAY_OF_YEAR,-1);String previous=HistoryDays.key(yesterday.getTimeInMillis(),yesterday.getTimeZone());
+        int index=0;
+        for(ThoughtTimeline.Day day:days){
+            LinearLayout section=Ui.row(activity);section.setGravity(android.view.Gravity.TOP);Daybook.Rail rail=new Daybook.Rail(activity,index++==0);section.addView(rail,new LinearLayout.LayoutParams(Ui.dp(activity,18),-1));LinearLayout content=Ui.column(activity);content.setPadding(Ui.dp(activity,3),0,0,Ui.dp(activity,19));section.addView(content,new LinearLayout.LayoutParams(0,-2,1));
+            String title=day.key.equals(today)?"Today":day.key.equals(previous)?"Yesterday":new java.text.SimpleDateFormat("EEEE",Locale.getDefault()).format(new Date(day.time()));
+            LinearLayout head=Ui.row(activity);head.setMinimumHeight(Ui.dp(activity,44));head.setBackground(Daybook.ripple(activity,android.graphics.Color.TRANSPARENT,8));LinearLayout labels=Ui.column(activity);labels.addView(Daybook.text(activity,title,15,Daybook.ink(activity),true));Ui.space(labels,3);labels.addView(Daybook.text(activity,new java.text.SimpleDateFormat("EEE, MMM d",Locale.getDefault()).format(new Date(day.time()))+" · "+day.items.size()+" saved",11,Daybook.muted(activity),false));head.addView(labels,new LinearLayout.LayoutParams(0,-2,1));TextView arrow=Daybook.text(activity,"⌄",18,Daybook.accent(activity),false);head.addView(arrow);content.addView(head);Ui.space(content,7);
+            LinearLayout timeline=Ui.column(activity);timeline.setPadding(0,Ui.dp(activity,10),0,0);
+            for(ThoughtTimeline.Item item:day.items){
+                android.view.View divider=new android.view.View(activity);divider.setBackgroundColor(Daybook.line(activity));timeline.addView(divider,new LinearLayout.LayoutParams(-1,Math.max(1,Ui.dp(activity,.5f))));
+                LinearLayout row=Ui.row(activity);row.setMinimumHeight(Ui.dp(activity,51));row.setPadding(0,Ui.dp(activity,7),0,Ui.dp(activity,7));row.setBackground(Daybook.ripple(activity,android.graphics.Color.TRANSPARENT,7));TextView time=Daybook.text(activity,DateFormat.getTimeInstance(DateFormat.SHORT).format(new Date(item.id)),11,Daybook.muted(activity),false);row.addView(time,new LinearLayout.LayoutParams(Ui.dp(activity,67),-2));TextView excerpt=Daybook.text(activity,item.display(),16,item.recording||item.pending?Daybook.muted(activity):Daybook.ink(activity),false);excerpt.setMaxLines(2);excerpt.setEllipsize(android.text.TextUtils.TruncateAt.END);row.addView(excerpt,new LinearLayout.LayoutParams(0,-2,1));row.setContentDescription("Open thought "+item.id+": "+item.display());row.setOnClickListener(v->{Daybook.feedback(v);open=item.id;original=false;thoughtSourceShown=-1;refresh.run();});timeline.addView(row);
+            }
+            boolean expanded=thoughtDaysOpen.contains(day.key)||(day.key.equals(today)&&!thoughtDaysClosed.contains(day.key));timeline.setVisibility(expanded?android.view.View.VISIBLE:android.view.View.GONE);arrow.setText(expanded?"⌃":"⌄");content.addView(timeline);
+            if(enabled){Ui.space(content,10);content.addView(thoughtDayRecap(activity,day,model,endpoint,keyed,online,refresh));}
+            head.setContentDescription((expanded?"Hide":"Show")+" timeline for "+day.key);head.setOnClickListener(v->{Daybook.feedback(v);boolean show=timeline.getVisibility()!=android.view.View.VISIBLE;timeline.setVisibility(show?android.view.View.VISIBLE:android.view.View.GONE);if(show){thoughtDaysOpen.add(day.key);thoughtDaysClosed.remove(day.key);Daybook.motion(timeline);}else{thoughtDaysOpen.remove(day.key);thoughtDaysClosed.add(day.key);}arrow.setText(show?"⌃":"⌄");head.setContentDescription((show?"Hide":"Show")+" timeline for "+day.key);});body.addView(section);
         }
-        if(shown==0){LinearLayout empty=Daybook.card(activity);empty.setPadding(Ui.dp(activity,16),Ui.dp(activity,18),Ui.dp(activity,16),Ui.dp(activity,18));empty.addView(Daybook.text(activity,"No thoughts yet.",18,Daybook.ink(activity),true));Ui.space(empty,7);empty.addView(Daybook.text(activity,"Tap the edge dot outside VonoTation when no input is active. Finish with the floating checkmark; your thought is saved here automatically.",13,Daybook.muted(activity),false));body.addView(empty);}
+        ThoughtDailySummaries.request(activity,completed);
+    }
+
+    private static LinearLayout thoughtDayRecap(Activity activity,ThoughtTimeline.Day day,String model,String endpoint,boolean keyed,boolean online,Runnable refresh){
+        LinearLayout recap=Daybook.card(activity);recap.setPadding(Ui.dp(activity,12),Ui.dp(activity,10),Ui.dp(activity,12),Ui.dp(activity,10));recap.addView(Daybook.text(activity,"✧  Daily recap",11,Daybook.accent(activity),true));Ui.space(recap,4);
+        String cached=day.recap==null?"":DailySummaryCache.get(activity,"thought",day.recap,model,endpoint),failure=day.recap==null?"":ThoughtDailySummaries.failure(day.recap,model,endpoint);
+        String text=!cached.isEmpty()?cached:day.recap==null?"Your thoughts will fill in after transcription.":!failure.isEmpty()?"Recap unavailable. Your thoughts are under the day.":!keyed?"Your words are under the day. Add a provider key if you want a recap.":!online?"Waiting for a connection. Your thoughts are saved.":"Creating your daily recap…";
+        recap.addView(Daybook.text(activity,text,13,cached.isEmpty()?Daybook.muted(activity):Daybook.ink(activity),false));
+        if(!cached.isEmpty()||!failure.isEmpty()){String status=failure.isEmpty()?"AI recap · "+thoughtModelName(model):failure;recap.addView(Daybook.text(activity,status,11,Daybook.muted(activity),false));}
+        if(!failure.isEmpty()&&day.recap!=null)recap.addView(Daybook.button(activity,"Retry recap",false,v->{ThoughtDailySummaries.retry(activity,day.recap);refresh.run();}),new LinearLayout.LayoutParams(-1,Ui.dp(activity,44)));
+        return recap;
+    }
+    private static String thoughtModelName(String model){for(int i=0;i<ModelCatalog.CLEANUP_IDS.length;i++)if(ModelCatalog.CLEANUP_IDS[i].equals(model))return ModelCatalog.CLEANUP_NAMES[i];return model;}
+    private static List<ThoughtTimeline.Day> thoughtDays(Context context){
+        List<ThoughtTimeline.Item> items=new ArrayList<>();JSONArray notes=all(context);
+        for(int i=0;i<notes.length();i++){JSONObject note=notes.optJSONObject(i);if(note!=null&&note.optBoolean("thought")&&note.optLong("id")>0)items.add(new ThoughtTimeline.Item(note.optLong("id"),titleOf(note),note.optString("text"),note.optString("raw"),note.optLong("revision",1),note.optBoolean("recording"),note.optBoolean("pending"),note.optBoolean("source_interrupted")));}
+        return ThoughtTimeline.group(items,java.util.TimeZone.getDefault());
+    }
+    static List<HistoryDays.Day> thoughtRecapDays(Context context){List<HistoryDays.Day> days=new ArrayList<>();for(ThoughtTimeline.Day day:thoughtDays(context))if(day.recap!=null)days.add(day.recap);return days;}
+    private static String thoughtBody(JSONObject note){String text=note.optString("text");return text.trim().isEmpty()?note.optString("raw"):text;}
+
+    /** Upgrade old short summaries alone; text edits and retained audio never go through organization again. */
+    private static void upgradeThoughtSummary(Context context,JSONObject shown){
+        if(shown.optInt("summary_version",0)>=QuickThoughtPolicy.SUMMARY_VERSION || shown.optBoolean("recording") || shown.optBoolean("pending"))return;
+        final Context app=context.getApplicationContext();final long id=shown.optLong("id"),revision=shown.optLong("revision",1);
+        final String raw=shown.optString("raw"),text=shown.optString("text"),parts=String.valueOf(shown.opt("parts")),audio=shown.optString("audio");
+        final String source=text.trim().isEmpty()?raw:text;if(source.trim().isEmpty())return;
+        final String fallback=QuickThoughtPolicy.summary(source),model=ThoughtDailySummaries.model(app),endpoint=ThoughtDailySummaries.endpoint(app);
+        synchronized(Store.class){
+            JSONObject current=find(app,id);if(!thoughtSnapshot(current,revision,raw,text,parts,audio) || current.optInt("summary_version",0)>=QuickThoughtPolicy.SUMMARY_VERSION)return;
+            try{
+                String before=Store.get(app,"notes","[]");JSONArray notes=new JSONArray(before);
+                for(int i=0;i<notes.length();i++){JSONObject note=notes.optJSONObject(i);if(note!=null&&note.optLong("id")==id)note.put("summary",fallback).put("summary_version",QuickThoughtPolicy.SUMMARY_VERSION);}
+                if(!Store.prefs(app).edit().putString("notes",notes.toString()).commit()){Store.prefs(app).edit().putString("notes",before).commit();return;}
+                shown.put("summary",fallback).put("summary_version",QuickThoughtPolicy.SUMMARY_VERSION);
+            }catch(Exception unavailable){return;}
+        }
+        if(Vault.get(app).isEmpty() || !ThoughtDailySummaries.online(app))return;
+        synchronized(thoughtSummaryUpgrades){if(!thoughtSummaryUpgrades.add(id))return;}
+        thoughtWork.incrementAndGet();
+        work.execute(()->{
+            try{
+                if(!model.equals(ThoughtDailySummaries.model(app)) || !endpoint.equals(ThoughtDailySummaries.endpoint(app)))return;
+                synchronized(Store.class){JSONObject current=find(app,id);if(!thoughtSnapshot(current,revision,raw,text,parts,audio) || !current.optString("summary").equals(fallback))return;}
+                String summary=new CloudApi(app).thoughtSummary(source);
+                synchronized(Store.class){
+                    JSONObject current=find(app,id);
+                    if(!thoughtSnapshot(current,revision,raw,text,parts,audio) || !current.optString("summary").equals(fallback) || !model.equals(ThoughtDailySummaries.model(app)) || !endpoint.equals(ThoughtDailySummaries.endpoint(app)))return;
+                    String before=Store.get(app,"notes","[]");JSONArray notes=new JSONArray(before);
+                    for(int i=0;i<notes.length();i++){JSONObject note=notes.optJSONObject(i);if(note!=null&&note.optLong("id")==id)note.put("summary",summary).put("summary_version",QuickThoughtPolicy.SUMMARY_VERSION);}
+                    if(!Store.prefs(app).edit().putString("notes",notes.toString()).commit())Store.prefs(app).edit().putString("notes",before).commit();
+                }
+            }catch(Exception unavailable){/* A detailed local extract is already saved. */}
+            finally{synchronized(thoughtSummaryUpgrades){thoughtSummaryUpgrades.remove(id);}thoughtWork.decrementAndGet();poke();}
+        });
+    }
+    private static boolean thoughtSnapshot(JSONObject current,long revision,String raw,String text,String parts,String audio){
+        return current!=null && current.optBoolean("thought") && !current.optBoolean("recording") && !current.optBoolean("pending") && current.optLong("revision",1)==revision && current.optString("raw").equals(raw) && current.optString("text").equals(text) && String.valueOf(current.opt("parts")).equals(parts) && current.optString("audio").equals(audio);
     }
 
     private static void thoughtDetail(Activity activity,LinearLayout body,JSONObject note,Runnable refresh) {
         if(!Store.quickThoughts(activity)){back();return;}
+        upgradeThoughtSummary(activity,note);
         long id=note.optLong("id");boolean recording=note.optBoolean("recording"),coming=transcribing==id;
         body.addView(Daybook.text(activity,titleOf(note),22,Daybook.ink(activity),true));Ui.space(body,4);body.addView(Daybook.text(activity,when(note),12,Daybook.muted(activity),false));Ui.space(body,16);
         String summary=note.optString("summary");
         if(!original&&!summary.isEmpty()){
-            body.addView(Daybook.text(activity,"Summary",12,Daybook.muted(activity),true));Ui.space(body,6);
+            body.addView(Daybook.text(activity,"Detailed summary",12,Daybook.muted(activity),true));Ui.space(body,6);
             TextView recap=Daybook.text(activity,summary,16,Daybook.ink(activity),false);recap.setLineSpacing(Ui.dp(activity,3),1);recap.setTextIsSelectable(true);body.addView(recap);Ui.space(body,16);
         }
-        body.addView(Daybook.text(activity,original?"Original transcript":"Your thought",12,Daybook.muted(activity),true));Ui.space(body,6);
+        body.addView(Daybook.text(activity,original?"Original transcript":"Full transcript",12,Daybook.muted(activity),true));Ui.space(body,6);
         String text=note.optString(original?"raw":"text");
+        if(!original&&!recording&&!note.optBoolean("pending")&&text.trim().isEmpty())text=note.optString("raw");
         if(text.isEmpty())text=recording?"Recording. Your source audio is being kept on this phone.":coming?"Writing it up…":note.optBoolean("pending")?"Saved on this phone. The words will fill in when you are online and your provider is connected.":note.optBoolean("source_interrupted")?"The recording was interrupted before a finalized source segment could be recovered.":"No speech was recognized. Your source audio is still saved.";
         TextView words=Daybook.text(activity,text,17,Daybook.ink(activity),false);words.setLineSpacing(Ui.dp(activity,4),1);words.setTextIsSelectable(true);body.addView(words);Ui.space(body,18);
         LinearLayout actions=Ui.row(activity);
         if(!note.optString("raw").isEmpty())actions.addView(quiet(activity,original?"Organized":"Original",v->{original=!original;refresh.run();}));
-        if(!note.optString("text").isEmpty())actions.addView(quiet(activity,"Edit",v->{
-            android.widget.EditText input=new android.widget.EditText(activity);input.setText(note.optString("text"));input.setMinLines(3);input.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE);
+        if(!thoughtBody(note).isEmpty())actions.addView(quiet(activity,"Edit",v->{
+            android.widget.EditText input=new android.widget.EditText(activity);input.setText(thoughtBody(note));input.setMinLines(3);input.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE);
             android.app.AlertDialog dialog=new android.app.AlertDialog.Builder(activity).setTitle("Edit thought").setView(input).setNegativeButton("Cancel",null).setPositiveButton("Save",null).create();
             dialog.setOnShowListener(d->dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener(view->{if(editThought(activity,note.optLong("id"),input.getText().toString())){dialog.dismiss();refresh.run();}else input.setError("Add some text, or reopen this thought.");}));dialog.show();
         }));
