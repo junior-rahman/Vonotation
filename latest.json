@@ -1,9 +1,9 @@
 {
-  "versionCode": 83,
-  "versionName": "0.1.11-preview",
-  "apk": "https://github.com/JuelHossain/Vonotation/releases/download/v0.1.11-preview/VonoTation-0.1.11-preview.apk",
-  "sha256": "2a2d840ba923ff61688f0f0392fbb09cdff914f83dd852ec28837b85d78cabe7",
-  "size": 6159434,
+  "versionCode": 84,
+  "versionName": "0.1.12-preview",
+  "apk": "https://github.com/JuelHossain/Vonotation/releases/download/v0.1.12-preview/VonoTation-0.1.12-preview.apk",
+  "sha256": "571ab3aa6710c4dce839d7599f839739e958f75c4659473a653264cea99b13e8",
+  "size": 6160890,
   "package": "app.voiceflow",
-  "notes": "Quick thoughts save source audio offline and add organized transcripts, summaries and titles with hidden playback. Recording continues across outside taps and app changes. Delete uses the current selection or cursor. Removed Clear history and restored Backup controls. Google sign-in and live Drive backup still need verification on your phone."
+  "notes": "With no input active, tap the floating button to record, hold it to open Quick thoughts, or drag it freely around the usable screen. Its saved position is shared with active-input controls. Tap, hold and drag are separated to prevent accidental recording. The selected card is retained after folding or rotation. Existing design and offline thought recording are preserved. Phone gesture testing remains pending."
 }
