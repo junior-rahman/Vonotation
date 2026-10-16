@@ -29,7 +29,7 @@ final class VoiceTake {
     /** Includes setup, capture, recorder finalization and the completed-file save callback. */
     static boolean updateBusy(){return pendingWork.get()>0;}
     private void beginWork(){if(countedWork.compareAndSet(false,true))pendingWork.incrementAndGet();}
-    private void completeWork(){if(countedWork.compareAndSet(true,false))pendingWork.decrementAndGet();}
+    private void completeWork(){if(countedWork.compareAndSet(true,false)){pendingWork.decrementAndGet();handler.post(()->{if(FlowAccessibility.instance!=null)FlowAccessibility.instance.updateBubble();});}}
     private final Context context;
     private final Listener listener;
     private final Handler handler=new Handler(Looper.getMainLooper());
@@ -37,6 +37,7 @@ final class VoiceTake {
     private MediaRecorder recorder;
     private File file;
     private boolean active,started,untilQuiet,note,call,heardSpeech;
+    private volatile boolean discardedNote;
     private int source=-1;
     private long startedAt;
     private int index;
@@ -81,6 +82,7 @@ final class VoiceTake {
 
     private static void open(Context context,Listener listener,boolean untilQuiet,boolean needsKey,File folder,long id,boolean call) {
         if(current!=null && current.note && current.active){listener.failed("Finish the recording first.");return;}
+        if(current!=null && current.note && current.finalizing){listener.failed("The recording is still being saved. Try again in a moment.");return;}
         cancel();
         if(context.checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){listener.failed("Allow microphone access first.");return;}
         if(needsKey && Vault.get(context).isEmpty()){listener.failed("Add your API key in Settings first.");return;}
@@ -92,6 +94,12 @@ final class VoiceTake {
     static void finish(){if(current!=null)current.stop();}
 
     static void cancel(){if(current!=null && current.note && current.active)return;if(current!=null){current.drop();current=null;}}
+    /** Explicit owner-only cancellation; an unrelated dictation cannot discard a saved note or call. */
+    static boolean cancelNote(long id){
+        VoiceTake take=current;
+        if(take==null || !take.note || take.call || take.noteId!=id)return false;
+        take.discardedNote=true;current=null;take.drop();return true;
+    }
 
     private void start() {
         beginWork();active=true;
@@ -107,7 +115,7 @@ final class VoiceTake {
             } catch(Exception error) {
                 failure=error.getMessage()==null?"Could not start the microphone.":error.getMessage();
             }
-            if(failure!=null){final String message=failure;handler.post(()->{drop();if(current==this)current=null;listener.failed(message);});}
+            if(failure!=null){final String message=failure;handler.post(()->{drop();if(current==this)current=null;if(!discardedNote)listener.failed(message);});}
         });
     }
 
@@ -150,7 +158,7 @@ final class VoiceTake {
                     arm(new File(folder,noteId+"-"+(index++)+".m4a"));
                     started=true;
                     java.util.List<File> ready=new java.util.ArrayList<>(parts);
-                    handler.post(()->{if(active)listener.partReady(ready);});
+                    handler.post(()->{if(active && !discardedNote)listener.partReady(ready);});
                     handler.postDelayed(rotate,SEGMENT);
                 } catch(Exception error) {
                     handler.post(VoiceTake.this::stop);
@@ -205,6 +213,7 @@ final class VoiceTake {
             handler.post(()->{
                 try{
                     if(current==this)current=null;
+                    if(discardedNote){for(File discarded:ready)discarded.delete();return;}
                     if(untilQuiet && !heardSpeech){for(File silent:ready)silent.delete();listener.failed("Nothing was recorded.");return;}
                     if(ready.isEmpty())listener.failed("Nothing was recorded.");else listener.finishedAll(ready);
                 }finally{completeWork();}
@@ -223,7 +232,7 @@ final class VoiceTake {
     private void drop() {
         active=false;handler.removeCallbacks(quietPoll);handler.removeCallbacks(rotate);handler.removeCallbacks(meter);
         executor.execute(()->{
-            try{try{if(started && recorder!=null)recorder.stop();}catch(RuntimeException ignored){}release();if(!note && file!=null)file.delete();file=null;parts.clear();releaseWake();}
+            try{try{if(started && recorder!=null)recorder.stop();}catch(RuntimeException ignored){}release();if((!note || discardedNote) && file!=null)file.delete();if(discardedNote)for(File discarded:parts)discarded.delete();file=null;parts.clear();releaseWake();}
             finally{if(!finalizing)completeWork();} // A queued finishedAll callback still owns finalization.
         });
     }

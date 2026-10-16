@@ -5,7 +5,7 @@ public final class QuickThoughtOrganizationTest {
     static void check(boolean value,String reason){checks++;if(!value)throw new AssertionError(reason);}
     static void equal(String expected,String actual){check(expected.equals(actual),"Expected ["+expected+"] got ["+actual+"]");}
     static String quote(String value){return "\""+value.replace("\\","\\\\").replace("\"","\\\"").replace("\n","\\n").replace("\r","\\r").replace("\t","\\t")+"\"";}
-    static String json(String title,String body){return "{\"title\":"+quote(title)+",\"body\":"+quote(body)+"}";}
+    static String json(String title,String body){return "{\"title\":"+quote(title)+",\"body\":"+quote(body)+",\"summary\":\"\"}";}
     static void invalid(String raw,String reply){QuickThoughtPolicy.Organized result=QuickThoughtPolicy.organizeReply(raw,reply);check(!result.accepted,"Malformed/unsafe response accepted: "+reply);equal(raw,result.body);}
     public static void main(String[] args){
         String raw="I was thinking about repainting the kitchen this weekend then buying blue paint";
@@ -74,7 +74,7 @@ public final class QuickThoughtOrganizationTest {
         invalid(raw,"{\"title\":\"Buy milk\"}");
         invalid(raw,"{\"title\":\"Buy milk\",\"body\":\"Buy milk\",}");
         invalid(raw,"{\"title\":\"\\u+042uy milk\",\"body\":\"Buy milk\"}");
-        organized=QuickThoughtPolicy.organizeReply(raw,"{\"body\":\"Buy milk\",\"title\":\"\\u0042uy milk\"}");check(organized.accepted,"strict escaped Unicode and reverse schema key order accepted");
+        organized=QuickThoughtPolicy.organizeReply(raw,"{\"body\":\"Buy milk\",\"summary\":\"Buy milk\",\"title\":\"\\u0042uy milk\"}");check(organized.accepted,"strict escaped Unicode and reverse schema key order accepted");
         check(!QuickThoughtPolicy.titleAccepted(raw,"Buy milk\nnext"),"single-line title enforced");
         check(!QuickThoughtPolicy.titleAccepted("one two three four five six seven eight nine","one two three four five six seven eight nine"),"eight-word title cap");
         StringBuilder longNote=new StringBuilder("I was thinking about ");for(int i=0;i<8000;i++)longNote.append("weekend kitchen repainting supplies ");

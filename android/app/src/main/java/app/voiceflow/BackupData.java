@@ -37,7 +37,7 @@ final class BackupData {
             JSONObject data=new JSONObject().put("format",FORMAT).put("schema",SCHEMA).put("created_at",System.currentTimeMillis()).put("settings",settings).put("history",history);
             JSONArray thoughts=new JSONArray();
             JSONArray notes=new JSONArray(prefs.getString("notes","[]"));
-            for(int i=0;i<notes.length();i++){JSONObject note=notes.optJSONObject(i);if(note!=null && note.optBoolean("thought"))thoughts.put(new JSONObject().put("id",note.optLong("id")).put("created",note.optLong("created",note.optLong("id"))).put("text",note.optString("text")).put("raw",note.optString("raw")).put("title",note.optString("title")).put("duration",note.optLong("duration")).put("lang",note.optString("lang","en")));}
+            for(int i=0;i<notes.length();i++){JSONObject note=notes.optJSONObject(i);if(note!=null && note.optBoolean("thought")&&!note.optBoolean("recording")&&!note.optString("raw").trim().isEmpty()&&!note.optString("text").trim().isEmpty())thoughts.put(new JSONObject().put("id",note.optLong("id")).put("created",note.optLong("created",note.optLong("id"))).put("text",note.optString("text")).put("raw",note.optString("raw")).put("title",note.optString("title")).put("summary",note.optString("summary")).put("duration",note.optLong("duration")).put("lang",note.optString("lang","en")));}
             data.put("thoughts",thoughts); // Text only. Microphone recordings never enter an archive.
             String draft=MainActivity.currentDraft;if(draft!=null && !draft.isEmpty())data.put("draft",draft);
             return validate(data);
@@ -99,7 +99,7 @@ final class BackupData {
                 JSONObject item=sourceThoughts.optJSONObject(i);if(item==null)throw invalid("A saved thought is not valid.");
                 long id=integer(item,"id",1,Long.MAX_VALUE);if(!thoughtIds.add(id))throw invalid("The backup contains duplicate thoughts.");
                 String text=string(item,"text",1000000,false),raw=string(item,"raw",1000000,false);if(text.trim().isEmpty() || raw.trim().isEmpty())throw invalid("A saved thought has no words.");
-                thoughts.put(new JSONObject().put("id",id).put("created",integer(item,"created",1,Long.MAX_VALUE)).put("text",text).put("raw",raw).put("title",string(item,"title",256,true)).put("duration",integer(item,"duration",0,Long.MAX_VALUE)).put("lang",string(item,"lang",32,true)));
+                thoughts.put(new JSONObject().put("id",id).put("created",integer(item,"created",1,Long.MAX_VALUE)).put("text",text).put("raw",raw).put("title",string(item,"title",256,true)).put("summary",item.has("summary")?string(item,"summary",1000000,true):"").put("duration",integer(item,"duration",0,Long.MAX_VALUE)).put("lang",string(item,"lang",32,true)));
             }
         }
         boolean thoughtsIncluded=data.has("thoughts");
@@ -130,12 +130,15 @@ final class BackupData {
             editor.putString("history",checked.getJSONArray("history").toString()).remove("history_summaries");
             // Restore portable thought text; retain this phone's unrelated recordings.
             JSONArray restoredThoughts=checked.getJSONArray("thoughts"),mergedNotes=new JSONArray(),existingNotes=new JSONArray(prefs.getString("notes","[]"));
-            HashSet<Long> mergedIds=new HashSet<>();
+            HashSet<Long> mergedIds=new HashSet<>(),attachedSources=new HashSet<>();
             for(int i=0;i<restoredThoughts.length();i++){
                 JSONObject thought=new JSONObject(restoredThoughts.getJSONObject(i).toString());long id=thought.getLong("id");mergedIds.add(id);
-                thought.put("thought",true).put("audio","").put("summary","").put("pending",false).put("revision",System.nanoTime());mergedNotes.put(thought);
+                thought.put("thought",true).put("audio","").put("pending",false).put("recording",false).put("revision",System.nanoTime());
+                // Source audio is local-only. Never attach a recording merely because an ID collided.
+                for(int j=0;j<existingNotes.length();j++){JSONObject local=existingNotes.optJSONObject(j);if(local!=null&&local.optBoolean("thought")&&local.optLong("id")==id&&!local.optString("raw").isEmpty()&&local.optString("raw").equals(thought.optString("raw"))){thought.put("audio",local.optString("audio"));if(local.has("parts"))thought.put("parts",local.getJSONArray("parts"));if(local.has("wave"))thought.put("wave",local.optString("wave"));attachedSources.add(id);break;}}
+                mergedNotes.put(thought);
             }
-            for(int i=0;i<existingNotes.length();i++){JSONObject note=existingNotes.optJSONObject(i);if(note!=null && (!note.optBoolean("thought") || !checked.optBoolean("thoughts_included"))){if(mergedIds.contains(note.optLong("id")))note.put("id",Store.nextId(mergedNotes,System.currentTimeMillis()));mergedNotes.put(note);}}
+            for(int i=0;i<existingNotes.length();i++){JSONObject note=existingNotes.optJSONObject(i);if(note==null)continue;boolean localSource=!note.optString("audio").isEmpty()||(note.optJSONArray("parts")!=null&&note.optJSONArray("parts").length()>0);boolean retain=!note.optBoolean("thought")||!checked.optBoolean("thoughts_included")||(localSource&&!attachedSources.contains(note.optLong("id")));if(retain){if(mergedIds.contains(note.optLong("id")))note.put("id",Store.nextId(mergedNotes,System.currentTimeMillis()));mergedIds.add(note.optLong("id"));mergedNotes.put(note);}}
             editor.putString("notes",mergedNotes.toString());
             DraftState.invalidate(editor);
             if(!editor.commit()) {

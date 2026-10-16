@@ -1,0 +1,14 @@
+VonoTation 0.1.11-preview / versionCode 83 / app.voiceflow
+Prepared 2026-10-16T00:44:59+00:00
+
+Android :app:assemblePreview: passed (recorded build log).
+Pure Java suites: all 21 passed (recorded test log).
+APK manifest identity and existing preview signing certificate: verified.
+Signer certificate SHA256: 5dca2219fbe89fb885b24c904fd4c57d3b58930922d21d455fc10d7a35f7568a
+Source inventory SHA256: 48ded5eed2a4395d1f7fc5370c75a7e49d888a4410c72152365ef5329b445a75
+
+Phone/device testing: not performed. Samsung/Niagara, actual cursor/selection deletion, microphone capture, provider responses, background retry timing, notification behavior, installer return, Google account consent and live backup/restore still need device testing. Google OAuth registration for the current signing certificate is not verified. JVM tests cover synthetic logic only.
+
+The dot records through the existing floating service and Voice Notes source-audio pipeline without opening VonoTation or a capture popup. Offline audio is retained locally; completed thoughts use the connected Notes provider for transcription, organization, grounded summary and title, with a silent persisted network retry that Android may defer. Changing apps, inputs or tapping elsewhere does not finish a thought. Explicit Finish/Cancel controls end it; system interruptions may finalize. Quick Thoughts inside the app displays and manages saved thoughts and reveals source playback only on request. Backups exclude recordings. Delete uses current editor context and waits for acknowledgement before repeating. Settings Clear history is removed; Backup opens the existing decrypted backup/restore flow with an audio-work restore guard. Live Drive integration is unverified. The existing visual design is retained.
+
+Private signing keys, API keys, recordings, machine configuration and build caches are excluded. The Gradle wrapper JAR is intentionally included. Historical documents describe older versions; app/build.gradle identifies this source version.

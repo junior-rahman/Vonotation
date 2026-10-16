@@ -10,24 +10,85 @@ final class QuickThoughtPolicy {
         return !working && (lastInteraction<=0 || now-lastInteraction>=IDLE_MS);
     }
     static final class Organized {
-        final String title,body;
+        final String title,body,summary;
         final boolean accepted;
-        Organized(String title,String body,boolean accepted){this.title=title;this.body=body;this.accepted=accepted;}
+        Organized(String title,String body,String summary,boolean accepted){this.title=title;this.body=body;this.summary=summary;this.accepted=accepted;}
     }
     /** A malformed or unfaithful response never replaces the complete original. */
     static Organized organizeReply(String raw,String response){
         try{
             String[] fields=new ReplyReader(response).read();
-            return organized(raw,fields[0],fields[1]);
+            return organized(raw,fields[0],fields[1],fields[2]);
         }catch(IllegalArgumentException invalid){return fallback(raw);}
     }
     static Organized organized(String raw,String proposedTitle,String proposedBody){
+        return organized(raw,proposedTitle,proposedBody,null);
+    }
+    static Organized organized(String raw,String proposedTitle,String proposedBody,String proposedSummary){
         String source=raw==null?"":raw.trim();
         if(!bodyAccepted(source,proposedBody))return fallback(raw);
         String title=titleAccepted(source,proposedTitle)?proposedTitle.trim():title(source,"Quick thought");
-        return new Organized(title,proposedBody.trim(),true);
+        String summary=summaryAccepted(source,proposedSummary)?proposedSummary.trim():summary(source);
+        return new Organized(title,proposedBody.trim(),summary,true);
     }
-    private static Organized fallback(String raw){String source=raw==null?"":raw.trim();return new Organized(title(source,"Quick thought"),source,false);}
+    private static Organized fallback(String raw){String source=raw==null?"":raw.trim();return new Organized(title(source,"Quick thought"),source,summary(source),false);}
+    /** Excerpts only: never delete words within a sentence, reorder facts, or invent a paraphrase. */
+    static boolean summaryAccepted(String raw,String candidate){
+        if(raw==null||candidate==null||candidate.trim().isEmpty()||candidate.length()>raw.length()*4L+1024)return false;
+        java.util.List<String> source=sentences(raw),chosen=sentences(candidate);
+        if(chosen.isEmpty()||chosen.size()>3)return false;
+        int next=0;
+        for(String excerpt:chosen){
+            boolean found=false;
+            for(;next<source.size();next++){
+                String original=source.get(next);
+                if(bodyAccepted(original,excerpt)&&questionMark(original)==questionMark(excerpt)){found=true;next++;break;}
+            }
+            if(!found)return false;
+        }
+        return true;
+    }
+    /** A complete first sentence is useful even when the recognizer supplied no sentence boundaries. */
+    static String summary(String raw){
+        java.util.List<String> source=sentences(raw==null?"":raw);
+        StringBuilder excerpt=new StringBuilder();
+        for(int i=0;i<source.size()&&i<2;i++){
+            String sentence=source.get(i);
+            if(excerpt.length()>0&&excerpt.length()+sentence.length()+1>360)break;
+            if(excerpt.length()>0)excerpt.append(' ');
+            excerpt.append(sentence);
+        }
+        return excerpt.toString();
+    }
+    private static final String ABBREVIATIONS=" mr mrs ms dr prof sr jr st vs etc eg ie fig no approx inc ltd ";
+    private static boolean questionMark(String text){return text.indexOf('?')>=0||text.indexOf('？')>=0||text.indexOf('؟')>=0;}
+    /** Conservative boundaries: decimals, initials, abbreviations, and quoted/nested punctuation stay together. */
+    private static java.util.List<String> sentences(String raw){
+        java.util.ArrayList<String> parts=new java.util.ArrayList<>();int start=0,depth=0;boolean quoted=false,singleQuoted=false;
+        for(int at=0;at<raw.length();at++){
+            char c=raw.charAt(at);
+            if(c=='"'||c=='“'||c=='”'){quoted=!quoted;continue;}
+            if(c=='\''||c=='‘'||c=='’'){
+                boolean apostrophe=at>0&&at+1<raw.length()&&Character.isLetterOrDigit(raw.charAt(at-1))&&Character.isLetterOrDigit(raw.charAt(at+1));
+                if(!apostrophe)singleQuoted=!singleQuoted;
+                continue;
+            }
+            if(c=='('||c=='['||c=='{'){depth++;continue;}
+            if(c==')'||c==']'||c=='}'){if(depth>0)depth--;continue;}
+            if(quoted||singleQuoted||depth>0||".!?।。！？؟".indexOf(c)<0)continue;
+            int end=at+1;while(end<raw.length()&&".!?।。！？؟".indexOf(raw.charAt(end))>=0)end++;
+            if(end<raw.length()&&!Character.isWhitespace(raw.charAt(end)))continue;
+            if(c=='.'){
+                if(end>at+1||(at>0&&raw.charAt(at-1)=='.')){at=end-1;continue;}
+                if(at>0&&at+1<raw.length()&&Character.isDigit(raw.charAt(at-1))&&Character.isDigit(raw.charAt(at+1)))continue;
+                int word=at;while(word>0&&Character.isLetter(raw.charAt(word-1)))word--;
+                String before=raw.substring(word,at).toLowerCase(java.util.Locale.ROOT);
+                if(before.length()==1||ABBREVIATIONS.contains(" "+before+" "))continue;
+            }
+            String part=raw.substring(start,end).trim();if(!part.isEmpty())parts.add(part);start=end;at=end-1;
+        }
+        String tail=raw.substring(start).trim();if(!tail.isEmpty())parts.add(tail);return parts;
+    }
     /** Same spoken word order; paragraphs and plain Unicode bullets may add structure. */
     static boolean bodyAccepted(String raw,String candidate){
         if(raw==null || candidate==null || candidate.trim().isEmpty() || candidate.length()>raw.length()*4L+1024)return false;
@@ -110,10 +171,10 @@ final class QuickThoughtPolicy {
         }
         return best.isEmpty()?fallback:best;
     }
-    /** Small strict JSON parser: exactly two string fields, no coercion, duplicate keys or trailing prose. */
+    /** Small strict JSON parser: exactly three string fields, no coercion, duplicate keys or trailing prose. */
     private static final class ReplyReader {
         final String text;int at;ReplyReader(String text){if(text==null || text.length()>2_000_000)throw new IllegalArgumentException();this.text=text;}
-        String[] read(){take('{');String title=null,body=null;for(int n=0;n<2;n++){String key=string();take(':');String value=string();if(key.equals("title") && title==null)title=value;else if(key.equals("body") && body==null)body=value;else throw new IllegalArgumentException();if(n==0)take(',');}take('}');space();if(at!=text.length() || title==null || body==null)throw new IllegalArgumentException();return new String[]{title,body};}
+        String[] read(){take('{');String title=null,body=null,summary=null;for(int n=0;n<3;n++){String key=string();take(':');String value=string();if(key.equals("title") && title==null)title=value;else if(key.equals("body") && body==null)body=value;else if(key.equals("summary") && summary==null)summary=value;else throw new IllegalArgumentException();if(n<2)take(',');}take('}');space();if(at!=text.length() || title==null || body==null || summary==null)throw new IllegalArgumentException();return new String[]{title,body,summary};}
         void space(){while(at<text.length() && " \t\r\n".indexOf(text.charAt(at))>=0)at++;}
         void take(char wanted){space();if(at>=text.length() || text.charAt(at++)!=wanted)throw new IllegalArgumentException();}
         String string(){take('"');StringBuilder out=new StringBuilder();while(at<text.length()){char c=text.charAt(at++);if(c=='"')return out.toString();if(c<' ')throw new IllegalArgumentException();if(c=='\\'){if(at>=text.length())throw new IllegalArgumentException();c=text.charAt(at++);switch(c){case '"':case '\\':case '/':out.append(c);break;case 'b':out.append('\b');break;case 'f':out.append('\f');break;case 'n':out.append('\n');break;case 'r':out.append('\r');break;case 't':out.append('\t');break;case 'u':if(at+4>text.length())throw new IllegalArgumentException();try{String hex=text.substring(at,at+4);if(!hex.matches("[0-9a-fA-F]{4}"))throw new NumberFormatException();out.append((char)Integer.parseInt(hex,16));}catch(NumberFormatException bad){throw new IllegalArgumentException();}at+=4;break;default:throw new IllegalArgumentException();}}else out.append(c);}throw new IllegalArgumentException();}

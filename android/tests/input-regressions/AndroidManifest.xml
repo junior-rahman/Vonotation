@@ -6,6 +6,8 @@
     <instrumentation android:name=".AuthFieldTest" android:targetPackage="app.voiceflow.fixture" android:functionalTest="true" />
     <instrumentation android:name=".InputRecoveryTest" android:targetPackage="app.voiceflow.fixture" android:functionalTest="true" />
     <instrumentation android:name=".ComposeDeleteTest" android:targetPackage="app.voiceflow.fixture" android:functionalTest="true" />
+    <instrumentation android:name=".CurrentCursorDeleteTest" android:targetPackage="app.voiceflow.fixture" android:functionalTest="true" />
+    <instrumentation android:name="app.voiceflow.InputSnapshotTest" android:targetPackage="app.voiceflow" android:functionalTest="true" />
     <instrumentation android:name="app.voiceflow.ApiRequestTest" android:targetPackage="app.voiceflow" android:functionalTest="true" />
     <instrumentation android:name="app.voiceflow.RecoveryTest" android:targetPackage="app.voiceflow" android:functionalTest="true" />
     <application android:label="VoiceFlow native input regressions" android:debuggable="true" android:allowBackup="false" android:theme="@android:style/Theme.Material.Light.NoActionBar">

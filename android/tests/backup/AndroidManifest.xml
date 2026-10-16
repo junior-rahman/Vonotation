@@ -3,5 +3,7 @@
     <instrumentation android:name="app.voiceflow.BackupCredentialPolicyTest" android:targetPackage="app.voiceflow" android:functionalTest="true" />
     <instrumentation android:name="app.voiceflow.BackupArchiveTest" android:targetPackage="app.voiceflow" android:functionalTest="true" />
     <instrumentation android:name="app.voiceflow.BackupHistoryDeletionTest" android:targetPackage="app.voiceflow" android:functionalTest="true" />
+    <instrumentation android:name="app.voiceflow.BackupRestoreBusyTest" android:targetPackage="app.voiceflow" android:functionalTest="true" />
+    <instrumentation android:name="app.voiceflow.ThoughtStorageTest" android:targetPackage="app.voiceflow" android:functionalTest="true" />
     <application android:label="VoiceFlow isolated backup checks" />
 </manifest>

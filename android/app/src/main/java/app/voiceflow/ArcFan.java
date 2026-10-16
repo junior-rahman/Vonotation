@@ -26,7 +26,7 @@ import android.widget.TextView;
  * A single text pill beside Clipboard pastes the latest readable plain-text copy.
  */
 final class ArcFan {
-    interface Actions { default void beginDelete(){} default void endDelete(){} boolean deleteWord(); void openClipboard(); void prepareClipboardPaste(); void cancelClipboardPaste(); void pasteClipboard(String value); void openKeyboard(); void closed(); }
+    interface Actions { default void beginDelete(){} default void endDelete(){} default boolean deletePending(){return false;} boolean deleteWord(); void openClipboard(); void prepareClipboardPaste(); void cancelClipboardPaste(); void pasteClipboard(String value); void openKeyboard(); void closed(); }
     static final float R_DP=76,MARGIN_DP=8,TILE_DP=48;
     static final int DWELL_MS=450,REDUCED_FADE_MS=150;
     // [Delete, Clipboard, Keyboard]. Checked so 48 dp tiles stay at least 8 dp apart.
@@ -39,7 +39,7 @@ final class ArcFan {
     private TextView clipPill;private RectF clipPillBounds;private String clipboardValue,pressedClipboardValue;
     float cx,cy;int edge;int[] angles;int rotation;
     private int hover=-1;private boolean touchable,closing,wordDone,deleting,deleteCanceled;private long lastAct;
-    private final Runnable dwell=new Runnable(){public void run(){if(hover==1&&root!=null){wordDone=true;if(!actions.deleteWord()){endDelete();return;}Haptics.fire(ctx,Haptics.POP);if(ring!=null)ring.set(0);mark();h.postDelayed(this,REPEAT_MS);}}};
+    private final Runnable dwell=new Runnable(){public void run(){if(hover==1&&root!=null){wordDone=true;if(!actions.deleteWord()){endDelete();return;}if(!actions.deletePending())Haptics.fire(ctx,Haptics.POP);if(ring!=null)ring.set(0);mark();h.postDelayed(this,REPEAT_MS);}}};
 
     ArcFan(Context ctx,WindowManager wm,Actions actions){this.ctx=ctx;this.wm=wm;this.actions=actions;density=ctx.getResources().getDisplayMetrics().density;R=R_DP*density;M=MARGIN_DP*density;T=TILE_DP*density;}
     boolean isOpen(){return root!=null&&!closing;}
@@ -206,7 +206,7 @@ final class ArcFan {
     private void beginDelete(){if(!deleting){actions.beginDelete();deleting=true;}}
     private void endDelete(){if(deleting){actions.endDelete();deleting=false;}}
     private boolean act(int i){
-        if(i==1){boolean single=!deleting;if(single)beginDelete();boolean removed=actions.deleteWord();if(single)endDelete();if(!removed)return false;Haptics.fire(ctx,Haptics.RELEASE);mark();}
+        if(i==1){boolean single=!deleting;if(single)beginDelete();boolean removed=actions.deleteWord();boolean pending=actions.deletePending();if(single)endDelete();if(!removed)return false;if(!pending)Haptics.fire(ctx,Haptics.RELEASE);mark();}
         else if(i==2){Haptics.fire(ctx,Haptics.RELEASE);actions.openClipboard();mark();}
         else if(i==3){Haptics.fire(ctx,Haptics.RELEASE);remove();h.post(actions::openKeyboard);}
         else close();

@@ -52,7 +52,9 @@ mkdir -p "$fixture_dir/classes" "$fixture_dir/dex"
     -classpath "$android_jar:$app_classes" -d "$fixture_dir/classes" \
     "$project_dir/tests/fixtures/BackupCredentialPolicyTest.java" \
     "$project_dir/tests/fixtures/BackupArchiveTest.java" \
-    "$project_dir/tests/fixtures/BackupHistoryDeletionTest.java"
+    "$project_dir/tests/fixtures/BackupHistoryDeletionTest.java" \
+    "$project_dir/tests/fixtures/BackupRestoreBusyTest.java" \
+    "$project_dir/tests/fixtures/ThoughtStorageTest.java"
 (cd "$fixture_dir/classes" && zip -q -r "$fixture_dir/classes.jar" . -i '*.class')
 (cd "$app_classes" && zip -q -r "$fixture_dir/app-classpath.jar" . -i '*.class')
 

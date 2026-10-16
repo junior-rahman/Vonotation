@@ -41,7 +41,7 @@ fi
 
 # Use current regression sources. Production classes are classpath-only.
 sources=(ControlSetup EditorActivity FakeSpeech KeyboardStateTest AuthFieldTest \
-    InputRecoveryTest ComposeDeleteTest ApiRequestTest RecoveryTest)
+    InputRecoveryTest ComposeDeleteTest CurrentCursorDeleteTest InputSnapshotTest ApiRequestTest RecoveryTest)
 source_files=()
 for source in "${sources[@]}"; do source_files+=("$project_dir/tests/fixtures/$source.java"); done
 rm -rf "$fixture_dir/classes" "$fixture_dir/dex"
@@ -58,12 +58,14 @@ while IFS= read -r -d '' generated; do
     case "$relative" in
         app/voiceflow/ControlSetup.class|app/voiceflow/ApiRequestTest.class|app/voiceflow/ApiRequestTest\$*.class|\
         app/voiceflow/RecoveryTest.class|app/voiceflow/RecoveryTest\$*.class|\
+        app/voiceflow/InputSnapshotTest.class|app/voiceflow/InputSnapshotTest\$*.class|\
         app/voiceflow/fixture/EditorActivity.class|app/voiceflow/fixture/EditorActivity\$*.class|\
         app/voiceflow/fixture/FakeSpeech.class|app/voiceflow/fixture/FakeSpeech\$*.class|\
         app/voiceflow/fixture/KeyboardStateTest.class|app/voiceflow/fixture/KeyboardStateTest\$*.class|\
         app/voiceflow/fixture/AuthFieldTest.class|app/voiceflow/fixture/AuthFieldTest\$*.class|\
         app/voiceflow/fixture/InputRecoveryTest.class|app/voiceflow/fixture/InputRecoveryTest\$*.class|\
-        app/voiceflow/fixture/ComposeDeleteTest.class|app/voiceflow/fixture/ComposeDeleteTest\$*.class) ;;
+        app/voiceflow/fixture/ComposeDeleteTest.class|app/voiceflow/fixture/ComposeDeleteTest\$*.class|\
+        app/voiceflow/fixture/CurrentCursorDeleteTest.class|app/voiceflow/fixture/CurrentCursorDeleteTest\$*.class) ;;
         *) echo "Unexpected class in fixture output: $relative" >&2; exit 1 ;;
     esac
 done < <(find "$fixture_dir/classes" -type f -name '*.class' -print0)

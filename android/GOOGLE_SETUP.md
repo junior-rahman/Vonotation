@@ -1,5 +1,21 @@
 # Google setup and verification status
 
+## Current 0.1.11-preview status
+
+Settings → Backup → Open backup now opens the existing encrypted Drive backup and restore flow. The hardcoded On hold screen has been removed. Automatic backup remains opt-in and restoring still requires confirmation.
+
+The update retains the installed preview signing identity. Independently inspected certificate:
+
+- Package: `app.voiceflow`
+- SHA-1: `A7:80:92:53:A2:9D:DD:19:16:F9:B4:B2:98:92:31:95:DA:58:EB:3F`
+- SHA-256: `5D:CA:22:19:FB:E8:9F:B8:85:B2:4C:90:4F:D4:C5:7D:3B:58:93:09:22:D2:1D:45:5F:C1:0D:7A:35:F7:56:8A`
+
+The historical Android OAuth registration below used a different certificate. Current registration in [the existing Google project](https://console.cloud.google.com/apis/credentials?project=voiceflow-37d9d), native Google consent, and live Drive backup/restore have not been verified from this environment. If the current package/certificate pair is absent, add an Android OAuth client for it in that existing project while preserving the previous clients. Do not rotate the app signing key, replace the Google project, publish the OAuth app, or enable billing. This AuthorizationClient implementation does not need the Web client secret or an embedded client ID.
+
+Thought text and summaries can be included in encrypted backups. Source recordings remain local and are excluded. Source-only pending thoughts do not prevent a text backup; existing local sources are preserved during text restore with matching-source checks. Restoring waits for recording, audio finalization and note processing to finish.
+
+The sections below are historical setup evidence, not proof of the current Google configuration.
+
 Updated October 4, 2026 UTC. This is integration setup evidence, not a production sign-in approval.
 
 ## Eva's handoff

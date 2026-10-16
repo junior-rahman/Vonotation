@@ -311,7 +311,7 @@ public final class MainActivity extends Activity {
                 render();
             });
             if(Store.quickThoughts(this)){
-                if(FlowAccessibility.instance==null)hint(thoughts,"Connect Floating microphone under Permissions to use the edge dot outside VonoTation. You can still record inside Thoughts.");
+                if(FlowAccessibility.instance==null)hint(thoughts,"Connect Floating microphone under Permissions to capture thoughts from the edge dot.");
                 Ui.space(thoughts,10);
                 thoughts.addView(Daybook.button(this,"Open Thoughts",true,v->{
                     if(!Store.quickThoughts(this)){render();return;}
@@ -320,9 +320,15 @@ public final class MainActivity extends Activity {
             }
             Ui.space(thoughts,10);
         }
-        // Backup (on hold)
-        LinearLayout backup=card("backup","Backup","On hold");
-        if(backup!=null){hint(backup,"Google Drive backup is paused. This build is signed with a new key, and Google sign-in is still registered to the old one, so Google cancels the connection. It returns once the new key is added in Google Cloud Console. Your dictations stay on this phone.");Ui.space(backup,10);}
+        LinearLayout backup=card("backup","Backup",DriveBackup.configured(this)?"Google Drive":"Set up");
+        if(backup!=null){
+            hint(backup,DriveBackup.summary(this));Ui.space(backup,10);
+            backup.addView(Daybook.button(this,"Open backup",true,v->{
+                backupReturnFocus=true;
+                startActivity(new Intent(this,BackupActivity.class));
+            }),new LinearLayout.LayoutParams(-1,Ui.dp(this,48)));
+            Ui.space(backup,10);
+        }
         // Permissions (live)
         boolean notif=android.os.Build.VERSION.SDK_INT<33||checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)==PackageManager.PERMISSION_GRANTED;
         boolean allSet=microphoneAllowed()&&FlowAccessibility.instance!=null&&notif&&BubbleHealth.ignoringBattery(this);
@@ -343,7 +349,6 @@ public final class MainActivity extends Activity {
         TextView updateLine=Daybook.text(this,"",12,Daybook.muted(this),false);updateLine.setGravity(Gravity.CENTER);body.addView(updateLine);
         AppUpdate.bind(this,update,updateLine);
         Ui.space(body,8);
-        settingsButton(body,"Clear history",v->new AlertDialog.Builder(this).setTitle("Clear saved history?").setMessage("Deletes all saved dictations and daily recaps from this phone.").setNegativeButton("Keep",null).setPositiveButton("Clear",(d,w)->{Store.clearHistory(this);render();}).show());
         String version="";try{version=getPackageManager().getPackageInfo(getPackageName(),0).versionName;}catch(PackageManager.NameNotFoundException ignored){}
         TextView foot=Daybook.text(this,"VonoTation "+version,11,Daybook.muted(this),false);foot.setGravity(Gravity.CENTER);body.addView(foot);Ui.space(body,12);
     }
@@ -461,7 +466,7 @@ public final class MainActivity extends Activity {
         final long kept=RetryBuffer.time(audio);
         final boolean retryThought=RetryBuffer.thought(audio);
         if(retryThought && !Store.quickThoughts(this))return;
-        if(Dictation.isWorking() || VoiceTake.running() || Translate.going()){Toast.makeText(this,"Finish the current recording first.",Toast.LENGTH_SHORT).show();return;}
+        if(Dictation.isWorking() || VoiceTake.running() || VoiceTake.updateBusy() || Translate.going()){Toast.makeText(this,"Finish the current recording first.",Toast.LENGTH_SHORT).show();return;}
         retryDictation=new Dictation(this,new Dictation.Listener(){
             public void state(String status){}
             public void partial(String text){}
@@ -469,7 +474,7 @@ public final class MainActivity extends Activity {
             public void result(String raw,String text,String warning){
                 Dictation finished=retryDictation;retryDictation=null;if(finished!=null)finished.close();
                 if(retryThought){
-                    long id=Notes.keepThought(MainActivity.this,kept,raw,0);
+                    long id=Notes.keepThought(MainActivity.this,kept,raw,0,audio);
                     if(id>0){RetryBuffer.discard(audio);Notes.formatThought(MainActivity.this,id);Toast.makeText(MainActivity.this,"Thought saved.",Toast.LENGTH_SHORT).show();}
                     else Toast.makeText(MainActivity.this,"Could not save. The recording is still kept for Retry.",Toast.LENGTH_LONG).show();
                     render();return;

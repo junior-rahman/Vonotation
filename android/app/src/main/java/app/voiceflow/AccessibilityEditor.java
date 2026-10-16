@@ -58,8 +58,10 @@ final class AccessibilityEditor extends InputMethod {
             }
         };
     }
-    CursorDeletion.Port captureDeletion(){
-        if(!eligible())return null;
+    CursorDeletion.Port captureDeletion(CharSequence packageName){
+        if(!eligible()||packageName==null)return null;
+        EditorInfo initial=getCurrentInputEditorInfo();
+        if(initial.packageName==null||!initial.packageName.contentEquals(packageName))return null;
         EditorInfo info=getCurrentInputEditorInfo();final String pkg=info.packageName;final int field=info.fieldId;final long expected=generation;
         return new CursorDeletion.Port(){
             public boolean current(){EditorInfo active=getCurrentInputEditorInfo();return eligible() && expected==generation && pkg.equals(active.packageName) && field==active.fieldId;}
@@ -72,7 +74,8 @@ final class AccessibilityEditor extends InputMethod {
                     // Android's accessibility bridge ends composition before this empty commit.
                     // Then delete only before the unchanged current caret, never select an old range.
                     connection.commitText("",1,null);
-                    if(!current() || !CursorDeletion.same(plan.source,read()))return false;
+                    // Both commands target this connection's current caret. Do not interpose an
+                    // async selection-callback equality gate after the harmless empty commit.
                     connection.deleteSurroundingText(plan.beforeUnits,0);
                 }
                 return true;

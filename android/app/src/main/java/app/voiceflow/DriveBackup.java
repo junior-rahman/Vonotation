@@ -400,7 +400,7 @@ final class DriveBackup {
             checkInterrupted();
             checkRestoreAllowed();
             synchronized (Store.class) {
-                if (Dictation.isWorking()) throw new ConfigurationException("Finish your dictation before restoring a backup.");
+                if (writingActive()) throw new ConfigurationException("Finish recording or processing before restoring a backup.");
                 checkInterrupted();
                 boolean same = sameIdentity(app, fresh.profile);
                 String previousFrequency = same && latestUnlocked && automaticEnabled(app) ? frequency(app) : "off";
@@ -576,7 +576,7 @@ final class DriveBackup {
         checkInterrupted();
         checkRestoreAllowed();
         synchronized (Store.class) {
-            if (Dictation.isWorking()) throw new ConfigurationException("Finish your dictation before restoring a backup.");
+            if (writingActive()) throw new ConfigurationException("Finish recording or processing before restoring a backup.");
             checkInterrupted();
             BackupData.restore(app, archive);
         }
@@ -590,10 +590,13 @@ final class DriveBackup {
             try { recording = query.get(5, TimeUnit.SECONDS); }
             catch (java.util.concurrent.TimeoutException timeout) { query.cancel(false); throw new ConfigurationException("The app is busy. Try restoring again."); }
         }
-        if (recording) throw new ConfigurationException("Finish your dictation before restoring a backup.");
+        if (recording) throw new ConfigurationException("Finish recording or processing before restoring a backup.");
+    }
+    private static boolean writingActive() {
+        return Dictation.isWorking() || VoiceTake.updateBusy() || LineWire.updateBusy() || Notes.updateBusy();
     }
     private static boolean recordingActive() {
-        return Dictation.isWorking() || CaptureActivity.visible
+        return writingActive() || CaptureActivity.visible
                 || (FlowKeyboard.instance != null && (FlowKeyboard.instance.isRecording() || FlowKeyboard.instance.isFinishing()))
                 || (FlowAccessibility.instance != null && FlowAccessibility.instance.isRecording());
     }

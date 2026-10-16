@@ -19,17 +19,19 @@ final class InputSnapshots {
     /** Fresh editor-reported offsets only; cached callback positions are insufficient for destructive edits. */
     static EditorInsertion.Snapshot readCurrent(InputConnection connection) {
         if(connection==null)return null;
+        EditorInsertion.Snapshot surrounding=null;
         if(Build.VERSION.SDK_INT>=31) {
-            EditorInsertion.Snapshot result=from(connection.getSurroundingText(EditorInsertion.CONTEXT,EditorInsertion.CONTEXT,0));
-            if(result!=null)return result;
+            surrounding=from(connection.getSurroundingText(EditorInsertion.CONTEXT,EditorInsertion.CONTEXT,0));
+            if(CursorDeletion.absolute(surrounding))return surrounding;
         }
+        // Compose/default InputConnection may return offset=-1 even while ExtractedText has fresh offsets.
         ExtractedTextRequest request=new ExtractedTextRequest();request.hintMaxChars=4096;
-        ExtractedText extracted=connection.getExtractedText(request,0);
-        if(extracted!=null && extracted.text!=null && extracted.selectionStart>=0 && extracted.selectionEnd>=0) {
+        ExtractedText extracted=null;try{extracted=connection.getExtractedText(request,0);}catch(RuntimeException unavailable){}
+        if(extracted!=null && extracted.text!=null && extracted.startOffset>=0 && extracted.selectionStart>=0 && extracted.selectionEnd>=0) {
             int a=extracted.selectionStart,b=extracted.selectionEnd;String text=extracted.text.toString();int lo=Math.min(a,b),hi=Math.max(a,b);
             if(hi<=text.length())return new EditorInsertion.Snapshot(text.substring(Math.max(0,lo-EditorInsertion.CONTEXT),lo),text.substring(lo,hi),text.substring(hi,Math.min(text.length(),hi+EditorInsertion.CONTEXT)),extracted.startOffset+a,extracted.startOffset+b);
         }
-        return null;
+        return surrounding;
     }
     static EditorInsertion.Snapshot read(InputConnection connection,int selectionStart,int selectionEnd) {
         if(connection==null)return null;

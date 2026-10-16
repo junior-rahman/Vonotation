@@ -1,7 +1,6 @@
 package app.voiceflow;
 
 import android.content.Context;
-import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.PixelFormat;
 import android.os.Handler;
@@ -20,16 +19,14 @@ final class QuickThoughtOverlay {
     private final WindowManager manager;
     private final Handler handler=new Handler(Looper.getMainLooper());
     private final Runnable refresh;
+    private final Runnable capture;
     private final java.util.function.BooleanSupplier mayCapture;
     private FrameLayout host;
     private WindowManager.LayoutParams layout;
-    private boolean collapsed,captureLaunched,captureObserved;
+    private boolean collapsed;
     private long lastInteraction;
-    QuickThoughtOverlay(Context context,WindowManager manager,Runnable refresh,java.util.function.BooleanSupplier mayCapture){this.context=context;this.manager=manager;this.refresh=refresh;this.mayCapture=mayCapture;}
+    QuickThoughtOverlay(Context context,WindowManager manager,Runnable refresh,java.util.function.BooleanSupplier mayCapture,Runnable capture){this.context=context;this.manager=manager;this.refresh=refresh;this.mayCapture=mayCapture;this.capture=capture;}
     void show(){
-        // Recording/upload time is active time. Start the idle minute only once
-        // capture has actually been observed, then the control becomes available again.
-        if(captureLaunched && captureObserved){lastInteraction=SystemClock.elapsedRealtime();captureLaunched=false;captureObserved=false;}
         boolean compact=QuickThoughtPolicy.collapsed(SystemClock.elapsedRealtime(),lastInteraction,Dictation.isWorking());
         if(host!=null && collapsed==compact){position();armIdle(compact);return;}
         hide();collapsed=compact;
@@ -55,11 +52,13 @@ final class QuickThoughtOverlay {
     private void armIdle(boolean compact){handler.removeCallbacks(refresh);if(!compact)handler.postDelayed(refresh,Math.max(1,QuickThoughtPolicy.IDLE_MS-(SystemClock.elapsedRealtime()-lastInteraction)));}
     private void open(){
         if(!mayCapture.getAsBoolean()){refresh.run();return;}
-        if(!Store.quickThoughts(context) || Dictation.isWorking() || VoiceTake.running() || Translate.going() || LineWire.running())return;
-        lastInteraction=SystemClock.elapsedRealtime();captureLaunched=true;captureObserved=false;Haptics.fire(context,Haptics.PRESS);hide();
-        try{context.startActivity(new Intent(context,CaptureActivity.class).putExtra("destination","thought").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));}
-        catch(RuntimeException denied){captureLaunched=false;captureObserved=false;android.widget.Toast.makeText(context,"Open VonoTation to record a thought.",android.widget.Toast.LENGTH_SHORT).show();refresh.run();}
+        if(!Store.quickThoughts(context) || Dictation.isWorking() || VoiceTake.running() || VoiceTake.updateBusy() || Translate.going() || LineWire.running())return;
+        lastInteraction=SystemClock.elapsedRealtime();Haptics.fire(context,Haptics.PRESS);hide();
+        // The existing bound dictation service owns capture. The dot never opens an activity.
+        capture.run();
     }
+    /** Recording and processing are active time; the idle minute starts after completion. */
+    void captureFinished(){lastInteraction=SystemClock.elapsedRealtime();}
     private void position(){
         if(layout==null)return;
         DisplayMetrics metrics=new DisplayMetrics();manager.getDefaultDisplay().getRealMetrics(metrics);
@@ -81,5 +80,5 @@ final class QuickThoughtOverlay {
             }
         });
     }
-    void hide(){if(captureLaunched && (CaptureActivity.visible || Dictation.isWorking()))captureObserved=true;handler.removeCallbacks(refresh);if(host!=null)try{manager.removeView(host);}catch(RuntimeException ignored){}host=null;layout=null;}
+    void hide(){handler.removeCallbacks(refresh);if(host!=null)try{manager.removeView(host);}catch(RuntimeException ignored){}host=null;layout=null;}
 }

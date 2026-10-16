@@ -249,17 +249,30 @@ final class Dictation {
         if(changed)handler.post(()->{if(FlowAccessibility.instance!=null)FlowAccessibility.instance.updateBubble();});
     }
     /** Finish the existing audio/upload even after its owning UI or input service goes away. */
-    /** Retain a frozen destination when the thought capture activity leaves the screen. */
+    /** Retain a frozen destination when an owning UI leaves the screen. */
     void finishDetached(Listener detached){if(closed)return;listener=detached;stop();}
     void finishDetached(long duration){
         if(closed)return;
         final Context app=context.getApplicationContext();
         listener=new Listener(){
             public void state(String value){}public void partial(String value){}public void level(float value){}
-            public void result(String raw,String text,String warning){Recovery.keep(app,raw,text,duration,false,sensitive);close();}
-            public void error(String message){String raw=join(committed,partial);if(!raw.trim().isEmpty())Recovery.keep(app,raw,sensitive?raw:Store.clean(app,raw),duration,false,sensitive);else android.widget.Toast.makeText(app,message,android.widget.Toast.LENGTH_LONG).show();close();}
+            public void result(String raw,String text,String warning){
+                if(thought)saveThought(app,raw,duration);else Recovery.keep(app,raw,text,duration,false,sensitive);
+                close();
+            }
+            public void error(String message){
+                String raw=join(committed,partial);
+                if(!raw.trim().isEmpty()){if(thought)saveThought(app,raw,duration);else Recovery.keep(app,raw,sensitive?raw:Store.clean(app,raw),duration,false,sensitive);}
+                else android.widget.Toast.makeText(app,message,android.widget.Toast.LENGTH_LONG).show();
+                close();
+            }
         };
         stop();
+    }
+    private static void saveThought(Context app,String raw,long duration){
+        long id=Notes.keepThought(app,System.currentTimeMillis(),raw,duration);
+        if(id>0)Notes.formatThought(app,id);
+        else android.widget.Toast.makeText(app,"Could not save your quick thought. Check available phone storage.",android.widget.Toast.LENGTH_LONG).show();
     }
     void close() { if(closed)return;closed=true;active=false;releaseScreenReceiver();handler.removeCallbacksAndMessages(null);if(recognizer!=null){recognizer.cancel();recognizer.destroy();recognizer=null;}CloudApi request=api;if(request!=null)request.cancel();
         // Never drop queued setup/stop/cleanup. A native call may still be in

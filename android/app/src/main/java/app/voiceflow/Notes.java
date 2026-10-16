@@ -29,6 +29,10 @@ final class Notes {
     private static volatile long transcribing=-1;
     private static String pick="auto";
     private static boolean fixing,original,choosing;
+    private static long thoughtSourceShown=-1;
+    private static android.net.ConnectivityManager.NetworkCallback thoughtNetwork;
+    private static android.content.SharedPreferences.OnSharedPreferenceChangeListener thoughtRetryPrefs;
+    private static volatile Runnable thoughtRetryAction;
     private static volatile boolean busy;
     private static List<File> queue=new ArrayList<>();
     private static int queueAt;
@@ -37,6 +41,7 @@ final class Notes {
     private static volatile boolean draining;
     private static boolean translating;
     private static final java.util.concurrent.atomic.AtomicInteger thoughtWork=new java.util.concurrent.atomic.AtomicInteger();
+    private static final java.util.HashSet<Long> recoveringThoughts=new java.util.HashSet<>();
     private static Wave liveWave,playWave;
     private static TextView liveTime,playTime;
     private static long totalDuration,playedBefore;
@@ -55,7 +60,7 @@ final class Notes {
 
     private Notes() {}
 
-    static boolean back(){if(open<0)return false;stopPlayback();fixing=false;original=false;translating=false;open=-1;return true;}
+    static boolean back(){if(open<0)return false;stopPlayback();fixing=false;original=false;translating=false;thoughtSourceShown=-1;open=-1;return true;}
     static void stop(){stopPlayback();}
 
     static void show(Activity activity,LinearLayout body,Runnable refresh) { show(activity,body,null,refresh); }
@@ -555,6 +560,8 @@ final class Notes {
     }
 
     private static File dir(Context context){File folder=new File(context.getFilesDir(),"notes");if(!folder.isDirectory())folder.mkdirs();return folder;}
+    static File sourceDirectory(Context context){return dir(context);}
+    static long nextThoughtId(Context context){synchronized(Store.class){long id=Store.nextId(all(context),System.currentTimeMillis());while(thoughtDeleted(context,id))id=Store.nextId(all(context),id+1);return id;}}
 
     private static File storeAudio(Activity activity,long id,File source) {
         File dest=new File(dir(activity),id+".m4a");
@@ -578,35 +585,121 @@ final class Notes {
     }
 
     static void catchUp(Context context) {
+        catchUp(context,false);
+    }
+    static void catchUpThoughts(Context context){catchUp(context,true);}
+    static boolean hasPendingThoughts(Context context){
+        JSONArray notes=all(context);for(int i=0;i<notes.length();i++){JSONObject note=notes.optJSONObject(i);if(note!=null&&note.optBoolean("thought")&&!note.optBoolean("recording")&&note.optBoolean("pending")&&!filesOf(context,note).isEmpty())return true;}return false;
+    }
+    private static void catchUp(Context context,boolean thoughtsOnlyDrain) {
         if(context==null)return;
+        ThoughtJob.schedule(context.getApplicationContext());
         JSONArray notes=all(context);
-        for(int i=0;i<notes.length();i++){JSONObject note=notes.optJSONObject(i);if(note!=null && note.optBoolean("pending")){writeUp(context,note.optLong("id"));return;}}
+        for(int i=0;i<notes.length();i++){
+            JSONObject note=notes.optJSONObject(i);if(note==null)continue;
+            if(thoughtsOnlyDrain&&!note.optBoolean("thought"))continue;
+            if(note.optBoolean("thought")){
+                ensureThoughtRetry(context);
+                if(note.optBoolean("recording")){
+                    if(FlowAccessibility.thoughtCaptureActive(note.optLong("id")) || VoiceTake.noteRunning() || VoiceTake.updateBusy())continue;
+                    // Recover sealed segments on the worker; never inspect media metadata on the UI thread.
+                    recoverThought(context,note);continue;
+                }
+            }
+            if(note.optBoolean("pending") || (note.optBoolean("thought") && note.optBoolean("recording"))){writeUp(context,note.optLong("id"));return;}
+        }
     }
 
+    /** One process-lifetime retry hook; it never opens a microphone or an activity. */
+    private static synchronized void ensureThoughtRetry(Context context){
+        Context app=context.getApplicationContext();
+        if(thoughtRetryAction==null)thoughtRetryAction=()->catchUpThoughts(app);
+        if(thoughtRetryPrefs==null){
+            thoughtRetryPrefs=(prefs,key)->{if("api_secret".equals(key)||"api_iv".equals(key)||"api_base".equals(key)||"notes_transcribe_model".equals(key))requestThoughtRetry();};
+            Store.prefs(app).registerOnSharedPreferenceChangeListener(thoughtRetryPrefs);
+        }
+        if(thoughtNetwork!=null)return;
+        android.net.ConnectivityManager cm=(android.net.ConnectivityManager)app.getSystemService(Context.CONNECTIVITY_SERVICE);
+        if(cm==null)return;
+        android.net.ConnectivityManager.NetworkCallback callback=new android.net.ConnectivityManager.NetworkCallback(){
+            @Override public void onAvailable(android.net.Network network){requestThoughtRetry();}
+            @Override public void onCapabilitiesChanged(android.net.Network network,android.net.NetworkCapabilities caps){if(caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED))requestThoughtRetry();}
+        };
+        try{cm.registerDefaultNetworkCallback(callback);thoughtNetwork=callback;}catch(RuntimeException unavailable){/* Resume and explicit Retry remain available. */}
+    }
+    private static void requestThoughtRetry(){Runnable task=thoughtRetryAction;if(task!=null){tick.removeCallbacks(task);tick.post(task);}}
+
+    private static void recoverThought(Context context,JSONObject captured){
+        final Context app=context.getApplicationContext();final long id=captured.optLong("id"),revision=captured.optLong("revision",1);
+        synchronized(recoveringThoughts){if(!recoveringThoughts.add(id))return;}
+        thoughtWork.incrementAndGet();
+        work.execute(()->{
+            boolean committed=false;
+            try{
+                List<File> recovered=filesOf(app,captured);File[] candidates=dir(app).listFiles((folder,name)->name.matches(Long.toString(id)+"-[0-9]+\\.m4a"));
+                if(candidates!=null){java.util.Arrays.sort(candidates,(a,b)->Long.compare(segmentIndex(a),segmentIndex(b)));for(File file:candidates)if(!recovered.contains(file)&&audioDuration(file)>0)recovered.add(file);}
+                long duration=durations(recovered);
+                synchronized(Store.class){
+                    JSONObject current=find(app,id);
+                    if(current==null||!current.optBoolean("thought")||!current.optBoolean("recording")||current.optLong("revision",1)!=revision||FlowAccessibility.thoughtCaptureActive(id)||VoiceTake.noteRunning()||VoiceTake.updateBusy())return;
+                    String before=Store.get(app,"notes","[]");JSONArray notes=new JSONArray(before);
+                    for(int i=0;i<notes.length();i++){JSONObject item=notes.optJSONObject(i);if(item!=null&&item.optLong("id")==id)item.put("recording",false).put("pending",!recovered.isEmpty()&&item.optString("raw").isEmpty()).put("audio",recovered.isEmpty()?"":recovered.get(0).getName()).put("parts",names(recovered)).put("duration",duration>0?duration:item.optLong("duration")).put("source_interrupted",recovered.isEmpty()).put("revision",revision+1);}
+                    committed=Store.prefs(app).edit().putString("notes",notes.toString()).commit();if(!committed)Store.prefs(app).edit().putString("notes",before).commit();
+                }
+            }catch(Exception ignored){/* Original files remain on this phone for another recovery attempt. */}
+            finally{synchronized(recoveringThoughts){recoveringThoughts.remove(id);}thoughtWork.decrementAndGet();}
+            if(committed){poke();ThoughtJob.schedule(app);catchUpThoughts(app);}
+        });
+    }
+    private static long segmentIndex(File file){try{String name=file.getName();return Long.parseLong(name.substring(name.lastIndexOf('-')+1,name.length()-4));}catch(RuntimeException invalid){return Long.MAX_VALUE;}}
+
+    static void writeUpThought(Context context,long id){writeUp(context.getApplicationContext(),id);}
+    private static void thoughtToast(Context context,String message){Activity activity=screen.get();if(activity!=null&&!activity.isDestroyed()&&!activity.isFinishing()&&activity.hasWindowFocus())toast(context,message);}
+
     private static void writeUp(Context context,long id) {
-        synchronized(Notes.class){if(draining)return;if(!online(context) || Vault.get(context).isEmpty())return;draining=true;transcribing=id;}
+        JSONObject waiting=find(context,id);if(waiting==null || waiting.optBoolean("recording"))return;
+        final boolean thought=waiting.optBoolean("thought");
+        if(!online(context)||Vault.get(context).isEmpty())return;
+        synchronized(Notes.class){if(draining)return;draining=true;transcribing=id;}
         poke();
         work.execute(()->{
             boolean wrote=false;
             try {
                 JSONObject note=find(context,id);
+                if(note==null || note.optBoolean("recording"))return;
                 List<File> files=note==null?new ArrayList<>():filesOf(context,note);
                 if(note==null || files.isEmpty())throw new java.io.IOException("The recording is missing.");
                 String language=note.optString("lang","auto");
                 String[] detected=new String[]{language};
                 String raw=transcribeFiles(context,files,language,detected);
-                if(raw.isEmpty()){save(context,id,"","",false,language,"",files.get(0).getName(),durations(files),"",false,names(files));toast(context,"I couldn't hear speech in that one. The recording is still saved.");}
+                if(note.optBoolean("thought")){
+                    // Persist the full transcript before optional organization, and never recreate a deleted note.
+                    if(saveThoughtTranscript(context,note,raw,detected[0])){if(!raw.isEmpty())formatThought(context,id);else thoughtToast(context,"I couldn't hear speech in that one. The source audio is still saved.");wrote=true;}
+                }
+                else if(raw.isEmpty()){save(context,id,"","",false,language,"",files.get(0).getName(),durations(files),"",false,names(files));toast(context,"I couldn't hear speech in that one. The recording is still saved.");}
                 else {
                     String text=organize(context,raw);
                     String summary=recap(context,text);
                     save(context,id,text,raw,!text.equals(raw),language,detected[0],files.get(0).getName(),durations(files),summary,false,names(files));
                 }
-                wrote=true;
-            } catch(Exception error) { toast(context,offlineMessage(context,error)); }
-            synchronized(Notes.class){draining=false;transcribing=-1;}
-            poke();
-            if(wrote)catchUp(context);
+                if(!note.optBoolean("thought"))wrote=true;
+            } catch(Exception error) { if(thought)thoughtToast(context,offlineMessage(context,error));else toast(context,offlineMessage(context,error)); }
+            finally{synchronized(Notes.class){draining=false;transcribing=-1;}poke();}
+            if(wrote){if(thought)catchUpThoughts(context);else catchUp(context);}
         });
+    }
+
+    private static boolean saveThoughtTranscript(Context context,JSONObject captured,String raw,String heard){
+        synchronized(Store.class){
+            try{
+                long id=captured.optLong("id"),revision=captured.optLong("revision",1);JSONObject current=find(context,id);
+                if(current==null||!current.optBoolean("thought")||current.optBoolean("recording")||!current.optBoolean("pending")||current.optLong("revision",1)!=revision||!current.optString("raw").equals(captured.optString("raw"))||!String.valueOf(current.opt("parts")).equals(String.valueOf(captured.opt("parts"))))return false;
+                String before=Store.get(context,"notes","[]");JSONArray notes=new JSONArray(before);
+                for(int i=0;i<notes.length();i++){JSONObject note=notes.optJSONObject(i);if(note!=null&&note.optLong("id")==id)note.put("raw",raw).put("text",raw.trim()).put("title",QuickThoughtPolicy.title(raw,"Quick thought")).put("summary",QuickThoughtPolicy.summary(raw)).put("heard",heard==null?"":heard).put("pending",false).put("revision",revision+1);}
+                if(Store.prefs(context).edit().putString("notes",notes.toString()).commit())return true;
+                Store.prefs(context).edit().putString("notes",before).commit();return false;
+            }catch(Exception unavailable){return false;}
+        }
     }
 
     private static void remember(Context context,long id,List<File> files,String lang,boolean pending) {
@@ -757,14 +850,21 @@ final class Notes {
             }
     }
 
-    private static void remove(Activity activity,long id) {
+    private static void remove(Context activity,long id) {
         synchronized(Store.class){
         stopPlayback();
-        JSONArray notes=all(activity),next=new JSONArray();
-        for(int i=0;i<notes.length();i++){JSONObject old=notes.optJSONObject(i);if(old==null)continue;if(old.optLong("id")==id){for(File audio:filesOf(activity,old))if(audio.isFile())audio.delete();}else next.put(old);}
-        Store.prefs(activity).edit().putString("notes",next.toString()).apply();
+        JSONArray notes=all(activity),next=new JSONArray();List<File> removedFiles=new ArrayList<>();boolean thought=false;
+        for(int i=0;i<notes.length();i++){JSONObject old=notes.optJSONObject(i);if(old==null)continue;if(old.optLong("id")==id){removedFiles.addAll(filesOf(activity,old));thought=old.optBoolean("thought");}else next.put(old);}
+        String previousDeleted=Store.get(activity,"thought_deletions","[]");android.content.SharedPreferences.Editor edit=Store.prefs(activity).edit().putString("notes",next.toString());
+        if(thought)edit.putString("thought_deletions",deletedThoughts(activity,id).toString());
+        if(!edit.commit()){Store.prefs(activity).edit().putString("notes",notes.toString()).putString("thought_deletions",previousDeleted).commit();toast(activity,"Could not delete this note. Check available phone storage.");return;}
+        for(File audio:removedFiles)if(audio.isFile())audio.delete();
             }
     }
+
+    static boolean thoughtDeleted(Context context,long id){synchronized(Store.class){try{JSONArray ids=new JSONArray(Store.get(context,"thought_deletions","[]"));for(int i=0;i<ids.length();i++)if(ids.optLong(i)==id)return true;}catch(Exception ignored){}return false;}}
+    private static JSONArray deletedThoughts(Context context,long id){JSONArray next=new JSONArray().put(id);try{JSONArray old=new JSONArray(Store.get(context,"thought_deletions","[]"));for(int i=0;i<old.length()&&next.length()<10000;i++)if(old.optLong(i)!=id)next.put(old.optLong(i));}catch(Exception ignored){}return next;}
+    static void discardThoughtCapture(Context context,long id){synchronized(Store.class){JSONObject note=find(context,id);if(note!=null&&note.optBoolean("thought")&&(note.optBoolean("recording")||note.optBoolean("pending")))remove(context,id);}poke();}
 
     private static void stamp(Context context,long id,String key,String value) {
         synchronized(Store.class){
@@ -790,24 +890,67 @@ final class Notes {
 
     /** Stored before optional cloud formatting. The original words never depend on its result. */
     static long keepThought(Context context,long requestedId,String raw,long duration) {
+        return keepThought(context,requestedId,raw,duration,null);
+    }
+    static long keepThought(Context context,long requestedId,String raw,long duration,File source) {
+        List<File> copied=new ArrayList<>();
         synchronized(Store.class){
         if(raw==null || raw.trim().isEmpty())return -1;
         try {
             JSONArray notes=all(context),next=new JSONArray();
             long id=Store.nextId(notes,requestedId>0?requestedId:System.currentTimeMillis());
+            List<File> audio=adoptThoughtFiles(context,id,source==null?null:java.util.Collections.singletonList(source),copied);
             String text=raw.trim();
             JSONObject thought=new JSONObject().put("id",id).put("created",id).put("thought",true)
                 .put("text",text).put("raw",raw).put("title",QuickThoughtPolicy.title(text,"Quick thought"))
-                .put("duration",Math.max(0,duration)).put("lang",Store.language(context)).put("heard",Store.language(context))
-                .put("audio","").put("summary","").put("pending",false).put("revision",1L);
+                .put("duration",Math.max(Math.max(0,duration),durations(audio))).put("lang",Store.language(context)).put("heard",Store.language(context))
+                .put("audio",audio.isEmpty()?"":audio.get(0).getName()).put("parts",names(audio)).put("summary",QuickThoughtPolicy.summary(raw)).put("pending",false).put("revision",1L);
             next.put(thought);
             appendRetained(next,notes,-1);
             // Commit so the UI only says Saved when storage has accepted the words.
-            if(!Store.prefs(context).edit().putString("notes",next.toString()).commit()){Store.prefs(context).edit().putString("notes",notes.toString()).commit();return -1;}
+            if(!Store.prefs(context).edit().putString("notes",next.toString()).commit()){Store.prefs(context).edit().putString("notes",notes.toString()).commit();for(File file:copied)file.delete();return -1;}
             poke();
             return id;
-        } catch(Exception error){return -1;}
+        } catch(Exception error){for(File file:copied)file.delete();return -1;}
             }
+    }
+
+    /** Finalized source segments are committed before transcription; repeating a callback updates one note. */
+    static long keepThoughtAudio(Context context,long requestedId,List<File> sources,long duration,boolean complete){
+        long saved=-1;List<File> copied=new ArrayList<>();
+        synchronized(Store.class){
+            if(requestedId<=0||thoughtDeleted(context,requestedId))return -1;
+            try{
+                JSONArray previous=all(context);JSONObject old=find(context,requestedId);
+                if(old!=null&&!old.optBoolean("thought"))return -1;
+                if(old!=null&&!old.optBoolean("recording")&&!old.optBoolean("pending")&&!old.optString("raw").isEmpty())return requestedId;
+                List<File> files=adoptThoughtFiles(context,requestedId,sources,copied);
+                if(complete&&files.isEmpty())return -1;
+                if(old!=null&&old.optBoolean("recording")==!complete&&old.optBoolean("pending")==complete&&String.valueOf(old.opt("parts")).equals(names(files).toString())&&old.optLong("duration")>=Math.max(0,duration))return requestedId;
+                JSONObject note=old==null?new JSONObject().put("id",requestedId).put("created",requestedId).put("thought",true).put("raw","").put("text","").put("title","Quick thought").put("summary","").put("lang","auto").put("heard",""):new JSONObject(old.toString());
+                note.put("audio",files.isEmpty()?"":files.get(0).getName()).put("parts",names(files)).put("duration",Math.max(Math.max(0,duration),durations(files)))
+                    .put("recording",!complete).put("pending",complete).put("revision",old==null?1:old.optLong("revision",1)+1);
+                JSONArray next=new JSONArray().put(note);appendRetained(next,previous,requestedId);
+                if(!Store.prefs(context).edit().putString("notes",next.toString()).commit()){Store.prefs(context).edit().putString("notes",previous.toString()).commit();for(File file:copied)file.delete();return -1;}
+                saved=requestedId;
+            }catch(Exception unavailable){for(File file:copied)file.delete();return -1;}
+        }
+        ensureThoughtRetry(context);poke();if(complete){ThoughtJob.schedule(context.getApplicationContext());writeUpThought(context,saved);}return saved;
+    }
+
+    /** External finalized files are copied and synced; a failed commit never consumes the caller's source. */
+    private static List<File> adoptThoughtFiles(Context context,long id,List<File> sources,List<File> copied) throws Exception{
+        List<File> result=new ArrayList<>();if(sources==null)return result;File folder=dir(context).getCanonicalFile();int index=0;
+        for(File source:sources){
+            if(source==null||!source.isFile()||source.length()==0)continue;File canonical=source.getCanonicalFile();
+            if(folder.equals(canonical.getParentFile())){result.add(canonical);index++;continue;}
+            String ext=source.getName().toLowerCase(Locale.ROOT).endsWith(".wav")?".wav":".m4a";File target=new File(folder,"thought-"+id+"-"+(index++)+"-"+System.nanoTime()+ext),temporary=new File(target.getPath()+".part");
+            try(FileInputStream in=new FileInputStream(source);FileOutputStream out=new FileOutputStream(temporary)){byte[] buffer=new byte[8192];int count;while((count=in.read(buffer))!=-1)out.write(buffer,0,count);out.getFD().sync();}
+            catch(Exception error){temporary.delete();throw error;}
+            if(temporary.length()!=source.length()||!temporary.renameTo(target)){temporary.delete();throw new java.io.IOException("Could not retain the source audio.");}
+            copied.add(target);result.add(target);
+        }
+        return result;
     }
 
     static void formatThought(Context context,long id) {
@@ -827,7 +970,7 @@ final class Notes {
                     String before=Store.get(app,"notes","[]");JSONArray old=new JSONArray(before),next=new JSONArray();
                     for(int i=0;i<old.length();i++){
                         JSONObject note=old.optJSONObject(i);if(note==null)continue;
-                        if(note.optLong("id")==id){note.put("text",organized.body).put("title",organized.title).put("revision",revision+1);}
+                        if(note.optLong("id")==id){note.put("text",organized.body).put("title",organized.title).put("summary",organized.summary).put("revision",revision+1);}
                         next.put(note);
                     }
                     if(!Store.prefs(app).edit().putString("notes",next.toString()).commit())Store.prefs(app).edit().putString("notes",before).commit();
@@ -846,7 +989,7 @@ final class Notes {
             String before=Store.get(context,"notes","[]");JSONArray old=new JSONArray(before),next=new JSONArray();
             for(int i=0;i<old.length();i++){
                 JSONObject note=old.optJSONObject(i);if(note==null)continue;
-                if(note.optLong("id")==id)note.put("text",text.trim()).put("title",QuickThoughtPolicy.title(text,"Quick thought")).put("revision",note.optLong("revision",1)+1);
+                if(note.optLong("id")==id)note.put("text",text.trim()).put("title",QuickThoughtPolicy.title(text,"Quick thought")).put("summary",QuickThoughtPolicy.summary(text)).put("revision",note.optLong("revision",1)+1);
                 next.put(note);
             }
             boolean saved=Store.prefs(context).edit().putString("notes",next.toString()).commit();if(saved)poke();else Store.prefs(context).edit().putString("notes",before).commit();return saved;
@@ -857,12 +1000,6 @@ final class Notes {
     private static void thoughtList(Activity activity,LinearLayout body,Runnable refresh) {
         if(!Store.quickThoughts(activity))return;
         body.addView(Daybook.text(activity,"Ideas captured when no input is active.",13,Daybook.muted(activity),false));Ui.space(body,8);
-        Button recordThought=Daybook.button(activity,"Record thought",true,v->{
-            if(Dictation.isWorking() || VoiceTake.running() || Translate.going() || LineWire.running() || CaptureActivity.visible){toast(activity,"Finish the current recording first.");return;}
-            if(!Store.quickThoughts(activity))return;
-            activity.startActivity(new android.content.Intent(activity,CaptureActivity.class).putExtra("destination","thought"));
-        });
-        body.addView(recordThought,new LinearLayout.LayoutParams(-2,Ui.dp(activity,44)));Ui.space(body,14);
         JSONArray notes=all(activity);String bucket="";int shown=0;
         for(int i=0;i<notes.length();i++){
             JSONObject note=notes.optJSONObject(i);if(note==null || !note.optBoolean("thought"))continue;
@@ -872,26 +1009,55 @@ final class Notes {
             LinearLayout card=Daybook.card(activity);card.setPadding(Ui.dp(activity,14),Ui.dp(activity,12),Ui.dp(activity,14),Ui.dp(activity,12));
             TextView title=Daybook.text(activity,titleOf(note),16,Daybook.ink(activity),false);title.setMaxLines(2);title.setEllipsize(android.text.TextUtils.TruncateAt.END);card.addView(title);Ui.space(card,4);
             card.addView(Daybook.text(activity,when(note),12,Daybook.muted(activity),false));Ui.space(card,8);
-            TextView preview=Daybook.text(activity,note.optString("text"),14,Daybook.muted(activity),false);preview.setMaxLines(2);preview.setEllipsize(android.text.TextUtils.TruncateAt.END);card.addView(preview);
-            long id=note.optLong("id");card.setOnClickListener(v->{Daybook.feedback(v);open=id;original=false;refresh.run();});body.addView(card);Ui.space(body,8);
+            String previewText=note.optString("text");if(previewText.isEmpty())previewText=note.optBoolean("recording")?"Recording…":note.optBoolean("pending")?"Source saved. Waiting for transcription.":note.optBoolean("source_interrupted")?"Recording interrupted.":"Source audio saved.";
+            TextView preview=Daybook.text(activity,previewText,14,Daybook.muted(activity),false);preview.setMaxLines(2);preview.setEllipsize(android.text.TextUtils.TruncateAt.END);card.addView(preview);
+            long id=note.optLong("id");card.setOnClickListener(v->{Daybook.feedback(v);open=id;original=false;thoughtSourceShown=-1;refresh.run();});body.addView(card);Ui.space(body,8);
         }
-        if(shown==0){LinearLayout empty=Daybook.card(activity);empty.setPadding(Ui.dp(activity,16),Ui.dp(activity,18),Ui.dp(activity,16),Ui.dp(activity,18));empty.addView(Daybook.text(activity,"No thoughts yet.",18,Daybook.ink(activity),true));Ui.space(empty,7);empty.addView(Daybook.text(activity,"Record a thought here, or tap the edge dot outside VonoTation when no input is active. Your thought is saved here.",13,Daybook.muted(activity),false));body.addView(empty);}
+        if(shown==0){LinearLayout empty=Daybook.card(activity);empty.setPadding(Ui.dp(activity,16),Ui.dp(activity,18),Ui.dp(activity,16),Ui.dp(activity,18));empty.addView(Daybook.text(activity,"No thoughts yet.",18,Daybook.ink(activity),true));Ui.space(empty,7);empty.addView(Daybook.text(activity,"Tap the edge dot outside VonoTation when no input is active. Finish with the floating checkmark; your thought is saved here automatically.",13,Daybook.muted(activity),false));body.addView(empty);}
     }
 
     private static void thoughtDetail(Activity activity,LinearLayout body,JSONObject note,Runnable refresh) {
         if(!Store.quickThoughts(activity)){back();return;}
+        long id=note.optLong("id");boolean recording=note.optBoolean("recording"),coming=transcribing==id;
         body.addView(Daybook.text(activity,titleOf(note),22,Daybook.ink(activity),true));Ui.space(body,4);body.addView(Daybook.text(activity,when(note),12,Daybook.muted(activity),false));Ui.space(body,16);
+        String summary=note.optString("summary");
+        if(!original&&!summary.isEmpty()){
+            body.addView(Daybook.text(activity,"Summary",12,Daybook.muted(activity),true));Ui.space(body,6);
+            TextView recap=Daybook.text(activity,summary,16,Daybook.ink(activity),false);recap.setLineSpacing(Ui.dp(activity,3),1);recap.setTextIsSelectable(true);body.addView(recap);Ui.space(body,16);
+        }
         body.addView(Daybook.text(activity,original?"Original transcript":"Your thought",12,Daybook.muted(activity),true));Ui.space(body,6);
-        TextView words=Daybook.text(activity,note.optString(original?"raw":"text"),17,Daybook.ink(activity),false);words.setLineSpacing(Ui.dp(activity,4),1);words.setTextIsSelectable(true);body.addView(words);Ui.space(body,18);
+        String text=note.optString(original?"raw":"text");
+        if(text.isEmpty())text=recording?"Recording. Your source audio is being kept on this phone.":coming?"Writing it up…":note.optBoolean("pending")?"Saved on this phone. The words will fill in when you are online and your provider is connected.":note.optBoolean("source_interrupted")?"The recording was interrupted before a finalized source segment could be recovered.":"No speech was recognized. Your source audio is still saved.";
+        TextView words=Daybook.text(activity,text,17,Daybook.ink(activity),false);words.setLineSpacing(Ui.dp(activity,4),1);words.setTextIsSelectable(true);body.addView(words);Ui.space(body,18);
         LinearLayout actions=Ui.row(activity);
-        actions.addView(quiet(activity,original?"Organized":"Original",v->{original=!original;refresh.run();}));
-        actions.addView(quiet(activity,"Edit",v->{
+        if(!note.optString("raw").isEmpty())actions.addView(quiet(activity,original?"Organized":"Original",v->{original=!original;refresh.run();}));
+        if(!note.optString("text").isEmpty())actions.addView(quiet(activity,"Edit",v->{
             android.widget.EditText input=new android.widget.EditText(activity);input.setText(note.optString("text"));input.setMinLines(3);input.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE);
             android.app.AlertDialog dialog=new android.app.AlertDialog.Builder(activity).setTitle("Edit thought").setView(input).setNegativeButton("Cancel",null).setPositiveButton("Save",null).create();
             dialog.setOnShowListener(d->dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener(view->{if(editThought(activity,note.optLong("id"),input.getText().toString())){dialog.dismiss();refresh.run();}else input.setError("Add some text, or reopen this thought.");}));dialog.show();
         }));
-        actions.addView(quiet(activity,"Delete",v->new android.app.AlertDialog.Builder(activity).setTitle("Delete this thought?").setMessage("Removes the thought and its original transcript from this phone.").setNegativeButton("Keep",null).setPositiveButton("Delete",(d,w)->{remove(activity,note.optLong("id"));back();refresh.run();}).show()));
+        if(!filesOf(activity,note).isEmpty()&&!recording)actions.addView(quiet(activity,thoughtSourceShown==id?"Hide audio":"Source audio",v->{if(thoughtSourceShown==id){thoughtSourceShown=-1;stopPlayback();}else thoughtSourceShown=id;refresh.run();}));
+        actions.addView(quiet(activity,"Delete",v->new android.app.AlertDialog.Builder(activity).setTitle("Delete this thought?").setMessage("Removes the thought, its original transcript and source audio from this phone.").setNegativeButton("Keep",null).setPositiveButton("Delete",(d,w)->{remove(activity,id);back();refresh.run();}).show()));
         body.addView(actions);
+        if(!recording&&!coming&&note.optString("raw").isEmpty()&&!filesOf(activity,note).isEmpty())body.addView(quiet(activity,"Retry transcription",v->{retryThought(activity,id);refresh.run();}));
+        if(thoughtSourceShown==id&&!recording){Ui.space(body,12);thoughtSourcePlayer(activity,body,note,refresh);}
+    }
+
+    private static void retryThought(Context context,long id){
+        synchronized(Store.class){try{String before=Store.get(context,"notes","[]");JSONArray notes=new JSONArray(before);boolean found=false;for(int i=0;i<notes.length();i++){JSONObject note=notes.optJSONObject(i);if(note!=null&&note.optLong("id")==id&&note.optBoolean("thought")&&!note.optBoolean("recording")){note.put("pending",true).put("revision",note.optLong("revision",1)+1);found=true;}}if(!found)return;if(!Store.prefs(context).edit().putString("notes",notes.toString()).commit()){Store.prefs(context).edit().putString("notes",before).commit();return;}}catch(Exception unavailable){return;}}
+        ThoughtJob.schedule(context.getApplicationContext());writeUpThought(context,id);
+    }
+
+    /** Uses the existing note player, revealed only by an explicit detail action. */
+    private static void thoughtSourcePlayer(Activity activity,LinearLayout body,JSONObject note,Runnable refresh){
+        boolean on=playing==note.optLong("id");
+        body.addView(Daybook.text(activity,"Source audio",12,Daybook.muted(activity),true));Ui.space(body,8);
+        playTime=Daybook.text(activity,(on?clock(position()):"0:00")+" / "+clock(note.optLong("duration")),16,Daybook.ink(activity),true);body.addView(playTime);Ui.space(body,8);
+        playWave=new Wave(activity);playWave.show(barsOf(note.optString("wave")),on&&totalDuration>0?position()/(float)totalDuration:0);body.addView(playWave,new LinearLayout.LayoutParams(-1,Ui.dp(activity,56)));Ui.space(body,12);
+        LinearLayout controls=Ui.row(activity);controls.setGravity(android.view.Gravity.CENTER);
+        TextView back5=Daybook.text(activity,"−5s",14,Daybook.muted(activity),true);back5.setPadding(Ui.dp(activity,8),Ui.dp(activity,8),Ui.dp(activity,8),Ui.dp(activity,8));back5.setOnClickListener(v->{Daybook.feedback(v);nudge(-5000);});controls.addView(back5);
+        LinearLayout.LayoutParams mid=new LinearLayout.LayoutParams(0,Ui.dp(activity,48),1);mid.leftMargin=Ui.dp(activity,8);mid.rightMargin=Ui.dp(activity,8);controls.addView(Daybook.button(activity,on?"Pause":"Play",true,v->togglePlay(activity,note,refresh)),mid);
+        TextView forward=Daybook.text(activity,"+5s",14,Daybook.muted(activity),true);forward.setPadding(Ui.dp(activity,8),Ui.dp(activity,8),Ui.dp(activity,8),Ui.dp(activity,8));forward.setOnClickListener(v->{Daybook.feedback(v);nudge(5000);});controls.addView(forward);body.addView(controls);if(on)armTick();
     }
 
     private static final Runnable pulse=new Runnable(){

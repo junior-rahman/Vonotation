@@ -1,0 +1,41 @@
+VonoTation 0.1.11-preview
+Android package: app.voiceflow
+Version code: 83
+
+Quick Thoughts records on your current screen
+- With Quick thoughts enabled and no input active, tap the faint edge dot to record using the existing floating controls.
+- It does not open VonoTation or a recording popup. Changing apps, focusing an input or tapping elsewhere keeps recording; use the physical Finish or Cancel control. System interruptions can finalize a recording.
+- Uses the existing Voice Notes source-audio pipeline: recording and local saving work offline and without an API key. After Finish, the connected Notes provider transcribes the saved source, organizes the note and creates a grounded summary and title.
+- Original transcript and local source audio are retained. Source audio stays hidden until Source audio is tapped to reveal playback. Backups exclude recordings.
+- Completed pending thoughts retry when the connection returns, including a persisted background network job with exponential backoff. Android may defer background work. Still-recording segments are excluded from transcription; no background recorder is started by retry work.
+- Active-input dictation keeps its selected engine and destination. Focusing an input during a thought does not redirect the thought into that field.
+- Thoughts inside the app displays saved thoughts for viewing, editing and deleting, without a recording button or recording popup.
+- Turning Quick thoughts off hides its idle dot and card while retaining saved notes. The 60-second idle collapse remains.
+- Existing colors, typography and layout are retained. Reminders remain future work.
+
+Delete uses the current input position
+- Deletes the current selection in place, or the preceding word at the current cursor.
+- Supports relative editor context when an input does not supply absolute cursor offsets.
+- Held deletion waits for acknowledgement and stops when the input, text or cursor changes.
+- Shows feedback if an editor cannot safely perform the requested edit; it does not guess another position.
+
+Settings and backup entry
+- Removed the Settings Clear history action.
+- Backup opens the existing backup flow instead of the hardcoded On hold state.
+- Restored the existing encrypted backup/restore controls and added a recording/audio-work restore guard.
+- These changes repair the app entry and local flow. Google OAuth registration against the current preview signing certificate, account consent and live Drive backup/restore are not verified. Do not treat this build as a successful live Drive integration test.
+
+Existing features retained
+- Compact latest-copy pill and scrollable clipboard history.
+- Verified in-app update downloads and Android installer handoff.
+- Quiet Call Notes recovery with pairing retained; Android/device/network changes can still interrupt wireless debugging.
+
+Verification
+Final packaging records the Android preview build, passing pure Java suites, APK identity/signature, source inventory and artifact hashes. The suite count is generated from the actual test files and passing results. The publisher separately validates the prepared release manifest and artifacts before publishing. Consult verification/v0.1.11-preview/VERIFICATION.txt in the repository or RELEASE_VERIFICATION-0.1.11-preview.txt in the source archive for recorded results.
+
+Phone/device testing: not performed. Actual Samsung/Niagara UI, native input-field compatibility, microphone/provider responses, background retry timing, installer return, notification behavior, wireless debugging, Google consent and live backup/restore remain unverified. Existing logic tests use synthetic data and do not establish device or backend behavior.
+
+Installation
+Use Settings > Update, grant installation permission if requested and confirm Android's installer. The older app may require Update tapped once more after returning from installation-permission settings. The preview uses the existing app package and signing identity so normal Android update installation retains app data.
+
+Source excludes private signing keys, API keys, recordings, machine configuration and build caches. The Gradle wrapper JAR is intentionally included. Compatible preview builds require the existing signing key supplied separately through VOICEFLOW_KEYSTORE.
