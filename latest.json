@@ -1,9 +1,9 @@
 {
-  "versionCode": 86,
-  "versionName": "0.1.14-preview",
-  "apk": "https://github.com/JuelHossain/Vonotation/releases/download/v0.1.14-preview/VonoTation-0.1.14-preview.apk",
-  "sha256": "fcc87013d0620a9f63e4b4feeea14602e7f5194c51635c2f23a812b71ef8e741",
-  "size": 6171750,
+  "versionCode": 87,
+  "versionName": "0.1.15-preview",
+  "apk": "https://github.com/junior-rahman/Vonotation/releases/download/v0.1.15-preview/VonoTation-0.1.15-preview.apk",
+  "sha256": "2c9efb767596be93d5556a425176c94d2a78c1f3839b671a22bf945f263c04b8",
+  "size": 6186026,
   "package": "app.voiceflow",
-  "notes": "New Quick Thoughts shorter than two normal phone-width transcript lines are skipped after successful complete transcription. Existing thoughts and explicit manual saves are kept. Offline audio waits for transcription; failed, uncertain, interrupted or incomplete sources are preserved. Daily summaries, full transcripts, hidden source playback and the existing design are retained. Phone testing remains pending."
+  "notes": "Priority reliability fixes for Quick Thoughts and recording completion, Call Notes cleanup and reconnection alerts, cursor delete/paste, note processing and retries, encrypted text-backup verification, playback and safe in-app installation. Existing visuals are retained for this bugfix release. Phone/device testing remains pending."
 }
