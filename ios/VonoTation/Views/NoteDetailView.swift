@@ -41,28 +41,30 @@ struct NoteDetailView: View {
                         } else {
                             DisclosureGroup(isExpanded: $transcriptExpanded) {
                                 Text(note.transcript.isEmpty ? "The transcript is pending." : note.transcript)
-                                    .font(.body).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading).padding(.top, 9)
+                                    .font(.body).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                                    .frame(maxWidth: .infinity, alignment: .leading).padding(.top, 9)
                                     .accessibilityIdentifier("note.transcript")
                             } label: {
                                 Text("Full transcript").font(.subheadline.weight(.semibold)).foregroundStyle(Daybook.accent).frame(minHeight: 44)
+                                    .accessibilityIdentifier("note.detail.transcript.disclosure")
                             }
-                            .accessibilityIdentifier("note.detail.transcript.disclosure")
                         }
                         if !note.rawTranscript.isEmpty && note.rawTranscript != note.transcript {
                             DisclosureGroup {
-                                Text(note.rawTranscript).font(.subheadline).foregroundStyle(Daybook.muted).textSelection(.enabled).padding(.top, 8).accessibilityIdentifier("note.original")
+                                Text(note.rawTranscript).font(.subheadline).foregroundStyle(Daybook.muted).textSelection(.enabled)
+                                    .fixedSize(horizontal: false, vertical: true).padding(.top, 8).accessibilityIdentifier("note.original")
                             } label: {
                                 Text("Heard before cleanup").font(.subheadline).foregroundStyle(Daybook.accent).frame(minHeight: 44)
+                                    .accessibilityIdentifier("note.detail.original.disclosure")
                             }
-                            .accessibilityIdentifier("note.detail.original.disclosure")
                         }
                         if let url = model.audioURL(for: note) {
                             DisclosureGroup {
                                 SourceAudioView(url: url).padding(.top, 9)
                             } label: {
                                 Label("Source audio", systemImage: "waveform").font(.subheadline).foregroundStyle(Daybook.accent).frame(minHeight: 44)
+                                    .accessibilityIdentifier("note.audio")
                             }
-                            .accessibilityIdentifier("note.audio")
                         }
                         actionRow(note)
                     }

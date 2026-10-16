@@ -206,6 +206,7 @@ struct ClipboardTimelineRow: View {
             DisclosureGroup(isExpanded: $expanded) {
                 VStack(alignment: .leading, spacing: 12) {
                     Text(clip.text).font(.body).foregroundStyle(Daybook.ink).textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("clip.fulltext.\(clip.id.uuidString)")
                     Text("Expires \(clip.expiresAt.formatted(date: .abbreviated, time: .shortened))")
                         .font(.caption).foregroundStyle(Daybook.muted)
@@ -223,8 +224,8 @@ struct ClipboardTimelineRow: View {
                     Text(clip.createdAt, format: .dateTime.hour().minute()).font(.caption).foregroundStyle(Daybook.muted).frame(width: 58, alignment: .leading).padding(.top, 3)
                     Text(clip.text).font(.body).foregroundStyle(Daybook.ink).lineLimit(2).frame(maxWidth: .infinity, alignment: .leading)
                 }.padding(.vertical, 13).frame(minHeight: 51)
+                    .accessibilityIdentifier("clip.\(clip.id.uuidString)")
             }
-            .accessibilityIdentifier("clip.\(clip.id.uuidString)")
         }
     }
 }

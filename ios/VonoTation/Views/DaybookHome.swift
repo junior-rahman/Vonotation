@@ -29,7 +29,7 @@ enum DaybookPage: String, CaseIterable, Identifiable {
         case .voiceNotes: return "waveform"
         case .calls: return "phone"
         case .translate: return "character.bubble"
-        case .dictations: return "waveform.and.pencil"
+        case .dictations: return "waveform"
         case .thoughts: return "note.text"
         case .clipboard: return "doc.on.clipboard"
         }
@@ -130,6 +130,7 @@ struct DaybookHome: View {
                 }
             }
         }
+        .tint(Daybook.accent)
     }
 
     private var cardNavigation: some View {
@@ -143,6 +144,8 @@ struct DaybookHome: View {
                         HStack(spacing: 6) {
                             if candidate == .thoughts {
                                 ThoughtMark().stroke(style: StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round)).frame(width: 16, height: 17)
+                            } else if candidate == .dictations {
+                                DaybookMark(size: 16, color: page == candidate ? Daybook.actionInk : Daybook.accent)
                             } else { Image(systemName: candidate.symbol).font(.caption) }
                             Text(candidate.title).font(.subheadline.weight(page == candidate ? .semibold : .regular))
                         }

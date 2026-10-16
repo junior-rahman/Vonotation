@@ -83,6 +83,8 @@ struct DaybookCard<Content: View>: View {
 }
 
 struct DaybookMark: View {
+    var size: CGFloat = 30
+    var color: Color = Daybook.coral
     var body: some View {
         Canvas { context, size in
             let scale = min(size.width / 30, size.height / 31)
@@ -94,13 +96,13 @@ struct DaybookMark: View {
                          CGRect(x: 9, y: 4, width: 4, height: 23),
                          CGRect(x: 16, y: 6, width: 4, height: 18),
                          CGRect(x: 23, y: 11, width: 4, height: 8)] {
-                context.fill(Path(roundedRect: rect, cornerRadius: 2), with: .color(Daybook.coral))
+                context.fill(Path(roundedRect: rect, cornerRadius: 2), with: .color(color))
             }
             context.translateBy(x: 19, y: 28)
             context.rotate(by: .degrees(-45))
-            context.fill(Path(roundedRect: CGRect(x: -4, y: -2, width: 9, height: 4), cornerRadius: 2), with: .color(Daybook.coral))
+            context.fill(Path(roundedRect: CGRect(x: -4, y: -2, width: 9, height: 4), cornerRadius: 2), with: .color(color))
         }
-        .frame(width: 30, height: 31)
+        .frame(width: size, height: size * 31 / 30)
         .accessibilityHidden(true)
     }
 }
