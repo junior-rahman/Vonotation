@@ -351,9 +351,21 @@ final class AppModel: ObservableObject {
         isProcessing = !jobs.isEmpty || !recapJobs.isEmpty
         invalidateRecaps(); persistSoon()
     }
-    func deleteNote(_ note: VonoNote) {
-        guard isLoaded, !isBackingUp, !isStarting, !isFinalizing else { return }
-        if session?.id == note.id { cancelRecording(); return }
+    @discardableResult
+    func deleteNote(_ note: VonoNote) -> Bool {
+        guard isLoaded else {
+            errorMessage = "Wait for your saved notes to load before deleting."
+            return false
+        }
+        guard !isBackingUp else {
+            errorMessage = "Wait for backup or restore to finish before deleting this note."
+            return false
+        }
+        guard !isStarting, !isFinalizing else {
+            errorMessage = "Wait for the current recording action to finish before deleting this note."
+            return false
+        }
+        if session?.id == note.id { cancelRecording(); return true }
         jobs[note.id]?.cancel(); jobs.removeValue(forKey: note.id); jobTokens.removeValue(forKey: note.id)
         let source = notes.first(where: { $0.id == note.id })?.audioFileName
         notes.removeAll { $0.id == note.id }; invalidateRecaps()
@@ -364,6 +376,7 @@ final class AppModel: ObservableObject {
                 if let name = source, let source = store.audioURL(fileName: name) { try? FileManager.default.removeItem(at: source) }
             } catch { errorMessage = "The deletion could not be saved. The source file was kept." }
         }
+        return true
     }
     func audioURL(for note: VonoNote) -> URL? {
         guard let name = note.audioFileName, let url = store.audioURL(fileName: name), FileManager.default.fileExists(atPath: url.path) else { return nil }

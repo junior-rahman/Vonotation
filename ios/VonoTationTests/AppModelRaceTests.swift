@@ -51,7 +51,7 @@ final class AppModelRaceTests: XCTestCase {
         let value = try await loadedModel(note: original)
         await value.retry(original)
         await fulfillment(of: [requested], timeout: 5)
-        value.deleteNote(original)
+        XCTAssertTrue(value.deleteNote(original), "The original deletion must be accepted while its provider request is held.")
 
         let newAudio = directory.appendingPathComponent("new-import.m4a")
         try Data("different source bytes".utf8).write(to: newAudio)

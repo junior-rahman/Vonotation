@@ -73,6 +73,7 @@ final class DaybookUITests: XCTestCase {
         openCard("nav.thoughts")
         let note = elements(prefix: "note.").firstMatch
         XCTAssertTrue(note.waitForExistence(timeout: 5))
+        let originalNoteIdentifier = note.identifier
         note.tap()
         let summary = app.staticTexts["note.summary"]
         let transcript = app.staticTexts["note.transcript"]
@@ -82,6 +83,17 @@ final class DaybookUITests: XCTestCase {
         XCTAssertFalse(summary.label.isEmpty)
         XCTAssertNotEqual(summary.label, transcript.label)
         XCTAssertTrue(transcript.label.contains("UI fixture original transcript"))
+        let thoughtDetail = XCTAttachment(screenshot: app.screenshot())
+        thoughtDetail.name = "Thought detail before explicit deletion"
+        thoughtDetail.lifetime = .keepAlways
+        add(thoughtDetail)
+        app.buttons["note.detail.delete"].tap()
+        let deleteConfirmation = app.buttons["Delete note and source audio"]
+        XCTAssertTrue(deleteConfirmation.waitForExistence(timeout: 5), "Deleting must require explicit destructive confirmation.")
+        deleteConfirmation.tap()
+        XCTAssertTrue(app.staticTexts["page.title"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["page.title"].label, "Thoughts")
+        XCTAssertFalse(app.descendants(matching: .any)[originalNoteIdentifier].exists)
     }
 
     func testClipboardExpandsFullTextAndKeepsItsEnding() {

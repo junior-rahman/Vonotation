@@ -88,8 +88,7 @@ struct NoteDetailView: View {
         .sheet(isPresented: $editing) { if let note { EditNoteView(note: note).environmentObject(model) } }
         .confirmationDialog("Delete this note?", isPresented: $deleting, titleVisibility: .visible) {
             Button("Delete note and source audio", role: .destructive) {
-                if let note { model.deleteNote(note) }
-                dismiss()
+                if let note, model.deleteNote(note) { dismiss() }
             }
             Button("Keep note", role: .cancel) { }
         } message: { Text("The saved text and its source recording will be removed from this device.") }
@@ -140,7 +139,7 @@ struct NoteDetailView: View {
             .buttonStyle(DaybookButtonStyle()).disabled(shareText(note).isEmpty)
             .accessibilityIdentifier("note.detail.share")
         Button(role: .destructive) { deleting = true } label: { Label("Delete", systemImage: "trash") }
-            .buttonStyle(DaybookButtonStyle()).accessibilityIdentifier("note.detail.delete")
+            .buttonStyle(DaybookButtonStyle()).disabled(model.isBackingUp).accessibilityIdentifier("note.detail.delete")
     }
 
     private func shareText(_ note: VonoNote) -> String {
