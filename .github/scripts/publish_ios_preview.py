@@ -129,7 +129,8 @@ class GitHub:
         self.token = token if token is not None else os.environ.get("GH_TOKEN", "")
         self.opener = urllib.request.build_opener(NoRedirect)
 
-    def request(self, url, *, authenticated, method="GET", data=None, accept="application/vnd.github+json"):
+    def request(self, url, *, authenticated, method="GET", data=None, accept="application/vnd.github+json",
+                content_type="application/json"):
         parsed = urllib.parse.urlsplit(url)
         if authenticated:
             require(parsed.scheme == "https" and parsed.hostname in ("api.github.com", "uploads.github.com")
@@ -140,7 +141,7 @@ class GitHub:
         if authenticated and self.token:
             headers["Authorization"] = "Bearer " + self.token
         if data is not None:
-            headers["Content-Type"] = "application/json" if accept != "application/octet-stream" else "application/octet-stream"
+            headers["Content-Type"] = content_type
         return self.opener.open(urllib.request.Request(url, headers=headers, method=method, data=data), timeout=60)
 
     def api(self, endpoint, *, method="GET", data=None, allow_404=False):
@@ -204,7 +205,7 @@ class GitHub:
     def upload(self, release_id, asset):
         url = "https://uploads.github.com/repos/" + REPO + f"/releases/{release_id}/assets?" + urllib.parse.urlencode({"name": asset["name"]})
         with self.request(url, authenticated=True, method="POST", data=asset["path"].read_bytes(),
-                          accept="application/octet-stream") as response:
+                          accept="application/vnd.github+json", content_type="application/octet-stream") as response:
             return json.loads(response.read())
 
 
