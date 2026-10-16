@@ -27,6 +27,7 @@ import java.util.Date;
 public final class MainActivity extends Activity {
     /** Set by the bubble/keyboard "Fix" action: DictationProblem.FIX_API_KEY or FIX_MICROPHONE. */
     static final String EXTRA_FIX="voiceflow_fix";
+    static final String EXTRA_OPEN_THOUGHTS="voiceflow_open_thoughts";
     static String currentDraft="";
     private LinearLayout body,root,header,strip,footer;
     private ScrollView scroll;
@@ -50,13 +51,20 @@ public final class MainActivity extends Activity {
     private volatile CloudApi summaryApi;
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);Store.migrate(this);ClipList.watch(this);if(!CaptureActivity.visible)Store.removeStaleAudio(this);
-        if(state!=null){settingsVisible=state.getBoolean("settings_visible",false);backupReturnFocus=state.getBoolean("backup_return_focus",false);panel=state.getString("daybook_panel","");origin=state.getString("daybook_origin","");homeTab=state.getString("home_tab","days");historyScrollY=Math.max(0,state.getInt("history_scroll_y",0));settingsScrollY=Math.max(0,state.getInt("settings_scroll_y",0));DraftState.restore(this,state);restoreSet(state,"days_open",expandedDays);restoreSet(state,"days_closed",collapsedDays);restoreSet(state,"entries_open",expandedEntries);heardDraft=state.getString("dictionary_heard","");preferredDraft=state.getString("dictionary_preferred","");}
+        if(state!=null){part=Math.max(0,Math.min(4,state.getInt("daybook_part",0)));settingsVisible=state.getBoolean("settings_visible",false);backupReturnFocus=state.getBoolean("backup_return_focus",false);panel=state.getString("daybook_panel","");origin=state.getString("daybook_origin","");homeTab=state.getString("home_tab","days");historyScrollY=Math.max(0,state.getInt("history_scroll_y",0));settingsScrollY=Math.max(0,state.getInt("settings_scroll_y",0));DraftState.restore(this,state);restoreSet(state,"days_open",expandedDays);restoreSet(state,"days_closed",collapsedDays);restoreSet(state,"entries_open",expandedEntries);heardDraft=state.getString("dictionary_heard","");preferredDraft=state.getString("dictionary_preferred","");}
         createShell();
         if(state==null)handleFix(getIntent());
         openCalls(getIntent());
+        openThoughts(getIntent());
     }
-    @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);handleFix(intent);openCalls(intent);}
+    @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);handleFix(intent);openCalls(intent);if(openThoughts(intent))render();}
     private void openCalls(Intent intent){if(intent!=null && intent.getBooleanExtra("open_calls",false)){intent.removeExtra("open_calls");settingsVisible=false;panel="";part=1;}}
+    private boolean openThoughts(Intent intent){
+        if(intent==null || !intent.getBooleanExtra(EXTRA_OPEN_THOUGHTS,false))return false;
+        intent.removeExtra(EXTRA_OPEN_THOUGHTS);
+        if(!Store.quickThoughts(this))return false;
+        Notes.back();settingsVisible=false;panel="";part=4;deckReady=false;return true;
+    }
     /** Opens the setting a dictation problem points to. */
     private void handleFix(Intent intent){
         String fix=intent==null?null:intent.getStringExtra(EXTRA_FIX);if(fix==null)return;intent.removeExtra(EXTRA_FIX);openedForFix=true;
@@ -78,7 +86,7 @@ public final class MainActivity extends Activity {
     @Override public void onWindowFocusChanged(boolean hasFocus){super.onWindowFocusChanged(hasFocus);if(hasFocus&&settingsVisible&&panel.equals("permissions"))render();}
     @Override protected void onPause(){AppUpdate.pause(this);saveScrollPosition();rememberDictionaryDraft();stopSummaryWork();super.onPause();}
     @Override protected void onDestroy(){if(retryDictation!=null){retryDictation.cancel();retryDictation=null;}Notes.stop();Translate.stop();scrollGeneration++;stopSummaryWork();summaryWorker.shutdownNow();super.onDestroy();}
-    @Override protected void onSaveInstanceState(Bundle state){saveScrollPosition();rememberDictionaryDraft();state.putInt("history_scroll_y",historyScrollY);state.putInt("settings_scroll_y",settingsScrollY);state.putBoolean("settings_visible",settingsVisible);state.putBoolean("backup_return_focus",backupReturnFocus);state.putString("daybook_panel",panel);state.putString("daybook_origin",origin);state.putString("home_tab",homeTab);DraftState.save(this,state);state.putStringArrayList("days_open",new java.util.ArrayList<>(expandedDays));state.putStringArrayList("days_closed",new java.util.ArrayList<>(collapsedDays));state.putStringArrayList("entries_open",new java.util.ArrayList<>(expandedEntries));state.putString("dictionary_heard",heardDraft);state.putString("dictionary_preferred",preferredDraft);super.onSaveInstanceState(state);}
+    @Override protected void onSaveInstanceState(Bundle state){saveScrollPosition();rememberDictionaryDraft();state.putInt("history_scroll_y",historyScrollY);state.putInt("settings_scroll_y",settingsScrollY);state.putInt("daybook_part",part);state.putBoolean("settings_visible",settingsVisible);state.putBoolean("backup_return_focus",backupReturnFocus);state.putString("daybook_panel",panel);state.putString("daybook_origin",origin);state.putString("home_tab",homeTab);DraftState.save(this,state);state.putStringArrayList("days_open",new java.util.ArrayList<>(expandedDays));state.putStringArrayList("days_closed",new java.util.ArrayList<>(collapsedDays));state.putStringArrayList("entries_open",new java.util.ArrayList<>(expandedEntries));state.putString("dictionary_heard",heardDraft);state.putString("dictionary_preferred",preferredDraft);super.onSaveInstanceState(state);}
     @Override public void onBackPressed(){if(!panel.isEmpty())backToSettings();else if(settingsVisible){settingsVisible=false;render();}else if(Notes.opened()){Notes.back();render();}else super.onBackPressed();}
     private void createShell() {
         root=Ui.column(this);root.setBackground(new Daybook.Backdrop(this));getWindow().setStatusBarColor(Daybook.paper(this));getWindow().setNavigationBarColor(Daybook.paper(this));

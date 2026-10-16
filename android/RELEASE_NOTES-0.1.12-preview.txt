@@ -1,0 +1,22 @@
+VonoTation 0.1.12-preview
+Android package: app.voiceflow
+Version code: 84
+
+Quick thoughts floating control
+- With no input active, tap the idle dot or microphone to record in place.
+- Hold it to open the saved Quick thoughts card inside the app.
+- Drag it freely within the usable screen. It remembers the microphone's center and shares that position with the active-input controls, without snapping to an edge.
+- Tap, hold and drag are separate gestures. Releasing a hold or drag does not start recording. Cancelled or multi-finger gestures do not activate the button.
+- Idle collapse and repositioning pause while touching the control. Focus changes, hiding the control and teardown cancel delayed holds.
+- Added the accessible Open Quick thoughts long-click action.
+- Opening Thoughts works for both a new app launch and an existing app window. Selected cards survive activity recreation, including folding or rotation.
+- Existing design, transparency, offline source-audio capture, summaries and hidden playback are retained. A recording still continues across outside taps until Finish or Cancel; system interruptions may finalize it.
+
+Verification
+Android preview assembly and vital lint, all pure JVM suites, APK identity, update-compatible signing identity and source archive exclusions are checked during preparation. See the versioned verification record for results. Public downloads are verified before the updater feed advances.
+
+Phone/device testing: not performed. Actual tap/hold/drag timing, fold/rotation behavior, accessibility gestures, input compatibility, microphone/provider responses, installation and Google sign-in/Drive backup remain unverified on a phone.
+
+Backup controls remain available; Google Cloud registration for the current certificate and live Drive backup/restore remain unverified. Source recordings remain local and excluded from text backups.
+
+Install using Settings > Update and confirm Android's installer. This preview retains the installed package and signing identity. Private signing keys, API keys, recordings, caches and machine configuration are excluded from source.

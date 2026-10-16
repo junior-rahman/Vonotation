@@ -352,7 +352,7 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
         if(!hasField && FlowKeyboard.instance!=null && FlowKeyboard.instance.isRecording() && !FlowKeyboard.instance.isFinishing())FlowKeyboard.instance.floatingMic();
         boolean active=recording();
         if(QuickThoughtPolicy.visible(Store.quickThoughts(this),interactive,locked,ownAppActive,CaptureActivity.visible,hasField,active || Dictation.isWorking() || VoiceTake.running() || VoiceTake.updateBusy() || Translate.going() || LineWire.running() || problem!=null)){
-            removeBubble();if(thoughtOverlay==null)thoughtOverlay=new QuickThoughtOverlay(this,manager,this::updateBubble,this::thoughtCaptureAllowed,this::beginThought);thoughtOverlay.show();return;
+            removeBubble();if(thoughtOverlay==null)thoughtOverlay=new QuickThoughtOverlay(this,manager,this::updateBubble,this::thoughtCaptureAllowed,this::beginThought,this::openThoughts);thoughtOverlay.show();return;
         }
         hideThought();
         boolean thoughtProblem=Store.quickThoughts(this) && !hasField && problem!=null;
@@ -374,6 +374,11 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
         AccessibilityNodeInfo field=focusedField();boolean available=field==null;if(field!=null)field.recycle();return available;
     }
     private void hideThought(){if(thoughtOverlay!=null)thoughtOverlay.hide();}
+    private void openThoughts(){
+        if(!thoughtCaptureAllowed()){updateBubble();return;}
+        try{startActivity(new Intent(this,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP).putExtra(MainActivity.EXTRA_OPEN_THOUGHTS,true));}
+        catch(RuntimeException unavailable){showProblem(DictationProblem.of("Could not open Quick thoughts. Open VonoTation and select Thoughts."));}
+    }
     private void removeBubble() {
         if(fan!=null){fan.dismissNow();fan=null;}
         if(bubble!=null){settlePresentation(bubble);try{manager.removeView(bubble);}catch(Exception ignored){}}

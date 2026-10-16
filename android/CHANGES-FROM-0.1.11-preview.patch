@@ -1,0 +1,209 @@
+--- a/app/build.gradle
++++ b/app/build.gradle
+@@ -3,7 +3,7 @@
+     namespace 'app.voiceflow'
+     compileSdk 35
+     buildToolsVersion '35.0.0'
+-    defaultConfig { applicationId 'app.voiceflow'; minSdk 26; targetSdk 35; versionCode 83; versionName '0.1.11-preview' }
++    defaultConfig { applicationId 'app.voiceflow'; minSdk 26; targetSdk 35; versionCode 84; versionName '0.1.12-preview' }
+     compileOptions { sourceCompatibility JavaVersion.VERSION_1_8; targetCompatibility JavaVersion.VERSION_1_8 }
+     kotlinOptions { jvmTarget = '1.8' }
+     buildFeatures { aidl true }
+--- a/app/src/main/java/app/voiceflow/FlowAccessibility.java
++++ b/app/src/main/java/app/voiceflow/FlowAccessibility.java
+@@ -352,7 +352,7 @@
+         if(!hasField && FlowKeyboard.instance!=null && FlowKeyboard.instance.isRecording() && !FlowKeyboard.instance.isFinishing())FlowKeyboard.instance.floatingMic();
+         boolean active=recording();
+         if(QuickThoughtPolicy.visible(Store.quickThoughts(this),interactive,locked,ownAppActive,CaptureActivity.visible,hasField,active || Dictation.isWorking() || VoiceTake.running() || VoiceTake.updateBusy() || Translate.going() || LineWire.running() || problem!=null)){
+-            removeBubble();if(thoughtOverlay==null)thoughtOverlay=new QuickThoughtOverlay(this,manager,this::updateBubble,this::thoughtCaptureAllowed,this::beginThought);thoughtOverlay.show();return;
++            removeBubble();if(thoughtOverlay==null)thoughtOverlay=new QuickThoughtOverlay(this,manager,this::updateBubble,this::thoughtCaptureAllowed,this::beginThought,this::openThoughts);thoughtOverlay.show();return;
+         }
+         hideThought();
+         boolean thoughtProblem=Store.quickThoughts(this) && !hasField && problem!=null;
+@@ -374,6 +374,11 @@
+         AccessibilityNodeInfo field=focusedField();boolean available=field==null;if(field!=null)field.recycle();return available;
+     }
+     private void hideThought(){if(thoughtOverlay!=null)thoughtOverlay.hide();}
++    private void openThoughts(){
++        if(!thoughtCaptureAllowed()){updateBubble();return;}
++        try{startActivity(new Intent(this,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP).putExtra(MainActivity.EXTRA_OPEN_THOUGHTS,true));}
++        catch(RuntimeException unavailable){showProblem(DictationProblem.of("Could not open Quick thoughts. Open VonoTation and select Thoughts."));}
++    }
+     private void removeBubble() {
+         if(fan!=null){fan.dismissNow();fan=null;}
+         if(bubble!=null){settlePresentation(bubble);try{manager.removeView(bubble);}catch(Exception ignored){}}
+--- a/app/src/main/java/app/voiceflow/MainActivity.java
++++ b/app/src/main/java/app/voiceflow/MainActivity.java
+@@ -27,6 +27,7 @@
+ public final class MainActivity extends Activity {
+     /** Set by the bubble/keyboard "Fix" action: DictationProblem.FIX_API_KEY or FIX_MICROPHONE. */
+     static final String EXTRA_FIX="voiceflow_fix";
++    static final String EXTRA_OPEN_THOUGHTS="voiceflow_open_thoughts";
+     static String currentDraft="";
+     private LinearLayout body,root,header,strip,footer;
+     private ScrollView scroll;
+@@ -50,13 +51,20 @@
+     private volatile CloudApi summaryApi;
+     @Override public void onCreate(Bundle state) {
+         super.onCreate(state);Store.migrate(this);ClipList.watch(this);if(!CaptureActivity.visible)Store.removeStaleAudio(this);
+-        if(state!=null){settingsVisible=state.getBoolean("settings_visible",false);backupReturnFocus=state.getBoolean("backup_return_focus",false);panel=state.getString("daybook_panel","");origin=state.getString("daybook_origin","");homeTab=state.getString("home_tab","days");historyScrollY=Math.max(0,state.getInt("history_scroll_y",0));settingsScrollY=Math.max(0,state.getInt("settings_scroll_y",0));DraftState.restore(this,state);restoreSet(state,"days_open",expandedDays);restoreSet(state,"days_closed",collapsedDays);restoreSet(state,"entries_open",expandedEntries);heardDraft=state.getString("dictionary_heard","");preferredDraft=state.getString("dictionary_preferred","");}
++        if(state!=null){part=Math.max(0,Math.min(4,state.getInt("daybook_part",0)));settingsVisible=state.getBoolean("settings_visible",false);backupReturnFocus=state.getBoolean("backup_return_focus",false);panel=state.getString("daybook_panel","");origin=state.getString("daybook_origin","");homeTab=state.getString("home_tab","days");historyScrollY=Math.max(0,state.getInt("history_scroll_y",0));settingsScrollY=Math.max(0,state.getInt("settings_scroll_y",0));DraftState.restore(this,state);restoreSet(state,"days_open",expandedDays);restoreSet(state,"days_closed",collapsedDays);restoreSet(state,"entries_open",expandedEntries);heardDraft=state.getString("dictionary_heard","");preferredDraft=state.getString("dictionary_preferred","");}
+         createShell();
+         if(state==null)handleFix(getIntent());
+         openCalls(getIntent());
+-    }
+-    @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);handleFix(intent);openCalls(intent);}
++        openThoughts(getIntent());
++    }
++    @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);handleFix(intent);openCalls(intent);if(openThoughts(intent))render();}
+     private void openCalls(Intent intent){if(intent!=null && intent.getBooleanExtra("open_calls",false)){intent.removeExtra("open_calls");settingsVisible=false;panel="";part=1;}}
++    private boolean openThoughts(Intent intent){
++        if(intent==null || !intent.getBooleanExtra(EXTRA_OPEN_THOUGHTS,false))return false;
++        intent.removeExtra(EXTRA_OPEN_THOUGHTS);
++        if(!Store.quickThoughts(this))return false;
++        Notes.back();settingsVisible=false;panel="";part=4;deckReady=false;return true;
++    }
+     /** Opens the setting a dictation problem points to. */
+     private void handleFix(Intent intent){
+         String fix=intent==null?null:intent.getStringExtra(EXTRA_FIX);if(fix==null)return;intent.removeExtra(EXTRA_FIX);openedForFix=true;
+@@ -78,7 +86,7 @@
+     @Override public void onWindowFocusChanged(boolean hasFocus){super.onWindowFocusChanged(hasFocus);if(hasFocus&&settingsVisible&&panel.equals("permissions"))render();}
+     @Override protected void onPause(){AppUpdate.pause(this);saveScrollPosition();rememberDictionaryDraft();stopSummaryWork();super.onPause();}
+     @Override protected void onDestroy(){if(retryDictation!=null){retryDictation.cancel();retryDictation=null;}Notes.stop();Translate.stop();scrollGeneration++;stopSummaryWork();summaryWorker.shutdownNow();super.onDestroy();}
+-    @Override protected void onSaveInstanceState(Bundle state){saveScrollPosition();rememberDictionaryDraft();state.putInt("history_scroll_y",historyScrollY);state.putInt("settings_scroll_y",settingsScrollY);state.putBoolean("settings_visible",settingsVisible);state.putBoolean("backup_return_focus",backupReturnFocus);state.putString("daybook_panel",panel);state.putString("daybook_origin",origin);state.putString("home_tab",homeTab);DraftState.save(this,state);state.putStringArrayList("days_open",new java.util.ArrayList<>(expandedDays));state.putStringArrayList("days_closed",new java.util.ArrayList<>(collapsedDays));state.putStringArrayList("entries_open",new java.util.ArrayList<>(expandedEntries));state.putString("dictionary_heard",heardDraft);state.putString("dictionary_preferred",preferredDraft);super.onSaveInstanceState(state);}
++    @Override protected void onSaveInstanceState(Bundle state){saveScrollPosition();rememberDictionaryDraft();state.putInt("history_scroll_y",historyScrollY);state.putInt("settings_scroll_y",settingsScrollY);state.putInt("daybook_part",part);state.putBoolean("settings_visible",settingsVisible);state.putBoolean("backup_return_focus",backupReturnFocus);state.putString("daybook_panel",panel);state.putString("daybook_origin",origin);state.putString("home_tab",homeTab);DraftState.save(this,state);state.putStringArrayList("days_open",new java.util.ArrayList<>(expandedDays));state.putStringArrayList("days_closed",new java.util.ArrayList<>(collapsedDays));state.putStringArrayList("entries_open",new java.util.ArrayList<>(expandedEntries));state.putString("dictionary_heard",heardDraft);state.putString("dictionary_preferred",preferredDraft);super.onSaveInstanceState(state);}
+     @Override public void onBackPressed(){if(!panel.isEmpty())backToSettings();else if(settingsVisible){settingsVisible=false;render();}else if(Notes.opened()){Notes.back();render();}else super.onBackPressed();}
+     private void createShell() {
+         root=Ui.column(this);root.setBackground(new Daybook.Backdrop(this));getWindow().setStatusBarColor(Daybook.paper(this));getWindow().setNavigationBarColor(Daybook.paper(this));
+--- a/app/src/main/java/app/voiceflow/QuickThoughtOverlay.java
++++ b/app/src/main/java/app/voiceflow/QuickThoughtOverlay.java
+@@ -10,28 +10,34 @@
+ import android.view.Gravity;
+ import android.view.MotionEvent;
+ import android.view.View;
++import android.view.ViewConfiguration;
+ import android.view.WindowManager;
++import android.view.accessibility.AccessibilityNodeInfo;
+ import android.widget.FrameLayout;
+ 
+-/** The existing coral control, reduced to an edge dot while optional thought capture is idle. */
++/** The existing coral control, reduced to a dot while optional thought capture is idle. */
+ final class QuickThoughtOverlay {
+     private final Context context;
+     private final WindowManager manager;
+     private final Handler handler=new Handler(Looper.getMainLooper());
+     private final Runnable refresh;
+     private final Runnable capture;
++    private final Runnable openThoughts;
+     private final java.util.function.BooleanSupplier mayCapture;
+     private FrameLayout host;
+     private WindowManager.LayoutParams layout;
+     private boolean collapsed;
++    private boolean interacting;
++    private Runnable pendingHold;
+     private long lastInteraction;
+-    QuickThoughtOverlay(Context context,WindowManager manager,Runnable refresh,java.util.function.BooleanSupplier mayCapture,Runnable capture){this.context=context;this.manager=manager;this.refresh=refresh;this.mayCapture=mayCapture;this.capture=capture;}
++    QuickThoughtOverlay(Context context,WindowManager manager,Runnable refresh,java.util.function.BooleanSupplier mayCapture,Runnable capture,Runnable openThoughts){this.context=context;this.manager=manager;this.refresh=refresh;this.mayCapture=mayCapture;this.capture=capture;this.openThoughts=openThoughts;}
+     void show(){
++        if(host!=null && interacting)return;
+         boolean compact=QuickThoughtPolicy.collapsed(SystemClock.elapsedRealtime(),lastInteraction,Dictation.isWorking());
+         if(host!=null && collapsed==compact){position();armIdle(compact);return;}
+         hide();collapsed=compact;
+         int size=Ui.dp(context,48);
+-        host=new FrameLayout(context);host.setClipChildren(false);host.setContentDescription(compact?"Quick thoughts: tap to record":"Record a quick thought");host.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);host.setClickable(true);
++        host=new FrameLayout(context);host.setClipChildren(false);host.setContentDescription("Quick thoughts: tap to record, hold to open thoughts, drag to move");host.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);host.setClickable(true);
+         View face;
+         if(compact){
+             face=new View(context);face.setBackground(FlowAccessibility.solidFace(context,Ui.dp(context,6)));face.setAlpha(.35f);
+@@ -42,7 +48,17 @@
+         }
+         // One semantic click target: a tiny visual dot still has a 48dp hit area.
+         face.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+-        host.setOnClickListener(v->open());attachDrag();
++        host.setOnClickListener(v->open());
++        host.setHapticFeedbackEnabled(Store.bool(context,"haptic_feedback",true));
++        host.setOnLongClickListener(v->{
++            if(!mayCapture.getAsBoolean())return false;
++            lastInteraction=SystemClock.elapsedRealtime();hide();openThoughts.run();return true;
++        });
++        host.setAccessibilityDelegate(new View.AccessibilityDelegate(){
++            @Override public void onInitializeAccessibilityNodeInfo(View view,AccessibilityNodeInfo info){super.onInitializeAccessibilityNodeInfo(view,info);info.addAction(new AccessibilityNodeInfo.AccessibilityAction(AccessibilityNodeInfo.ACTION_LONG_CLICK,"Open Quick thoughts"));}
++        });
++        host.setTooltipText("Tap to record · Hold to open Quick thoughts · Drag to move");
++        attachDrag();
+         layout=new WindowManager.LayoutParams(size,size,WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE|WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL|WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,PixelFormat.TRANSLUCENT);
+         layout.gravity=Gravity.TOP|Gravity.LEFT;layout.softInputMode=WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING;
+         position();
+@@ -54,31 +70,59 @@
+         if(!mayCapture.getAsBoolean()){refresh.run();return;}
+         if(!Store.quickThoughts(context) || Dictation.isWorking() || VoiceTake.running() || VoiceTake.updateBusy() || Translate.going() || LineWire.running())return;
+         lastInteraction=SystemClock.elapsedRealtime();Haptics.fire(context,Haptics.PRESS);hide();
+-        // The existing bound dictation service owns capture. The dot never opens an activity.
++        // A tap always records in place; opening the app is reserved for an explicit hold.
+         capture.run();
+     }
+     /** Recording and processing are active time; the idle minute starts after completion. */
+     void captureFinished(){lastInteraction=SystemClock.elapsedRealtime();}
+     private void position(){
+-        if(layout==null)return;
++        if(layout==null || interacting)return;
+         DisplayMetrics metrics=new DisplayMetrics();manager.getDefaultDisplay().getRealMetrics(metrics);
+-        int size=Ui.dp(context,48),edge=Ui.dp(context,4),saved=Store.prefs(context).getInt("rail_anchor_x",metrics.widthPixels-size/2-Ui.dp(context,12));
+-        // Keep the idle control on the same side as the ordinary dictation control.
+-        layout.x=saved<metrics.widthPixels/2?edge:Math.max(edge,metrics.widthPixels-size-edge);
+-        layout.y=Math.max(Ui.dp(context,40),Math.min(metrics.heightPixels-size-Ui.dp(context,48),Store.prefs(context).getInt("rail_anchor_y",Math.round(metrics.heightPixels*.52f))-size/2));
++        int savedX=Store.prefs(context).getInt("rail_anchor_x",metrics.widthPixels-layout.width/2-Ui.dp(context,16));
++        int savedY=Store.prefs(context).getInt("rail_anchor_y",Math.round(metrics.heightPixels*.52f));
++        // Both idle and active controls persist the microphone's center, without edge snapping.
++        layout.x=savedX-layout.width/2;layout.y=savedY-layout.height/2;clamp(metrics);
+         if(host!=null && host.isAttachedToWindow())try{manager.updateViewLayout(host,layout);}catch(RuntimeException ignored){}
++    }
++    private void clamp(DisplayMetrics metrics){
++        int left=0,right=metrics.widthPixels,top=Ui.dp(context,32),bottom=metrics.heightPixels-Ui.dp(context,48);
++        if(android.os.Build.VERSION.SDK_INT>=30)try{
++            android.graphics.Insets safe=manager.getCurrentWindowMetrics().getWindowInsets().getInsetsIgnoringVisibility(android.view.WindowInsets.Type.systemBars()|android.view.WindowInsets.Type.displayCutout());
++            left=safe.left;right-=safe.right;top=Math.max(top,safe.top);bottom=Math.min(bottom,metrics.heightPixels-safe.bottom-Ui.dp(context,12));
++        }catch(RuntimeException unavailable){}
++        layout.x=Math.max(left,Math.min(Math.max(left,right-layout.width),layout.x));
++        layout.y=Math.max(top,Math.min(Math.max(top,bottom-layout.height),layout.y));
+     }
+     private void attachDrag(){
+         host.setOnTouchListener(new View.OnTouchListener(){
+-            float downX,downY;int startY;boolean moved;
++            float downX,downY;int startX,startY;boolean down,moved,held,cancelled;
++            final int slop=ViewConfiguration.get(context).getScaledTouchSlop();
++            final Runnable hold=()->{if(down && !moved && !cancelled && host!=null && host.isAttachedToWindow()){held=true;host.performLongClick();}};
+             public boolean onTouch(View view,MotionEvent event){
+-                if(layout==null)return false;
+-                if(event.getActionMasked()==MotionEvent.ACTION_DOWN){downX=event.getRawX();downY=event.getRawY();startY=layout.y;moved=false;return true;}
+-                if(event.getActionMasked()==MotionEvent.ACTION_MOVE){float dx=event.getRawX()-downX,dy=event.getRawY()-downY;if(!moved && Math.abs(dx)+Math.abs(dy)>Ui.dp(context,12))moved=true;if(moved){DisplayMetrics metrics=new DisplayMetrics();manager.getDefaultDisplay().getRealMetrics(metrics);layout.x=event.getRawX()<metrics.widthPixels/2?Ui.dp(context,4):metrics.widthPixels-layout.width-Ui.dp(context,4);layout.y=Math.max(Ui.dp(context,40),Math.min(metrics.heightPixels-layout.height-Ui.dp(context,48),startY+(int)dy));try{manager.updateViewLayout(host,layout);}catch(RuntimeException ignored){}}return true;}
+-                if(event.getActionMasked()==MotionEvent.ACTION_UP){if(moved){lastInteraction=SystemClock.elapsedRealtime();Store.prefs(context).edit().putInt("rail_anchor_x",layout.x+layout.width/2).putInt("rail_anchor_y",layout.y+layout.height/2).apply();handler.post(refresh);}else view.performClick();return true;}
+-                return event.getActionMasked()==MotionEvent.ACTION_CANCEL;
++                if(layout==null || host!=view)return true;
++                int action=event.getActionMasked();
++                if(action==MotionEvent.ACTION_DOWN){
++                    downX=event.getRawX();downY=event.getRawY();startX=layout.x;startY=layout.y;down=true;moved=false;held=false;cancelled=false;interacting=true;view.setPressed(true);
++                    handler.removeCallbacks(refresh);pendingHold=hold;handler.postDelayed(hold,ViewConfiguration.getLongPressTimeout());return true;
++                }
++                if(!down)return true;
++                if(action==MotionEvent.ACTION_POINTER_DOWN || action==MotionEvent.ACTION_POINTER_UP){cancelled=true;handler.removeCallbacks(hold);view.setPressed(false);return true;}
++                if(action==MotionEvent.ACTION_MOVE){
++                    if(held || cancelled)return true;
++                    float dx=event.getRawX()-downX,dy=event.getRawY()-downY;
++                    if(!moved && dx*dx+dy*dy>slop*slop){moved=true;handler.removeCallbacks(hold);view.setPressed(false);}
++                    if(moved){DisplayMetrics metrics=new DisplayMetrics();manager.getDefaultDisplay().getRealMetrics(metrics);layout.x=startX+Math.round(dx);layout.y=startY+Math.round(dy);clamp(metrics);try{manager.updateViewLayout(host,layout);}catch(RuntimeException ignored){}}
++                    return true;
++                }
++                if(action==MotionEvent.ACTION_UP || action==MotionEvent.ACTION_CANCEL){
++                    down=false;interacting=false;handler.removeCallbacks(hold);pendingHold=null;view.setPressed(false);
++                    if(action==MotionEvent.ACTION_UP && !cancelled && moved){lastInteraction=SystemClock.elapsedRealtime();Store.prefs(context).edit().putInt("rail_anchor_x",layout.x+layout.width/2).putInt("rail_anchor_y",layout.y+layout.height/2).apply();}
++                    else if(action==MotionEvent.ACTION_UP && !cancelled && !held){view.performClick();return true;}
++                    handler.post(refresh);return true;
++                }
++                return true;
+             }
+         });
+     }
+-    void hide(){handler.removeCallbacks(refresh);if(host!=null)try{manager.removeView(host);}catch(RuntimeException ignored){}host=null;layout=null;}
++    void hide(){handler.removeCallbacks(refresh);if(pendingHold!=null)handler.removeCallbacks(pendingHold);pendingHold=null;interacting=false;if(host!=null)try{manager.removeView(host);}catch(RuntimeException ignored){}host=null;layout=null;}
+ }

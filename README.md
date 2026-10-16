@@ -1,12 +1,12 @@
 # VonoTation
 
-Current signed preview: **0.1.11-preview**, version code **83**, package `app.voiceflow`.
+Current signed preview: **0.1.12-preview**, version code **84**, package `app.voiceflow`.
 
-[Download APK, source and checksums](https://github.com/JuelHossain/Vonotation/releases/tag/v0.1.11-preview) · [Android source](android/) · [Changes and validation](release-notes/v0.1.11-preview.txt)
+[Download APK, source and checksums](https://github.com/JuelHossain/Vonotation/releases/tag/v0.1.12-preview) · [Android source](android/) · [Changes and validation](release-notes/v0.1.12-preview.txt)
 
 ## Quick thoughts
 
-Enable **Settings → Quick thoughts** and connect **Floating microphone** under Permissions. Outside VonoTation, tap the faint edge dot when no input is active. Recording uses the existing floating controls on your current screen. Changing apps, focusing a field or tapping elsewhere does not end it. Use the physical **Finish** or **Cancel** control; a system interruption can finalize a recording. The app and a capture popup do not open. Normal input dictation keeps its selected engine and writes into the active field.
+Enable **Settings → Quick thoughts** and connect **Floating microphone** under Permissions. Outside VonoTation, tap the faint dot when no input is active. Hold it to open Quick thoughts in the app. Drag it anywhere within the usable screen; the idle and active controls share its saved position. Recording uses the existing floating controls on your current screen. Changing apps, focusing a field or tapping elsewhere does not end it. Use the physical **Finish** or **Cancel** control; a system interruption can finalize a recording. A tap does not open the app or a capture popup. Normal input dictation keeps its selected engine and writes into the active field.
 
 A thought uses the existing Voice Notes recording pipeline: source audio is saved locally even without a connection or API key. Once finished, it waits for the connected Notes provider to transcribe it, organize the note and produce a grounded summary and title. Original words remain available. Pending completed thoughts retry when a connection returns, including a persisted background job; Android may defer that job. Still-recording segments are excluded from transcription. Unsupported organization keeps the original safely.
 
@@ -24,7 +24,7 @@ The compact clipboard and quiet Call Notes recovery changes remain included. And
 
 ## Verification and source
 
-Per-artifact hashes, signing identity and final build/test results are recorded during release preparation in `verification/v0.1.11-preview/VERIFICATION.txt`. Preparation checks APK identity/signature and the source archive and requires successful Android preview build and passing pure Java suite evidence. The release workflow performs separate validation before publishing. The final suite count is generated from the actual test files and recorded passing results.
+Per-artifact hashes, signing identity and final build/test results are recorded during release preparation in `verification/v0.1.12-preview/VERIFICATION.txt`. Preparation checks APK identity/signature and the source archive and requires successful Android preview build and passing pure Java suite evidence. The release workflow performs separate validation before publishing. The final suite count is generated from the actual test files and recorded passing results.
 
 **Phone/device testing: not performed.** Samsung/Niagara behavior, actual input-field deletion, microphone capture, live provider responses, installation, notification behavior, wireless debugging, Google consent and backup/restore remain unverified. Synthetic JVM tests and source review do not establish native UI or backend behavior.
 

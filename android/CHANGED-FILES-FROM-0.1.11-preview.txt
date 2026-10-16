@@ -1,0 +1,4 @@
+app/build.gradle
+app/src/main/java/app/voiceflow/FlowAccessibility.java
+app/src/main/java/app/voiceflow/MainActivity.java
+app/src/main/java/app/voiceflow/QuickThoughtOverlay.java
