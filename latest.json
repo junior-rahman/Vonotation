@@ -1,9 +1,9 @@
 {
-  "versionCode": 84,
-  "versionName": "0.1.12-preview",
-  "apk": "https://github.com/JuelHossain/Vonotation/releases/download/v0.1.12-preview/VonoTation-0.1.12-preview.apk",
-  "sha256": "571ab3aa6710c4dce839d7599f839739e958f75c4659473a653264cea99b13e8",
-  "size": 6160890,
+  "versionCode": 85,
+  "versionName": "0.1.13-preview",
+  "apk": "https://github.com/JuelHossain/Vonotation/releases/download/v0.1.13-preview/VonoTation-0.1.13-preview.apk",
+  "sha256": "8556583aac1d5332f8ed4c4011fa6f6da7048dc020b3cad89d645eab681ee830",
+  "size": 6170498,
   "package": "app.voiceflow",
-  "notes": "With no input active, tap the floating button to record, hold it to open Quick thoughts, or drag it freely around the usable screen. Its saved position is shared with active-input controls. Tap, hold and drag are separated to prevent accidental recording. The selected card is retained after folding or rotation. Existing design and offline thought recording are preserved. Phone gesture testing remains pending."
+  "notes": "Quick Thoughts now follows Dictation’s daily timeline, with optional daily summaries. Open a thought for its detailed summary and full transcript; source audio stays hidden until requested. Older thought summaries upgrade without changing your edits or recordings. Enable Daily Recaps in Quick Thoughts settings. Existing design, offline recording, tap/hold/drag controls and normal input dictation are preserved. Phone and live provider testing remain pending."
 }
