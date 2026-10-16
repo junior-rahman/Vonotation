@@ -1,9 +1,9 @@
 {
-  "versionCode": 85,
-  "versionName": "0.1.13-preview",
-  "apk": "https://github.com/JuelHossain/Vonotation/releases/download/v0.1.13-preview/VonoTation-0.1.13-preview.apk",
-  "sha256": "8556583aac1d5332f8ed4c4011fa6f6da7048dc020b3cad89d645eab681ee830",
-  "size": 6170498,
+  "versionCode": 86,
+  "versionName": "0.1.14-preview",
+  "apk": "https://github.com/JuelHossain/Vonotation/releases/download/v0.1.14-preview/VonoTation-0.1.14-preview.apk",
+  "sha256": "fcc87013d0620a9f63e4b4feeea14602e7f5194c51635c2f23a812b71ef8e741",
+  "size": 6171750,
   "package": "app.voiceflow",
-  "notes": "Quick Thoughts now follows Dictation’s daily timeline, with optional daily summaries. Open a thought for its detailed summary and full transcript; source audio stays hidden until requested. Older thought summaries upgrade without changing your edits or recordings. Enable Daily Recaps in Quick Thoughts settings. Existing design, offline recording, tap/hold/drag controls and normal input dictation are preserved. Phone and live provider testing remain pending."
+  "notes": "New Quick Thoughts shorter than two normal phone-width transcript lines are skipped after successful complete transcription. Existing thoughts and explicit manual saves are kept. Offline audio waits for transcription; failed, uncertain, interrupted or incomplete sources are preserved. Daily summaries, full transcripts, hidden source playback and the existing design are retained. Phone testing remains pending."
 }
