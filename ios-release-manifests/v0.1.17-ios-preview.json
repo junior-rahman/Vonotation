@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "tag": "v0.1.17-ios-preview",
+  "version": "0.1.17",
+  "build": 89,
+  "verificationSha256": "8bb73438c45fbae9ebc79126f7219ea1c49719f6ef1940b9af66381e8aa34468",
+  "sourcePayloadSha256": "f48b78e71b3a7b0e8609f2d93e4f04d25e32a08b759599000cf17da50eb5addf",
+  "screenshotsPayloadSha256": "4ba127d0bdb58bd93b6d0ceb2409ad7cd4f67b293d9707efaa0d04c5de054b88",
+  "expectedTestsPerFamily": 40,
+  "sourceCommit": "ee43607f4030c94377ecabe06c0d326304e26d04",
+  "nativeRunId": 38865347766,
+  "nativeRunAttempt": 1,
+  "nativeWorkflowId": 386354919,
+  "artifacts": {
+    "evidence": {
+      "id": 12031708469,
+      "size": 12001447,
+      "sha256": "1e7ed92fc3ab25d583b5584f80b2038c04d35b30415b0000c44cd120d53beb85"
+    },
+    "simulator": {
+      "id": 12032221013,
+      "size": 1146979,
+      "sha256": "49d88a70cf3ea291925a9a72cf43c7e9a1ccb21eefdef5044fe63e30b85ed719"
+    }
+  },
+  "screenshotsReviewed": true,
+  "notes": "ios-release-notes/v0.1.17-ios-preview.md"
+}
