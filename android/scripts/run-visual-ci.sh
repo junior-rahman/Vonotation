@@ -34,10 +34,24 @@ bash tests/build-visual-fixture.sh 2>&1 | tee "$task_output/logs/fixture-build.l
 sha256sum app/build/outputs/apk/preview/app-preview.apk build/tests/visual/VonoTation-visual-fixture.apk > "$task_output/test-apk-sha256.txt"
 [[ -e /dev/kvm ]] || { printf '%s\n' 'Native Android verification requires KVM on the hosted runner.' >&2; exit 2; }
 [[ -r /dev/kvm && -w /dev/kvm ]] || sudo chmod 666 /dev/kvm
-printf 'no\n' | avdmanager create avd --name vonotation_visual --package 'system-images;android-35;google_apis;x86_64' --device pixel_6 --force > "$task_output/logs/avd-create.log" 2>&1
+# avdmanager and emulator may inherit different default user-directory conventions.
+# Give both tools the same explicit disposable registry and device directory.
+export ANDROID_USER_HOME="$task_temp/android-user"
+export ANDROID_EMULATOR_HOME="$ANDROID_USER_HOME"
+export ANDROID_AVD_HOME="$ANDROID_USER_HOME/avd"
+mkdir -p "$ANDROID_AVD_HOME"
+printf 'no\n' | avdmanager create avd --name vonotation_visual --path "$ANDROID_AVD_HOME/vonotation_visual.avd" --package 'system-images;android-35;google_apis;x86_64' --device pixel_6 --force > "$task_output/logs/avd-create.log" 2>&1
+emulator -list-avds > "$task_output/available-avds.txt"
+[[ -s "$ANDROID_AVD_HOME/vonotation_visual.ini" ]] || { cat "$task_output/logs/avd-create.log" "$task_output/available-avds.txt"; printf '%s\n' 'The native emulator AVD registry was not created.' >&2; exit 1; }
 emulator -avd vonotation_visual -no-window -noaudio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on -camera-back none -camera-front none > "$task_output/logs/emulator.log" 2>&1 &
 task_emulator_pid=$!
-timeout 180 adb wait-for-device
+task_connected=false
+for task_attempt in $(seq 1 90); do
+  if [[ "$(adb get-state 2>/dev/null)" == device ]]; then task_connected=true; break; fi
+  kill -0 "$task_emulator_pid" || { cat "$task_output/logs/emulator.log"; exit 1; }
+  sleep 2
+done
+[[ "$task_connected" == true ]] || { cat "$task_output/logs/emulator.log"; printf '%s\n' 'Native emulator connection timed out.' >&2; exit 1; }
 task_booted=false
 for task_attempt in $(seq 1 90); do
   if [[ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == 1 ]]; then task_booted=true; break; fi
