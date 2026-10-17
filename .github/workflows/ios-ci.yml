@@ -43,6 +43,7 @@ jobs:
             ios/build/ci/*.txt
             ios/build/ci/logs
             ios/build/ci/screenshots
+            ios/build/ci/screenshots-dark
             ios/build/ci/failure-attachments
             ios/build/ci/intent-metadata
           if-no-files-found: error

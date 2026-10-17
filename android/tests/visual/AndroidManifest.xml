@@ -1,0 +1,5 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="app.voiceflow.visual.fixture">
+    <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35" />
+    <instrumentation android:name="app.voiceflow.VisualPaletteTest" android:targetPackage="app.voiceflow" android:functionalTest="true" />
+    <application android:label="VonoTation disposable native palette fixture" />
+</manifest>

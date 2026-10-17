@@ -14,6 +14,7 @@ import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.RippleDrawable;
+import android.graphics.drawable.StateListDrawable;
 import android.text.InputType;
 import android.view.HapticFeedbackConstants;
 import android.view.View;
@@ -22,30 +23,32 @@ import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
-/** Native Copper + Sand Daybook tokens; floating glass controls keep their own theme. */
+/** Native Sage + Paper Daybook tokens; floating glass controls keep their own theme. */
 final class Daybook {
     private static boolean dark(Context c) { return (c.getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES; }
     private static int color(Context c, int light, int night) { return dark(c) ? night : light; }
-    static int paper(Context c) { return color(c,0xfff1e9de,0xff211e1b); }
-    static int surface(Context c) { return color(c,0xfffffaf3,0xff302923); }
-    static int ink(Context c) { return color(c,0xff342820,0xfff6ede3); }
-    static int muted(Context c) { return color(c,0xff726255,0xffc6b3a3); }
-    static int accent(Context c) { return color(c,0xff8f5736,0xffe4b18a); }
-    static int soft(Context c) { return color(c,0xffe9d8c5,0xff463628); }
-    static int line(Context c) { return color(c,0xffd8c8b6,0xff544538); }
-    static int coral(Context c) { return color(c,0xffb3422f,0xffffab97); }
-    static int action(Context c) { return color(c,0xffbc4c36,0xffe78870); }
-    static int actionInk(Context c) { return color(c,0xfffffaf5,0xff22150f); }
+    static int paper(Context c) { return color(c,0xfff3f1ea,0xff121c19); }
+    static int surface(Context c) { return color(c,0xfffffcf6,0xff1b2923); }
+    static int ink(Context c) { return color(c,0xff25352f,0xffeef3e9); }
+    static int muted(Context c) { return color(c,0xff596960,0xffb2c2b5); }
+    static int accent(Context c) { return color(c,0xff3f6b5f,0xffaccebb); }
+    static int soft(Context c) { return color(c,0xffe3e9df,0xff2a3d32); }
+    static int line(Context c) { return color(c,0xffcbd5ca,0xff3f5748); }
+    static int controlOutline(Context c) { return color(c,0xff7b8e80,0xff6e8c77); }
+    static int coral(Context c) { return color(c,0xffae403d,0xffffb4aa); }
+    static int action(Context c) { return color(c,0xff28594e,0xffaccebb); }
+    static int actionInk(Context c) { return color(c,0xffffffff,0xff15271e); }
+    static int brand(Context c) { return color(c,0xffa46144,0xffd9ab8d); }
     static TextView text(Context c,String value,float size,int color,boolean bold) {
         TextView text=Ui.text(c,value,size,color,bold); text.setLineSpacing(Ui.dp(c,2),1); return text;
     }
     static GradientDrawable shape(Context c,int color,float radius) {
         GradientDrawable shape=Ui.shape(color,radius,c);
-        if(Color.alpha(color)!=0) shape.setStroke(Ui.dp(c,0.5f),color(c,0x70ffffff,0x80625040));
+        if(Color.alpha(color)!=0) shape.setStroke(Ui.dp(c,0.5f),color(c,0x70cbd5ca,0x803f5748));
         return shape;
     }
     static Drawable ripple(Context c,int color,float radius) {
-        return new RippleDrawable(ColorStateList.valueOf(color(c,0x198f5736,0x26e4b18a)),shape(c,color,radius),Ui.shape(Color.WHITE,radius,c));
+        return new RippleDrawable(ColorStateList.valueOf(color(c,0x193f6b5f,0x26accebb)),shape(c,color,radius),Ui.shape(Color.WHITE,radius,c));
     }
     static LinearLayout card(Context c) {
         LinearLayout card=Ui.column(c);card.setPadding(Ui.dp(c,13),0,Ui.dp(c,13),0);card.setBackground(shape(c,surface(c),17));return card;
@@ -63,9 +66,14 @@ final class Daybook {
     }
     static EditText field(Context c,String value,String hint,boolean secret) {
         EditText field=new EditText(c);field.setText(value);field.setHint(hint);field.setTextSize(16);field.setTextColor(ink(c));field.setHintTextColor(muted(c));field.setPadding(Ui.dp(c,12),Ui.dp(c,11),Ui.dp(c,12),Ui.dp(c,11));
-        GradientDrawable shape=shape(c,surface(c),12);shape.setStroke(Ui.dp(c,1),line(c));field.setBackground(shape);field.setMinHeight(Ui.dp(c,46));
+        field.setBackground(fieldSurface(c));field.setMinHeight(Ui.dp(c,46));
         field.setInputType(secret?InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD:InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_MULTI_LINE);
         field.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);return field;
+    }
+    static Drawable fieldSurface(Context c) {
+        GradientDrawable focused=shape(c,surface(c),12);focused.setStroke(Ui.dp(c,1),accent(c));
+        GradientDrawable resting=shape(c,surface(c),12);resting.setStroke(Ui.dp(c,1),controlOutline(c));
+        StateListDrawable states=new StateListDrawable();states.addState(new int[]{android.R.attr.state_focused},focused);states.addState(new int[]{},resting);return states;
     }
     static void feedback(View view) { boolean enabled=Store.bool(view.getContext(),"haptic_feedback",true);view.setHapticFeedbackEnabled(enabled);if(enabled){view.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK);Haptics.fire(view.getContext(),Haptics.RELEASE);} }
     static void motion(View view) {
@@ -78,7 +86,7 @@ final class Daybook {
         private final Paint base=new Paint(),fiber=new Paint();
         Backdrop(Context c) {
             base.setColor(paper(c));int w=Math.max(4,Ui.dp(c,4)),h=Math.max(3,Ui.dp(c,3));
-            Bitmap tile=Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888);Canvas canvas=new Canvas(tile);Paint ink=new Paint();ink.setColor(color(c,0x05785127,0x05ead1ad)); // 1.9.15: quieter linen texture
+            Bitmap tile=Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888);Canvas canvas=new Canvas(tile);Paint ink=new Paint();ink.setColor(color(c,0x033f6b5f,0x03accebb)); // Subtle linen, below 1.2% opacity.
             canvas.drawRect(0,Math.max(0,h-Ui.dp(c,1)),w,h,ink);canvas.drawRect(Math.max(0,w-Ui.dp(c,1)),0,w,h,ink);
             fiber.setShader(new BitmapShader(tile,Shader.TileMode.REPEAT,Shader.TileMode.REPEAT));
         }
@@ -89,7 +97,7 @@ final class Daybook {
     }
     static final class Mark extends View {
         private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);
-        Mark(Context c) { super(c);paint.setColor(coral(c));setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO); }
+        Mark(Context c) { super(c);paint.setColor(brand(c));setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO); }
         @Override protected void onDraw(Canvas canvas) {
             float unit=Math.min(getWidth()/30f,getHeight()/31f);canvas.save();canvas.translate((getWidth()-30*unit)/2,(getHeight()-31*unit)/2);canvas.scale(unit,unit);canvas.rotate(13,15,15);
             canvas.drawRoundRect(2,10,6,21,2,2,paint);canvas.drawRoundRect(9,4,13,27,2,2,paint);canvas.drawRoundRect(16,6,20,24,2,2,paint);canvas.drawRoundRect(23,11,27,19,2,2,paint);

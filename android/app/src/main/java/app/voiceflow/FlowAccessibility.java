@@ -492,7 +492,7 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
     }
     private View iconControl(String kind,String description,boolean active){
         int size=Math.max(Ui.dp(this,28),bdp(active?30:34));
-        FloatingIcon.Control view=new FloatingIcon.Control(this,kind,Color.WHITE,size);view.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);view.setContentDescription(description);
+        FloatingIcon.Control view=new FloatingIcon.Control(this,kind,active?Daybook.actionInk(this):Color.WHITE,size);view.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);view.setContentDescription(description);
         int rippleColor=0x30ffffff;
         float corner=size*0f+diameter()/4f; // 48dp square, 12dp corners (scaled with bubble size)
         android.graphics.drawable.Drawable face=active?Ui.glass(this,corner/getResources().getDisplayMetrics().density,Glass.DAYBOOK_ACTION):frostedGlass(corner);

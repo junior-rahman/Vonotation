@@ -1,12 +1,21 @@
 <resources>
     <style name="BaseAppTheme" parent="android:style/Theme.Material.Light.NoActionBar">
         <item name="android:fontFamily">sans</item>
-        <item name="android:colorAccent">#545C63</item>
+        <item name="android:colorAccent">@color/daybook_accent</item>
+        <item name="android:colorControlNormal">@color/daybook_control_outline</item>
+        <item name="android:colorControlActivated">@color/daybook_accent</item>
+        <item name="android:colorControlHighlight">@color/daybook_highlight</item>
+        <item name="android:colorError">@color/daybook_error</item>
+        <item name="android:textColorPrimary">@color/daybook_ink</item>
+        <item name="android:textColorSecondary">@color/daybook_muted</item>
+        <item name="android:textColorHighlight">@color/daybook_highlight</item>
+        <item name="android:colorBackground">@color/daybook_paper</item>
+        <item name="android:colorBackgroundFloating">@color/daybook_surface</item>
         <item name="android:windowLightStatusBar">true</item>
         <item name="android:windowActionModeOverlay">true</item>
-        <item name="android:windowBackground">#ECEEEC</item>
-        <item name="android:navigationBarColor">#ECEEEC</item>
-        <item name="android:statusBarColor">#ECEEEC</item>
+        <item name="android:windowBackground">@color/daybook_paper</item>
+        <item name="android:navigationBarColor">@color/daybook_paper</item>
+        <item name="android:statusBarColor">@color/daybook_paper</item>
     </style>
     <style name="AppTheme" parent="BaseAppTheme" />
     <style name="CaptureTheme" parent="AppTheme">

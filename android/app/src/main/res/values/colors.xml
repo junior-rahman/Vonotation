@@ -1,0 +1,10 @@
+<resources>
+    <color name="daybook_paper">#F3F1EA</color>
+    <color name="daybook_surface">#FFFCF6</color>
+    <color name="daybook_ink">#25352F</color>
+    <color name="daybook_muted">#596960</color>
+    <color name="daybook_accent">#3F6B5F</color>
+    <color name="daybook_control_outline">#7B8E80</color>
+    <color name="daybook_error">#AE403D</color>
+    <color name="daybook_highlight">#263F6B5F</color>
+</resources>

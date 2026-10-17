@@ -1,18 +1,21 @@
 import SwiftUI
 import UIKit
 
-/// The same Copper + Sand palette used by the Android Daybook.
+/// The same quiet paper and botanical palette used by the Android Daybook.
 enum Daybook {
-    static let paper = adaptive(0xf1e9de, 0x211e1b)
-    static let surface = adaptive(0xfffaf3, 0x302923)
-    static let ink = adaptive(0x342820, 0xf6ede3)
-    static let muted = adaptive(0x726255, 0xc6b3a3)
-    static let accent = adaptive(0x8f5736, 0xe4b18a)
-    static let soft = adaptive(0xe9d8c5, 0x463628)
-    static let line = adaptive(0xd8c8b6, 0x544538)
-    static let coral = adaptive(0xb3422f, 0xffab97)
-    static let action = adaptive(0xbc4c36, 0xe78870)
-    static let actionInk = adaptive(0xfffaf5, 0x22150f)
+    static let paper = adaptive(0xf3f1ea, 0x121c19)
+    static let surface = adaptive(0xfffcf6, 0x1b2923)
+    static let ink = adaptive(0x25352f, 0xeef3e9)
+    static let muted = adaptive(0x596960, 0xb2c2b5)
+    static let accent = adaptive(0x3f6b5f, 0xaccebb)
+    static let soft = adaptive(0xe3e9df, 0x2a3d32)
+    static let line = adaptive(0xcbd5ca, 0x3f5748)
+    static let fieldOutline = adaptive(0x7b8e80, 0x6e8c77)
+    static let coral = adaptive(0xae403d, 0xffb4aa)
+    static let action = adaptive(0x28594e, 0xaccebb)
+    static let actionInk = adaptive(0xffffff, 0x15271e)
+    static let brand = adaptive(0xa46144, 0xd9ab8d)
+    static let shadow = adaptive(0x25352f, 0x07110c)
 
     private static func adaptive(_ light: UInt32, _ dark: UInt32) -> Color {
         Color(uiColor: UIColor { traits in
@@ -42,7 +45,7 @@ struct LinenBackground: View {
                     fibers.move(to: CGPoint(x: x, y: 0))
                     fibers.addLine(to: CGPoint(x: x, y: size.height))
                 }
-                context.stroke(fibers, with: .color(Daybook.accent.opacity(0.025)), lineWidth: 0.5)
+                context.stroke(fibers, with: .color(Daybook.accent.opacity(0.018)), lineWidth: 0.5)
             }
             .accessibilityHidden(true)
             .allowsHitTesting(false)
@@ -58,12 +61,12 @@ struct DaybookButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.subheadline.weight(.medium))
-            .foregroundStyle(primary ? Daybook.actionInk : Daybook.accent)
+            .foregroundStyle(primary ? Daybook.actionInk : configuration.role == .destructive ? Daybook.coral : Daybook.accent)
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
             .frame(minHeight: 44)
             .background(primary ? Daybook.action : Daybook.surface, in: RoundedRectangle(cornerRadius: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Daybook.line.opacity(primary ? 0 : 0.55), lineWidth: 0.5))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Daybook.line.opacity(primary ? 0 : 0.85), lineWidth: 0.5))
             .opacity(configuration.isPressed ? 0.8 : 1)
             .scaleEffect(configuration.isPressed && !reduceMotion ? 0.98 : 1)
             .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: configuration.isPressed)
@@ -78,13 +81,13 @@ struct DaybookCard<Content: View>: View {
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Daybook.surface, in: RoundedRectangle(cornerRadius: 17))
-            .overlay(RoundedRectangle(cornerRadius: 17).stroke(Daybook.line.opacity(0.4), lineWidth: 0.5))
+            .overlay(RoundedRectangle(cornerRadius: 17).stroke(Daybook.line.opacity(0.75), lineWidth: 0.5))
     }
 }
 
 struct DaybookMark: View {
     var size: CGFloat = 30
-    var color: Color = Daybook.coral
+    var color: Color = Daybook.brand
     var body: some View {
         Canvas { context, size in
             let scale = min(size.width / 30, size.height / 31)

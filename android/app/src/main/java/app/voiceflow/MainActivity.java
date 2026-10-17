@@ -390,7 +390,7 @@ public final class MainActivity extends Activity {
     /** Asks the saved endpoint whether this key is accepted. Does not spend a transcription. */
     private void probeConnection(View button,TextView result){
         String key=Vault.get(this);
-        if(key.isEmpty()){result.setTextColor(0xffb34c40);result.setText("Add an API key first.");return;}
+        if(key.isEmpty()){result.setTextColor(Daybook.coral(this));result.setText("Add an API key first.");return;}
         button.setEnabled(false);
         if(button instanceof Button)((Button)button).setText("Checking…");
         result.setTextColor(Daybook.muted(this));result.setText("Reaching the API…");
@@ -403,11 +403,11 @@ public final class MainActivity extends Activity {
                 if(isFinishing()||isDestroyed()||!button.isAttachedToWindow())return;
                 button.setEnabled(true);
                 if(button instanceof Button)((Button)button).setText("Test connection");
-                if(error!=null){result.setTextColor(0xffb34c40);result.setText("Couldn't reach the API. Check your internet and the endpoint.");return;}
+                if(error!=null){result.setTextColor(Daybook.coral(this));result.setText("Couldn't reach the API. Check your internet and the endpoint.");return;}
                 if(status>=200&&status<300){result.setTextColor(Daybook.accent(this));result.setText("Connected. This key works.");return;}
-                if(status==401||status==403){result.setTextColor(0xffb34c40);result.setText("The key was rejected ("+status+"). Open API key and paste a new one.");return;}
-                if(status==429){result.setTextColor(0xffb34c40);result.setText("The key reached the API, but the service is limiting requests right now.");return;}
-                result.setTextColor(0xffb34c40);result.setText("The API replied "+status+". Check the endpoint.");
+                if(status==401||status==403){result.setTextColor(Daybook.coral(this));result.setText("The key was rejected ("+status+"). Open API key and paste a new one.");return;}
+                if(status==429){result.setTextColor(Daybook.coral(this));result.setText("The key reached the API, but the service is limiting requests right now.");return;}
+                result.setTextColor(Daybook.coral(this));result.setText("The API replied "+status+". Check the endpoint.");
             });
         },"api-probe").start();
     }
@@ -609,7 +609,7 @@ public final class MainActivity extends Activity {
         key.setOnClickListener(v->{ if(masked[0]) showEntry.run(); });
         update.setOnClickListener(v->{ showEntry.run(); key.requestFocus(); });
         ModelPicker model=new ModelPicker(form,"Transcript",ModelCatalog.TRANSCRIPT_NAMES,ModelCatalog.TRANSCRIPT_IDS,whisperV3?CloudApi.DEFAULT_TRANSCRIBE:Store.get(this,"transcribe_model",CloudApi.DEFAULT_TRANSCRIBE)); Ui.space(form,12);
-        ModelPicker ai=new ModelPicker(form,"Cleanup",ModelCatalog.CLEANUP_NAMES,ModelCatalog.CLEANUP_IDS,whisperV3?CloudApi.DEFAULT_POLISH:Store.get(this,"polish_model",CloudApi.DEFAULT_POLISH)); Ui.space(form,8); form.addView(Daybook.text(this,"On Groq, Instant and Versatile need enterprise access. OSS models are available alternatives.",12,Daybook.muted(MainActivity.this),false)); TextView error=Daybook.text(this,"",12,0xffb34c40,false); Ui.space(form,10); form.addView(error);
+        ModelPicker ai=new ModelPicker(form,"Cleanup",ModelCatalog.CLEANUP_NAMES,ModelCatalog.CLEANUP_IDS,whisperV3?CloudApi.DEFAULT_POLISH:Store.get(this,"polish_model",CloudApi.DEFAULT_POLISH)); Ui.space(form,8); form.addView(Daybook.text(this,"On Groq, Instant and Versatile need enterprise access. OSS models are available alternatives.",12,Daybook.muted(MainActivity.this),false)); TextView error=Daybook.text(this,"",12,Daybook.coral(this),false); Ui.space(form,10); form.addView(error);
         ScrollView scroll=new ScrollView(this); scroll.addView(form);
         AlertDialog.Builder builder=new AlertDialog.Builder(this).setTitle(whisperV3?"Groq defaults":"API key & models").setView(scroll).setNegativeButton("Close",null).setPositiveButton("Save",null);
         builder.setNeutralButton("Remove key",(d,w)->{synchronized(Store.class){Store.prefs(this).edit().remove("api_secret").remove("api_iv").putString("engine","cloud").putBoolean("ai_polish",false).apply();}render();});
@@ -636,7 +636,7 @@ public final class MainActivity extends Activity {
                 runOnUiThread(()->{
                     if(isFinishing()||isDestroyed())return;
                     save.setEnabled(true); keyState.setTextColor(Daybook.accent(this));
-                    if(rejection!=null){ keyState.setTextColor(0xffb34c40); keyState.setText(rejection+(stored[0].isEmpty()?"":" Your previous key is still saved.")); key.requestFocus(); return; }
+                    if(rejection!=null){ keyState.setTextColor(Daybook.coral(this)); keyState.setText(rejection+(stored[0].isEmpty()?"":" Your previous key is still saved.")); key.requestFocus(); return; }
                     try { commitConnection(url,transcribeModel,cleanupModel,typed,whisperV3); }
                     catch(Exception ex){ keyState.setText(""); error.setText("Could not save the key."); return; }
                     stored[0]=typed; render(); showSaved.run(); keyState.setText("✓ API key saved"+saveNote);

@@ -1,0 +1,39 @@
+name: Android native palette verification
+
+on:
+  workflow_dispatch:
+  push:
+    branches-ignore: [main]
+    paths:
+      - 'android/**'
+      - '.github/workflows/android-visual-ci.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-visual-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out exact source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Native Android build, lint and light/dark visual verification
+        run: bash android/scripts/run-visual-ci.sh
+      - name: Preserve native evidence
+        if: always() && !cancelled()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: VonoTation-Android-native-visual-${{ github.sha }}
+          path: |
+            android/build/visual-ci
+            android/app/build/reports/lint-results-preview.html
+            android/app/build/reports/lint-results-preview.xml
+          if-no-files-found: error
+          retention-days: 30

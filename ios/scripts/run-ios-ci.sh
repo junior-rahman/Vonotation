@@ -4,7 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 command -v xcodebuild >/dev/null || { printf '%s\n' 'Xcode is required; this script cannot validate iOS on Linux.' >&2; exit 2; }
 task_output="${VONOTATION_CI_OUTPUT:-$PWD/build/ci}"
-mkdir -p "$task_output/logs" "$task_output/screenshots"
+mkdir -p "$task_output/logs" "$task_output/screenshots" "$task_output/screenshots-dark"
 collect_failure_evidence() {
   task_exit_status=$?
   trap - EXIT
@@ -40,22 +40,30 @@ for task_family in iPhone iPad; do
   task_device_state="$(xcrun simctl list devices --json | python3 -c 'import json,sys; print(next(d["state"] for a in json.load(sys.stdin)["devices"].values() for d in a if d["udid"] == sys.argv[1]))' "$task_udid")"
   if [[ "$task_device_state" != 'Booted' ]]; then xcrun simctl boot "$task_udid"; fi
   xcrun simctl bootstatus "$task_udid" -b
+  xcrun simctl ui "$task_udid" appearance light
   xcrun simctl install "$task_udid" "$task_derived/Build/Products/Debug-iphonesimulator/VonoTation.app"
   xcrun simctl privacy "$task_udid" grant microphone app.vonotation.ios
   xcodebuild "${task_common[@]}" -configuration Debug -destination "platform=iOS Simulator,id=$task_udid" -parallel-testing-enabled NO -resultBundlePath "$task_output/$task_family.xcresult" test-without-building 2>&1 | tee "$task_output/logs/test-$task_family.log"
   xcrun xcresulttool get test-results summary --path "$task_output/$task_family.xcresult" > "$task_output/$task_family-test-summary.json"
   xcrun xcresulttool get test-results tests --path "$task_output/$task_family.xcresult" > "$task_output/$task_family-test-tree.json"
-  for task_screen in home dictations thoughts clipboard settings; do
-    # terminate can report 'not running'; launching and screenshot failures remain fatal.
-    xcrun simctl terminate "$task_udid" app.vonotation.ios 2>/dev/null || true
-    xcrun simctl launch "$task_udid" app.vonotation.ios --ui-testing --ui-fixtures --ui-screen "$task_screen"
-    # Native XCTest already asserts readiness; allow SwiftUI's first rendering pass to finish.
-    sleep 2
-    xcrun simctl io "$task_udid" screenshot "$task_output/screenshots/$task_family-$task_screen.png"
+  for task_appearance in light dark; do
+    xcrun simctl ui "$task_udid" appearance "$task_appearance"
+    xcrun simctl ui "$task_udid" appearance > "$task_output/$task_family-$task_appearance-appearance.txt"
+    task_screenshot_directory="$task_output/screenshots"
+    if [[ "$task_appearance" == dark ]]; then task_screenshot_directory="$task_output/screenshots-dark"; fi
+    for task_screen in home dictations thoughts clipboard settings; do
+      # terminate can report 'not running'; launching and screenshot failures remain fatal.
+      xcrun simctl terminate "$task_udid" app.vonotation.ios 2>/dev/null || true
+      xcrun simctl launch "$task_udid" app.vonotation.ios --ui-testing --ui-fixtures --ui-screen "$task_screen"
+      # Native XCTest already asserts readiness; allow SwiftUI's first rendering pass to finish.
+      sleep 2
+      xcrun simctl io "$task_udid" screenshot "$task_screenshot_directory/$task_family-$task_screen.png"
+    done
   done
   xcrun simctl terminate "$task_udid" app.vonotation.ios
   xcrun simctl shutdown "$task_udid"
 done
+python3 scripts/verify-appearance-captures.py "$task_output"
 xcodebuild "${task_common[@]}" -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -resultBundlePath "$task_output/device-sdk.xcresult" build 2>&1 | tee "$task_output/logs/device-sdk-build.log"
 xcrun xcresulttool get build-results --path "$task_output/device-sdk.xcresult" > "$task_output/device-sdk-build.json"
 xcodebuild "${task_common[@]}" -configuration Release -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -archivePath "$task_output/VonoTation-Simulator.xcarchive" archive 2>&1 | tee "$task_output/logs/simulator-archive.log"

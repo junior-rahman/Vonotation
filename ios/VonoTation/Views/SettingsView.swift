@@ -154,7 +154,7 @@ private struct DaybookField: ViewModifier {
     func body(content: Content) -> some View {
         content.font(.body).padding(12).frame(minHeight: 46)
             .background(Daybook.surface, in: RoundedRectangle(cornerRadius: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Daybook.line, lineWidth: 1))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Daybook.fieldOutline, lineWidth: 1))
     }
 }
 extension View { func daybookField() -> some View { modifier(DaybookField()) } }
@@ -165,7 +165,7 @@ struct ActiveRecordingStrip: View {
     var body: some View {
         VStack(spacing: 10) {
             HStack(spacing: 8) {
-                Image(systemName: "record.circle.fill").foregroundStyle(Daybook.action)
+                Image(systemName: "record.circle.fill").foregroundStyle(Daybook.coral)
                 Text("Recording \(model.recordingKind?.title ?? "audio")").font(.subheadline.weight(.semibold))
                 Spacer(minLength: 8)
                 Text(clock(model.recordingDuration)).font(.caption.monospacedDigit())

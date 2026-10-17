@@ -86,6 +86,7 @@ struct BackupSettingsView: View {
             }
             .foregroundStyle(Daybook.ink).tint(Daybook.accent)
             .navigationTitle("Backup").navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(Daybook.paper, for: .navigationBar).toolbarBackground(.visible, for: .navigationBar)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { clearSecrets(); dismiss() }.accessibilityIdentifier("settings.backup.done") } }
             .safeAreaInset(edge: .bottom) { if model.isRecording { ActiveRecordingStrip().padding(.horizontal, 16).background(Daybook.paper) } }
             .fileImporter(isPresented: $importing, allowedContentTypes: [.data], allowsMultipleSelection: false) { result in

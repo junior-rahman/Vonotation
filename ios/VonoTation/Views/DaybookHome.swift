@@ -210,8 +210,8 @@ struct DaybookHome: View {
             else if page == .voiceNotes || page == .dictations || page == .translate { recordButton }
         }
         .background(Daybook.surface, in: RoundedRectangle(cornerRadius: 28))
-        .overlay(RoundedRectangle(cornerRadius: 28).stroke(Daybook.line.opacity(0.6), lineWidth: 0.5))
-        .shadow(color: .black.opacity(0.06), radius: 14, x: 0, y: 7)
+        .overlay(RoundedRectangle(cornerRadius: 28).stroke(Daybook.line.opacity(0.85), lineWidth: 0.5))
+        .shadow(color: Daybook.shadow.opacity(0.055), radius: 14, x: 0, y: 7)
     }
 
     @ViewBuilder private var pageIntroduction: some View {
