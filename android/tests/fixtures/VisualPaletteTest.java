@@ -73,7 +73,7 @@ public final class VisualPaletteTest extends Instrumentation {
             for (int i = 0; i < pages.length; i++) {
                 page = pages[i];
                 activity = startActivitySync(new Intent(context, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK));
-                waitForIdleSync(); SystemClock.sleep(500);
+                waitForIdleSync(); awaitFocusedWindow();
                 boolean dark = (activity.getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
                 require(dark == appearance.equals("dark"), "Native appearance does not match requested theme");
                 require(findText(headings[i]) != null, "Missing production card heading: " + headings[i]);
@@ -139,13 +139,29 @@ public final class VisualPaletteTest extends Instrumentation {
     }
     private void tap(View target) throws Exception {
         require(target != null, "Settings control is missing");
+        awaitFocusedWindow();
         Rect bounds = new Rect(); runOnMainSync(() -> target.getGlobalVisibleRect(bounds));
         require(bounds.width() >= Ui.dp(activity, 44) && bounds.height() >= Ui.dp(activity, 44), "Settings touch target is smaller than 44dp");
         long time = SystemClock.uptimeMillis();
         MotionEvent down = MotionEvent.obtain(time, time, MotionEvent.ACTION_DOWN, bounds.exactCenterX(), bounds.exactCenterY(), 0);
         MotionEvent up = MotionEvent.obtain(time, time + 50, MotionEvent.ACTION_UP, bounds.exactCenterX(), bounds.exactCenterY(), 0);
         down.setSource(InputDevice.SOURCE_TOUCHSCREEN); up.setSource(InputDevice.SOURCE_TOUCHSCREEN);
-        try { sendPointerSync(down); sendPointerSync(up); } finally { down.recycle(); up.recycle(); }
+        try {
+            require(getUiAutomation().injectInputEvent(down, true), "Settings touch down was rejected");
+            require(getUiAutomation().injectInputEvent(up, true), "Settings touch up was rejected");
+        } finally { down.recycle(); up.recycle(); }
+    }
+    private void awaitFocusedWindow() throws Exception {
+        long deadline = SystemClock.uptimeMillis() + 15000;
+        boolean[] focused = {false};
+        do {
+            runOnMainSync(() -> focused[0] = activity != null && !activity.isFinishing()
+                && activity.getWindow().getDecorView().isShown() && activity.hasWindowFocus());
+            if (focused[0]) break;
+            SystemClock.sleep(100);
+        } while (SystemClock.uptimeMillis() < deadline);
+        require(focused[0], "Production Activity is obscured or unfocused; refusing to capture or tap a system window");
+        waitForIdleSync();
     }
     private File captureDirectory() throws Exception {
         File[] locations = context.getExternalMediaDirs();
@@ -154,6 +170,7 @@ public final class VisualPaletteTest extends Instrumentation {
         require(output.isDirectory() || output.mkdirs(), "Could not create native screenshot directory"); return output;
     }
     private void capture(String name) throws Exception {
+        awaitFocusedWindow();
         Bitmap screen = getUiAutomation().takeScreenshot(); require(screen != null, "Native screenshot unavailable");
         try (FileOutputStream output = new FileOutputStream(new File(captureDirectory(), name + ".png"))) { require(screen.compress(Bitmap.CompressFormat.PNG, 100, output), "Native screenshot could not be exported"); }
         finally { screen.recycle(); }

@@ -26,9 +26,10 @@ command -v sdkmanager >/dev/null
 java -version 2> "$task_output/java-version.txt"
 sdkmanager --version > "$task_output/sdkmanager-version.txt"
 # Hosted runner supplies the SDK licenses. Only official Google SDK components are installed.
-sdkmanager 'platforms;android-35' 'build-tools;35.0.0' 'emulator' 'system-images;android-35;google_apis;x86_64' 2>&1 | tee "$task_output/logs/sdk-install.log"
+sdkmanager 'platforms;android-35' 'build-tools;35.0.0' 'emulator' 'system-images;android-35;default;x86_64' 2>&1 | tee "$task_output/logs/sdk-install.log"
 keytool -genkeypair -keystore "$VOICEFLOW_KEYSTORE" -storepass android -keypass android -alias voiceflow -keyalg RSA -keysize 2048 -validity 2 -dname 'CN=Disposable native palette QA' > "$task_output/logs/disposable-signing.log" 2>&1
 bash gradlew --no-daemon assemblePreview lintPreview 2>&1 | tee "$task_output/logs/build-lint.log"
+bash tests/run-pure-tests.sh 2>&1 | tee "$task_output/logs/pure-tests.log"
 bash tests/build-visual-fixture.sh 2>&1 | tee "$task_output/logs/fixture-build.log"
 "$ANDROID_SDK_ROOT/build-tools/35.0.0/apksigner" verify --print-certs app/build/outputs/apk/preview/app-preview.apk > "$task_output/test-apk-certificate.txt"
 sha256sum app/build/outputs/apk/preview/app-preview.apk build/tests/visual/VonoTation-visual-fixture.apk > "$task_output/test-apk-sha256.txt"
@@ -40,7 +41,9 @@ export ANDROID_USER_HOME="$task_temp/android-user"
 export ANDROID_EMULATOR_HOME="$ANDROID_USER_HOME"
 export ANDROID_AVD_HOME="$ANDROID_USER_HOME/avd"
 mkdir -p "$ANDROID_AVD_HOME"
-printf 'no\n' | avdmanager create avd --name vonotation_visual --path "$ANDROID_AVD_HOME/vonotation_visual.avd" --package 'system-images;android-35;google_apis;x86_64' --device pixel_6 --force > "$task_output/logs/avd-create.log" 2>&1
+# Palette checks do not need Google services. The stock AOSP image avoids
+# first-boot Google launcher/account work obscuring the target Activity.
+printf 'no\n' | avdmanager create avd --name vonotation_visual --path "$ANDROID_AVD_HOME/vonotation_visual.avd" --package 'system-images;android-35;default;x86_64' --device pixel_6 --force > "$task_output/logs/avd-create.log" 2>&1
 emulator -list-avds > "$task_output/available-avds.txt"
 [[ -s "$ANDROID_AVD_HOME/vonotation_visual.ini" ]] || { cat "$task_output/logs/avd-create.log" "$task_output/available-avds.txt"; printf '%s\n' 'The native emulator AVD registry was not created.' >&2; exit 1; }
 emulator -avd vonotation_visual -no-window -noaudio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on -camera-back none -camera-front none > "$task_output/logs/emulator.log" 2>&1 &
@@ -66,8 +69,8 @@ adb shell settings put global animator_duration_scale 0
 adb shell getprop > "$task_output/emulator-properties.txt"
 adb shell wm size > "$task_output/emulator-display.txt"
 adb shell wm density >> "$task_output/emulator-display.txt"
-adb install app/build/outputs/apk/preview/app-preview.apk
-adb install build/tests/visual/VonoTation-visual-fixture.apk
+adb install --no-incremental app/build/outputs/apk/preview/app-preview.apk
+adb install --no-incremental build/tests/visual/VonoTation-visual-fixture.apk
 adb shell dumpsys package app.voiceflow > "$task_output/installed-package.txt"
 adb logcat -c
 for task_appearance in light dark; do
