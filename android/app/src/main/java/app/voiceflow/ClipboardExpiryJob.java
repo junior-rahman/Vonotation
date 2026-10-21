@@ -16,7 +16,7 @@ public final class ClipboardExpiryJob extends JobService {
     private static final ExecutorService WORK=Executors.newSingleThreadExecutor();
     private final IdentityHashMap<JobParameters,Run> runs=new IdentityHashMap<>();
     private static final class Run{boolean stopped;}
-    static void schedule(Context context){if(context!=null){Context app=context.getApplicationContext();WORK.execute(()->scheduleNow(app));}}
+    static void schedule(Context context){if(!AppProduct.isNotes()&&context!=null){Context app=context.getApplicationContext();WORK.execute(()->scheduleNow(app));}}
     private static void scheduleNow(Context app){
         try{
             long expiry=ClipList.nextExpiry(app);
@@ -30,6 +30,7 @@ public final class ClipboardExpiryJob extends JobService {
         }catch(RuntimeException unavailable){android.util.Log.w("VonoTation","Clipboard cleanup will retry when VonoTation is opened.");}
     }
     @Override public boolean onStartJob(JobParameters parameters){
+        if(AppProduct.isNotes())return false;
         Run run=new Run();synchronized(runs){if(runs.containsKey(parameters))return true;runs.put(parameters,run);}
         Context app=getApplicationContext();WORK.execute(()->{
             try{ synchronized(runs){if(run.stopped)return;}ClipList.expire(app); }

@@ -10,6 +10,7 @@ struct NoteDetailView: View {
     @State private var transcriptExpanded = false
 
     private var note: VonoNote? { model.notes.first { $0.id == noteID } }
+    private var archived: Bool { note.map { !model.product.supports($0.kind) } ?? false }
 
     var body: some View {
         ZStack {
@@ -23,7 +24,10 @@ struct NoteDetailView: View {
                             Text("\(note.createdAt.formatted(date: .abbreviated, time: .shortened)) · \(note.kind.title)")
                                 .font(.caption).foregroundStyle(Daybook.muted)
                         }
-                        if note.state != .ready { processingCard(note) }
+                        if archived {
+                            Text("Previous recording · Read only. Your original text and source stay on this device. Share a copy to move it to Vono Notes.")
+                                .font(.caption).foregroundStyle(Daybook.muted).accessibilityIdentifier("note.legacy.notice")
+                        } else if note.state != .ready { processingCard(note) }
                         if note.kind == .translation && !note.translation.isEmpty {
                             textSection("Translation", note.translation, identifier: "note.detail.translation")
                         }
@@ -61,6 +65,7 @@ struct NoteDetailView: View {
                         if let url = model.audioURL(for: note) {
                             DisclosureGroup {
                                 SourceAudioView(url: url).padding(.top, 9)
+                                if archived { ShareLink(item: url) { Label("Share source audio", systemImage: "square.and.arrow.up") }.accessibilityIdentifier("note.legacy.shareAudio") }
                             } label: {
                                 Label("Source audio", systemImage: "waveform").font(.subheadline).foregroundStyle(Daybook.accent).frame(minHeight: 44)
                                     .accessibilityIdentifier("note.audio")
@@ -82,7 +87,7 @@ struct NoteDetailView: View {
         .safeAreaInset(edge: .bottom) { if model.isRecording { ActiveRecordingStrip().padding(.horizontal, 16).background(Daybook.paper) } }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                if note != nil { Button("Edit") { editing = true }.disabled(model.isRecording || model.isBackingUp).accessibilityIdentifier("note.detail.edit") }
+                if note != nil && !archived { Button("Edit") { editing = true }.disabled(model.isRecording || model.isBackingUp).accessibilityIdentifier("note.detail.edit") }
             }
         }
         .sheet(isPresented: $editing) { if let note { EditNoteView(note: note).environmentObject(model) } }
@@ -138,8 +143,10 @@ struct NoteDetailView: View {
         ShareLink(item: shareText(note)) { Label("Share", systemImage: "square.and.arrow.up") }
             .buttonStyle(DaybookButtonStyle()).disabled(shareText(note).isEmpty)
             .accessibilityIdentifier("note.detail.share")
-        Button(role: .destructive) { deleting = true } label: { Label("Delete", systemImage: "trash") }
-            .buttonStyle(DaybookButtonStyle()).disabled(model.isBackingUp).accessibilityIdentifier("note.detail.delete")
+        if !archived {
+            Button(role: .destructive) { deleting = true } label: { Label("Delete", systemImage: "trash") }
+                .buttonStyle(DaybookButtonStyle()).disabled(model.isBackingUp).accessibilityIdentifier("note.detail.delete")
+        }
     }
 
     private func shareText(_ note: VonoNote) -> String {
@@ -170,10 +177,12 @@ struct EditNoteView: View {
                         Text("Title").font(.caption.weight(.semibold)).foregroundStyle(Daybook.accent)
                         TextField("Note title", text: $title).font(.title3.weight(.semibold))
                             .padding(12).background(Daybook.surface, in: RoundedRectangle(cornerRadius: 12))
+                            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Daybook.fieldOutline, lineWidth: 1))
                             .accessibilityIdentifier("note.edit.title")
                         Text("Full transcript").font(.caption.weight(.semibold)).foregroundStyle(Daybook.accent)
                         TextEditor(text: $transcript).scrollContentBackground(.hidden).frame(minHeight: 320)
                             .padding(8).background(Daybook.surface, in: RoundedRectangle(cornerRadius: 12))
+                            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Daybook.fieldOutline, lineWidth: 1))
                             .accessibilityIdentifier("note.edit.transcript")
                         Text("The original transcription and source audio stay with the note.")
                             .font(.caption).foregroundStyle(Daybook.muted)

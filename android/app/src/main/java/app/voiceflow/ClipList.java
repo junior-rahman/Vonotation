@@ -29,6 +29,7 @@ final class ClipList {
     private ClipList() {}
 
     static void watch(Context context) {
+        if(AppProduct.isNotes())return;
         Context app=context.getApplicationContext();archive(app);ClipboardExpiryJob.schedule(app);
         if(watching)return;
         ClipboardManager clipboard=(ClipboardManager)app.getSystemService(Context.CLIPBOARD_SERVICE);
@@ -65,6 +66,7 @@ final class ClipList {
     static void expire(Context context){try{ClipboardArchive saved=archive(context);if(saved!=null&&saved.prune(System.currentTimeMillis())>0)changed(context);}catch(RuntimeException unavailable){failed();}}
     /** Reads actual text only, never a URI, Intent, or unrelated selected input text. */
     static void capture(Context context) {
+        if(AppProduct.isNotes())return;
         boolean privateContext=FlowKeyboard.clipboardSensitiveContext()||FlowAccessibility.clipboardSensitiveContext();
         int next=UNAVAILABLE;String value=null;ClipData data=null;
         try{
@@ -103,6 +105,7 @@ final class ClipList {
         return extras!=null && extras.getBoolean("android.content.extra.IS_SENSITIVE");
     }
     private static synchronized ClipboardArchive archive(Context context){
+        if(AppProduct.isNotes())return null;
         try{
             ClipboardArchive saved=ClipboardArchive.get(context);JSONArray old;
             try{old=new JSONArray(Store.get(context,KEY,"[]"));}catch(Exception invalid){old=new JSONArray();}

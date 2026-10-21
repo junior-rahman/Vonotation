@@ -867,7 +867,7 @@ public final class BackupActivity extends Activity {
         field.setTextColor(Daybook.ink(this));
         field.setHintTextColor(Daybook.muted(this));
         android.graphics.drawable.GradientDrawable outline = Ui.shape(Daybook.surface(this),12,this);
-        outline.setStroke(Ui.dp(this,1),Daybook.line(this));
+        outline.setStroke(Ui.dp(this,1),Daybook.controlOutline(this));
         field.setBackground(outline);
         field.setPadding(Ui.dp(this,12),Ui.dp(this,11),Ui.dp(this,12),Ui.dp(this,11));
         field.setMinimumHeight(Ui.dp(this,48));

@@ -41,6 +41,8 @@ public final class CallService extends Service {
         return START_NOT_STICKY;
     }
 
+    // Legacy service is intentionally absent from both product manifests; active calls use CallWatch.
+    @android.annotation.SuppressLint("ForegroundServiceType")
     private void notice() {
         NotificationManager notifications=(NotificationManager)getSystemService(NOTIFICATION_SERVICE);
         notifications.createNotificationChannel(new NotificationChannel("calls","Call recording",NotificationManager.IMPORTANCE_LOW));

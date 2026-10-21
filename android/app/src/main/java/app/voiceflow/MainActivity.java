@@ -35,6 +35,7 @@ public final class MainActivity extends Activity {
     private ScrollView[] deckScrolls;
     private android.widget.FrameLayout[] deckDocks;
     private CardDeck deck;
+    private int[] deckCardIds=new int[0];
     private boolean deckReady;
     private boolean settingsVisible,hasRendered,scrollRestorePending,backupReturnFocus;
     private String panel="",origin="",renderedScreen="home",heardDraft="",preferredDraft="",homeTab="days";
@@ -54,24 +55,28 @@ public final class MainActivity extends Activity {
     private final ClipboardCard clipboardCard=new ClipboardCard();
     private boolean foreground;
     private final Runnable clipboardChanged=()->{if(foreground&&!isDestroyed()&&!settingsVisible&&part==clipboardIndex())refreshClipboard();};
-    private int clipboardIndex(){return Store.quickThoughts(this)?5:4;}
-    private void refreshClipboard(){int index=clipboardIndex();if(deckPages==null||index>=deckPages.length)return;LinearLayout page=deckPages[index];int held=deckScrolls[index].getScrollY();page.removeAllViews();clipboardCard.show(this,page,this::refreshClipboard);deckScrolls[index].post(()->deckScrolls[index].scrollTo(0,held));}
+    private int clipboardIndex(){return ProductProfile.CLIPBOARD;}
+    private int[] visibleCards(){return AppProduct.pages(Store.quickThoughts(this));}
+    private int cardPosition(int id){int[] cards=visibleCards();for(int i=0;i<cards.length;i++)if(cards[i]==id)return i;return -1;}
+    private int firstCard(){return visibleCards()[0];}
+    private void refreshClipboard(){int index=clipboardIndex();if(AppProduct.isNotes()||deckPages==null||deckPages[index]==null)return;LinearLayout page=deckPages[index];int held=deckScrolls[index].getScrollY();page.removeAllViews();clipboardCard.show(this,page,this::refreshClipboard);deckScrolls[index].post(()->deckScrolls[index].scrollTo(0,held));}
     @Override public void onCreate(Bundle state) {
-        super.onCreate(state);Store.migrate(this);ClipList.watch(this);if(!CaptureActivity.visible)Store.removeStaleAudio(this);
+        super.onCreate(state);part=firstCard();Store.migrate(this);DriveBackup.pauseScheduling(this);if(!AppProduct.isNotes())ClipList.watch(this);if(!CaptureActivity.visible)Store.removeStaleAudio(this);
         if(state!=null){part=Math.max(0,Math.min(5,state.getInt("daybook_part",0)));settingsVisible=state.getBoolean("settings_visible",false);backupReturnFocus=state.getBoolean("backup_return_focus",false);panel=state.getString("daybook_panel","");origin=state.getString("daybook_origin","");homeTab=state.getString("home_tab","days");historyScrollY=Math.max(0,state.getInt("history_scroll_y",0));settingsScrollY=Math.max(0,state.getInt("settings_scroll_y",0));DraftState.restore(this,state);restoreSet(state,"days_open",expandedDays);restoreSet(state,"days_closed",collapsedDays);restoreSet(state,"entries_open",expandedEntries);heardDraft=state.getString("dictionary_heard","");preferredDraft=state.getString("dictionary_preferred","");}
         clipboardCard.restore(state);
         if(state!=null&&state.getBoolean("clipboard_selected",false))part=clipboardIndex();
+        if(cardPosition(part)<0){part=firstCard();Notes.back();}
         createShell();
         if(state==null)handleFix(getIntent());
         openCalls(getIntent());
         openThoughts(getIntent());
     }
     @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);handleFix(intent);openCalls(intent);if(openThoughts(intent))render();}
-    private void openCalls(Intent intent){if(intent!=null && intent.getBooleanExtra("open_calls",false)){intent.removeExtra("open_calls");settingsVisible=false;panel="";part=1;}}
+    private void openCalls(Intent intent){if(intent!=null && intent.getBooleanExtra("open_calls",false)){intent.removeExtra("open_calls");if(AppProduct.isNotes()){settingsVisible=false;panel="";part=ProductProfile.CALL;}}}
     private boolean openThoughts(Intent intent){
         if(intent==null || !intent.getBooleanExtra(EXTRA_OPEN_THOUGHTS,false))return false;
         intent.removeExtra(EXTRA_OPEN_THOUGHTS);
-        if(!Store.quickThoughts(this))return false;
+        if(AppProduct.isNotes()||!Store.quickThoughts(this))return false;
         Notes.back();settingsVisible=false;panel="";part=4;deckReady=false;deckPages=null;return true;
     }
     /** Opens the setting a dictation problem points to. */
@@ -91,9 +96,9 @@ public final class MainActivity extends Activity {
         requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},21);
     }
     private void restoreSet(Bundle state,String key,java.util.Set<String> target){java.util.ArrayList<String> saved=state.getStringArrayList(key);if(saved!=null)target.addAll(saved);}
-    @Override protected void onResume(){super.onResume();foreground=true;ClipList.observe(clipboardChanged);ClipboardExpiryJob.schedule(this);Notes.resumeThoughtSummaries(this);DriveBackup.schedule(this);Notes.catchUp(this);LineWatch.start(this,callConnectionChanged);maybeRequestNotifications();boolean focusBackup=backupReturnFocus;backupReturnFocus=false;render();AppUpdate.resume(this);if(focusBackup&&panel.isEmpty()){View row=settingRows.get("backup");if(row!=null)row.post(row::requestFocusFromTouch);}}
-    @Override public void onWindowFocusChanged(boolean hasFocus){super.onWindowFocusChanged(hasFocus);if(hasFocus){ClipList.capture(this);if(settingsVisible&&panel.equals("permissions"))render();}}
-    @Override protected void onPause(){foreground=false;ClipList.forget(clipboardChanged);clipboardCard.stop();LineWatch.detach(callConnectionChanged);Notes.pauseThoughtSummaries();AppUpdate.pause(this);saveScrollPosition();rememberDictionaryDraft();stopSummaryWork();super.onPause();}
+    @Override protected void onResume(){super.onResume();foreground=true;DriveBackup.pauseScheduling(this);if(!AppProduct.isNotes()){ClipList.observe(clipboardChanged);ClipboardExpiryJob.schedule(this);Notes.resumeThoughtSummaries(this);}Notes.catchUp(this);if(AppProduct.isNotes())LineWatch.start(this,callConnectionChanged);maybeRequestNotifications();boolean focusBackup=backupReturnFocus;backupReturnFocus=false;render();if(!AppProduct.isNotes())AppUpdate.resume(this);if(focusBackup&&panel.isEmpty()){View row=settingRows.get("backup");if(row!=null)row.post(row::requestFocusFromTouch);}}
+    @Override public void onWindowFocusChanged(boolean hasFocus){super.onWindowFocusChanged(hasFocus);if(hasFocus){if(!AppProduct.isNotes())ClipList.capture(this);if(settingsVisible&&panel.equals("permissions"))render();}}
+    @Override protected void onPause(){foreground=false;ClipList.forget(clipboardChanged);clipboardCard.stop();LineWatch.detach(callConnectionChanged);Notes.pauseThoughtSummaries();if(!AppProduct.isNotes())AppUpdate.pause(this);saveScrollPosition();rememberDictionaryDraft();stopSummaryWork();super.onPause();}
     @Override protected void onDestroy(){foreground=false;ClipList.forget(clipboardChanged);clipboardCard.stop();LineWatch.detach(callConnectionChanged);Notes.pauseThoughtSummaries();if(retryDictation!=null){retryDictation.cancel();retryDictation=null;}Notes.stop();Translate.stop();scrollGeneration++;stopSummaryWork();summaryWorker.shutdownNow();if(chimeTrack!=null){try{chimeTrack.release();}catch(RuntimeException ignored){}chimeTrack=null;}super.onDestroy();}
     @Override protected void onSaveInstanceState(Bundle state){clipboardCard.save(state);state.putBoolean("clipboard_selected",part==clipboardIndex());saveScrollPosition();rememberDictionaryDraft();state.putInt("history_scroll_y",historyScrollY);state.putInt("settings_scroll_y",settingsScrollY);state.putInt("daybook_part",part);state.putBoolean("settings_visible",settingsVisible);state.putBoolean("backup_return_focus",backupReturnFocus);state.putString("daybook_panel",panel);state.putString("daybook_origin",origin);state.putString("home_tab",homeTab);DraftState.save(this,state);state.putStringArrayList("days_open",new java.util.ArrayList<>(expandedDays));state.putStringArrayList("days_closed",new java.util.ArrayList<>(collapsedDays));state.putStringArrayList("entries_open",new java.util.ArrayList<>(expandedEntries));state.putString("dictionary_heard",heardDraft);state.putString("dictionary_preferred",preferredDraft);super.onSaveInstanceState(state);}
     @Override public void onBackPressed(){if(!panel.isEmpty())backToSettings();else if(settingsVisible){settingsVisible=false;render();}else if(Notes.opened()){Notes.back();render();}else super.onBackPressed();}
@@ -112,17 +117,16 @@ public final class MainActivity extends Activity {
     private String screen(){return !settingsVisible?"home":panel.isEmpty()?"settings":"panel:"+panel;}
     private void render() {
         if(body==null)return;if("advanced".equals(panel))panel="";
-        int expectedCards=Store.quickThoughts(this)?6:5;
-        if(deckPages!=null&&deckPages.length!=expectedCards){if(part==deckPages.length-1)part=expectedCards-1;else if(!Store.quickThoughts(this)&&part==4)part=0;}
-        if(deckPages==null || deckPages.length!=expectedCards)deckReady=false;
-        if(part>=expectedCards)part=0;
+        int[] expectedCards=visibleCards();
+        if(deckPages==null||!java.util.Arrays.equals(deckCardIds,expectedCards))deckReady=false;
+        if(cardPosition(part)<0){part=firstCard();Notes.back();}
         if(!Store.quickThoughts(this) && Notes.thoughtOpened(this))Notes.back();
         boolean detail=!settingsVisible && Notes.opened();
         boolean deckHome=!settingsVisible && !detail;
         if(deckHome && deckReady && strip!=null && strip.getChildCount()>0){fillDeck();return;}
         saveScrollPosition();rememberDictionaryDraft();renderedScreen=screen();hasRendered=true;stopSummaryWork();dayCards.clear();settingRows.clear();heardField=null;preferredField=null;clipboardCard.stop();body.removeAllViews();header.removeAllViews();if(footer!=null)footer.removeAllViews();if(strip!=null)strip.removeAllViews();deckReady=false;deck=null;
         if(settingsVisible){((View)header.getParent()).setVisibility(View.VISIBLE);if(footer!=null)footer.setVisibility(View.GONE);TextView back=Daybook.text(this,"‹",30,Daybook.accent(this),false);back.setGravity(Gravity.CENTER);back.setBackground(Daybook.ripple(this,android.graphics.Color.TRANSPARENT,14));back.setContentDescription(panel.isEmpty()?"Back to Home":"Back to Settings");back.setTooltipText(back.getContentDescription());back.setOnClickListener(v->{Daybook.feedback(v);if(panel.isEmpty()){settingsVisible=false;render();}else backToSettings();});LinearLayout.LayoutParams bp=new LinearLayout.LayoutParams(Ui.dp(this,44),Ui.dp(this,44));bp.rightMargin=Ui.dp(this,6);header.addView(back,bp);header.addView(Daybook.text(this,panel.isEmpty()?"Settings":panelTitle(panel),24,Daybook.ink(this),true),new LinearLayout.LayoutParams(0,-2,1));}
-        else{((View)header.getParent()).setVisibility(View.GONE);footer.setVisibility(View.VISIBLE);Daybook.Mark mark=new Daybook.Mark(this);LinearLayout.LayoutParams mp=new LinearLayout.LayoutParams(Ui.dp(this,26),Ui.dp(this,27));mp.rightMargin=Ui.dp(this,8);footer.addView(mark,mp);footer.addView(Daybook.text(this,"VonoTation",18,Daybook.ink(this),true),new LinearLayout.LayoutParams(0,-2,1));Daybook.SettingsIcon gear=new Daybook.SettingsIcon(this);gear.setBackground(Daybook.ripple(this,Daybook.surface(this),14));gear.setContentDescription("Settings");gear.setTooltipText("Settings");gear.setOnClickListener(v->{Daybook.feedback(v);Notes.stop();Translate.stop();settingsVisible=true;panel="";render();Daybook.motion(body);});footer.addView(gear,new LinearLayout.LayoutParams(Ui.dp(this,44),Ui.dp(this,44)));}
+        else{((View)header.getParent()).setVisibility(View.GONE);footer.setVisibility(View.VISIBLE);Daybook.Mark mark=new Daybook.Mark(this);LinearLayout.LayoutParams mp=new LinearLayout.LayoutParams(Ui.dp(this,26),Ui.dp(this,27));mp.rightMargin=Ui.dp(this,8);footer.addView(mark,mp);footer.addView(Daybook.text(this,AppProduct.name(),18,Daybook.ink(this),true),new LinearLayout.LayoutParams(0,-2,1));Daybook.SettingsIcon gear=new Daybook.SettingsIcon(this);gear.setBackground(Daybook.ripple(this,Daybook.surface(this),14));gear.setContentDescription("Settings");gear.setTooltipText("Settings");gear.setOnClickListener(v->{Daybook.feedback(v);Notes.stop();Translate.stop();settingsVisible=true;panel="";render();Daybook.motion(body);});footer.addView(gear,new LinearLayout.LayoutParams(Ui.dp(this,44),Ui.dp(this,44)));}
         detail=!settingsVisible && Notes.opened();
         homeTab=detail && part==1?"calls":"days";
         deckHome=!settingsVisible && !detail;
@@ -136,18 +140,24 @@ public final class MainActivity extends Activity {
     }
     private void fillDeck() {
         int[] held=new int[deckScrolls.length];
-        for(int i=0;i<deckScrolls.length;i++)held[i]=deckScrolls[i].getScrollY();
-        for(LinearLayout page:deckPages)page.removeAllViews();
+        for(int id:deckCardIds)held[id]=deckScrolls[id].getScrollY();
+        for(int id:deckCardIds)deckPages[id].removeAllViews();
         dayCards.clear();
-        Notes.callsMode(false);Notes.show(this,deckPages[0],deckDocks[0],this::render);
-        Calls.show(this,deckPages[1],deckDocks[1],this::render);
-        Translate.show(this,deckPages[2],deckDocks[2],this::render);
-        historyHost=deckPages[3];history();historyHost=null;
-        if(Store.quickThoughts(this)){Notes.thoughtsMode();Notes.show(this,deckPages[4],this::render);}
-        refreshClipboard();
-        for(int i=0;i<3;i++)if(deckDocks[i]!=null)deckDocks[i].setVisibility(i==part?View.VISIBLE:View.GONE);
-        if(deck!=null && deck.front!=part){deck.front=part;deck.place(false);}
-        for(int i=0;i<deckScrolls.length;i++){int stay=held[i];ScrollView page=deckScrolls[i];page.post(()->page.scrollTo(0,stay));}
+        populateCards();
+        for(int id:deckCardIds)if(deckDocks[id]!=null)deckDocks[id].setVisibility(id==part?View.VISIBLE:View.GONE);
+        int position=cardPosition(part);
+        if(deck!=null && deck.front!=position){deck.front=position;deck.place(false);}
+        for(int id:deckCardIds){int stay=held[id];ScrollView page=deckScrolls[id];page.post(()->page.scrollTo(0,stay));}
+    }
+    private void populateCards(){
+        if(AppProduct.isNotes()){
+            Notes.callsMode(false);Notes.show(this,deckPages[ProductProfile.VOICE],deckDocks[ProductProfile.VOICE],this::render);
+            Calls.show(this,deckPages[ProductProfile.CALL],deckDocks[ProductProfile.CALL],this::render);
+        }else{
+            historyHost=deckPages[ProductProfile.DICTATION];history();historyHost=null;
+            if(Store.quickThoughts(this)){Notes.thoughtsMode();Notes.show(this,deckPages[ProductProfile.THOUGHTS],this::render);}
+            refreshClipboard();
+        }
     }
     private String panelTitle(String key){if(key.equals("transcription"))return "Transcription";if(key.equals("cleanup"))return "Cleanup options";if(key.equals("language"))return "Language";if(key.equals("size"))return "Bubble size";if(key.equals("dictionary"))return "Personal dictionary";if(key.equals("permissions"))return "Permissions";return "Advanced";}
     private void saveScrollPosition(){if(scroll==null||!hasRendered||scrollRestorePending)return;if(renderedScreen.equals("home"))historyScrollY=scroll.getScrollY();else if(renderedScreen.equals("settings"))settingsScrollY=scroll.getScrollY();}
@@ -155,59 +165,42 @@ public final class MainActivity extends Activity {
     private void backToSettings(){rememberDictionaryDraft();String focus=origin;panel="";settingsVisible=true;render();Daybook.motion(body);View row=settingRows.get(focus);if(row!=null)row.post(row::requestFocusFromTouch);}
     private void openPanel(String key){origin=key;panel=key;settingsVisible=true;render();Daybook.motion(body);}
     private void parts() {
-        String[] titles=Store.quickThoughts(this)?new String[]{"Voice notes","Call","Translate","Dictation","Thoughts","Clipboard"}:new String[]{"Voice notes","Call","Translate","Dictation","Clipboard"};
-        int count=titles.length;if(part>=count)part=0;
-        deckPages=new LinearLayout[count];
-        deckScrolls=new ScrollView[count];
+        deckCardIds=visibleCards();
+        if(cardPosition(part)<0)part=firstCard();
+        int count=deckCardIds.length;
+        deckPages=new LinearLayout[6];deckScrolls=new ScrollView[6];deckDocks=new android.widget.FrameLayout[6];
         android.widget.FrameLayout[] cards=new android.widget.FrameLayout[count];
-        deckDocks=new android.widget.FrameLayout[count];
         int widthDp=getResources().getConfiguration().screenWidthDp;
         boolean wide=widthDp>=600;
         for(int i=0;i<count;i++){
-            cards[i]=new android.widget.FrameLayout(this);
-            cards[i].setTag(i);
-            cards[i].setBackground(Daybook.shape(this,Daybook.surface(this),28));
-            cards[i].setClipChildren(false);
-            LinearLayout face=Ui.column(this);
-            face.setPadding(Ui.dp(this,18),Ui.dp(this,16),Ui.dp(this,18),Ui.dp(this,10));
-            face.addView(Daybook.text(this,titles[i],22,Daybook.ink(this),true));
-            Ui.space(face,10);
-            deckScrolls[i]=new ScrollView(this);deckScrolls[i].setFillViewport(true);deckScrolls[i].setVerticalScrollBarEnabled(false);
-            deckPages[i]=Ui.column(this);
-            deckScrolls[i].addView(deckPages[i],new ViewGroup.LayoutParams(-1,-2));
-            face.addView(deckScrolls[i],new LinearLayout.LayoutParams(-1,0,1));
-            cards[i].addView(face,new android.widget.FrameLayout.LayoutParams(-1,-1));
-            if(i<3)deckDocks[i]=new android.widget.FrameLayout(this);
+            int id=deckCardIds[i];
+            cards[i]=new android.widget.FrameLayout(this);cards[i].setTag(i);
+            cards[i].setBackground(Daybook.shape(this,Daybook.surface(this),28));cards[i].setClipChildren(false);
+            LinearLayout face=Ui.column(this);face.setPadding(Ui.dp(this,18),Ui.dp(this,16),Ui.dp(this,18),Ui.dp(this,10));
+            String title=id==ProductProfile.VOICE?"Voice notes":id==ProductProfile.CALL?"Call Recordings":id==ProductProfile.DICTATION?"Dictation":id==ProductProfile.THOUGHTS?"Thoughts":"Clipboard";
+            face.addView(Daybook.text(this,title,22,Daybook.ink(this),true));Ui.space(face,10);
+            deckScrolls[id]=new ScrollView(this);deckScrolls[id].setFillViewport(true);deckScrolls[id].setVerticalScrollBarEnabled(false);
+            deckPages[id]=Ui.column(this);deckScrolls[id].addView(deckPages[id],new ViewGroup.LayoutParams(-1,-2));
+            face.addView(deckScrolls[id],new LinearLayout.LayoutParams(-1,0,1));cards[i].addView(face,new android.widget.FrameLayout.LayoutParams(-1,-1));
+            if(AppProduct.isNotes())deckDocks[id]=new android.widget.FrameLayout(this);
         }
-        Notes.callsMode(false);Notes.show(this,deckPages[0],deckDocks[0],this::render);
-        Calls.show(this,deckPages[1],deckDocks[1],this::render);
-        Translate.show(this,deckPages[2],deckDocks[2],this::render);
-        historyHost=deckPages[3];history();historyHost=null;
-        if(Store.quickThoughts(this)){Notes.thoughtsMode();Notes.show(this,deckPages[4],this::render);}
-        refreshClipboard();
-        strip.setClipChildren(false);
-        deck=new CardDeck(this);
-        deck.front=part;deck.two=wide;deck.setClipChildren(false);
+        populateCards();
+        strip.setClipChildren(false);deck=new CardDeck(this);deck.front=cardPosition(part);deck.two=wide;deck.setClipChildren(false);
         for(int i=0;i<count;i++){
-            FrameLayout.LayoutParams lp=new FrameLayout.LayoutParams(-1,-1);
-            lp.leftMargin=Ui.dp(this,10);lp.rightMargin=Ui.dp(this,10);lp.topMargin=Ui.dp(this,wide?28:64);lp.bottomMargin=Ui.dp(this,36);
+            FrameLayout.LayoutParams lp=new FrameLayout.LayoutParams(-1,-1);lp.leftMargin=Ui.dp(this,10);lp.rightMargin=Ui.dp(this,10);lp.topMargin=Ui.dp(this,wide?28:64);lp.bottomMargin=Ui.dp(this,36);
             deck.addView(cards[i],lp);
         }
-        deck.listener=(from,to)->{part=to;if(to==clipboardIndex())refreshClipboard();Haptics.fire(this,Haptics.POP);chime(from,to);deck.postDelayed(()->Haptics.fire(this,Haptics.RELEASE),170);for(int i=0;i<3;i++)if(deckDocks[i]!=null)deckDocks[i].setVisibility(i==to?View.VISIBLE:View.GONE);};
-        android.widget.FrameLayout stage=new android.widget.FrameLayout(this);
-        stage.setClipChildren(false);
-        stage.addView(deck,new android.widget.FrameLayout.LayoutParams(-1,-1));
-        for(int i=0;i<3;i++){
-            deckDocks[i].setVisibility(i==part?View.VISIBLE:View.GONE);
-            deckDocks[i].setElevation(Ui.dp(this,24));
-            android.widget.FrameLayout.LayoutParams over=new android.widget.FrameLayout.LayoutParams(-2,-2,Gravity.BOTTOM|Gravity.END);
-            over.bottomMargin=Ui.dp(this,2);over.rightMargin=0;
-            stage.addView(deckDocks[i],over);
+        deck.listener=(from,to)->{
+            part=deckCardIds[to];if(part==clipboardIndex())refreshClipboard();Haptics.fire(this,Haptics.POP);chime(from,to);deck.postDelayed(()->Haptics.fire(this,Haptics.RELEASE),170);
+            for(int id:deckCardIds)if(deckDocks[id]!=null)deckDocks[id].setVisibility(id==part?View.VISIBLE:View.GONE);
+        };
+        android.widget.FrameLayout stage=new android.widget.FrameLayout(this);stage.setClipChildren(false);stage.addView(deck,new android.widget.FrameLayout.LayoutParams(-1,-1));
+        for(int id:deckCardIds)if(deckDocks[id]!=null){
+            deckDocks[id].setVisibility(id==part?View.VISIBLE:View.GONE);deckDocks[id].setElevation(Ui.dp(this,24));
+            android.widget.FrameLayout.LayoutParams over=new android.widget.FrameLayout.LayoutParams(-2,-2,Gravity.BOTTOM|Gravity.END);over.bottomMargin=Ui.dp(this,2);over.rightMargin=0;stage.addView(deckDocks[id],over);
         }
-        LinearLayout.LayoutParams deckLp=new LinearLayout.LayoutParams(wide?Ui.dp(this,460):-1,-1);
-        if(wide)deckLp.gravity=Gravity.CENTER_HORIZONTAL;
-        strip.addView(stage,deckLp);
-        deck.post(()->deck.place(false));
+        LinearLayout.LayoutParams deckLp=new LinearLayout.LayoutParams(wide?Ui.dp(this,460):-1,-1);if(wide)deckLp.gravity=Gravity.CENTER_HORIZONTAL;
+        strip.addView(stage,deckLp);deck.post(()->deck.place(false));
     }
     private void chime(int from,int to){
         float[] note={196f,262f,330f,392f,466f,523f};
@@ -281,34 +274,23 @@ public final class MainActivity extends Activity {
                 cloud.addView(test,new LinearLayout.LayoutParams(-1,Ui.dp(this,44)));
                 cloud.addView(probe);
             }
-            else hint(cloud,"Dictation, notes and translation all use this key.");
+            else hint(cloud,AppProduct.isNotes()?"Voice notes and call transcripts use this key.":"Dictation and Quick Thoughts use this key.");
         }
         LinearLayout models=card("models","Models",modelSummary());
         if(models!=null){
-            models.addView(Daybook.text(this,"Dictation",13,Daybook.accent(this),true));
-            Ui.space(models,4);
-            models.addView(Daybook.text(this,"What the keyboard hears, then the model that cleans it up.",12,Daybook.muted(this),false));
-            modelOptions(models,ModelCatalog.TRANSCRIPT_NAMES,ModelCatalog.TRANSCRIPT_IDS,"transcribe_model",CloudApi.DEFAULT_TRANSCRIBE);
-            Ui.space(models,8);
-            modelOptions(models,ModelCatalog.CLEANUP_NAMES,ModelCatalog.CLEANUP_IDS,"polish_model",CloudApi.DEFAULT_POLISH);
-            Ui.space(models,12);
-            models.addView(Daybook.text(this,"Notes",13,Daybook.accent(this),true));
-            Ui.space(models,4);
-            models.addView(Daybook.text(this,"Large v3 is the accurate multilingual model. OSS 120B writes the note back without changing the words.",12,Daybook.muted(this),false));
-            modelOptions(models,ModelCatalog.TRANSCRIPT_NAMES,ModelCatalog.TRANSCRIPT_IDS,"notes_transcribe_model","whisper-large-v3");
-            Ui.space(models,8);
-            modelOptions(models,ModelCatalog.CLEANUP_NAMES,ModelCatalog.CLEANUP_IDS,"notes_polish_model","openai/gpt-oss-120b");
-            Ui.space(models,12);
-            models.addView(Daybook.text(this,"Translation",13,Daybook.accent(this),true));
-            Ui.space(models,4);
-            models.addView(Daybook.text(this,"Speech model, then the model that writes the other language. Leave these on Large v3 and OSS 120B for Bengali.",12,Daybook.muted(this),false));
-            modelOptions(models,ModelCatalog.TRANSCRIPT_NAMES,ModelCatalog.TRANSCRIPT_IDS,"translate_transcribe_model","whisper-large-v3");
-            Ui.space(models,8);
-            modelOptions(models,ModelCatalog.CLEANUP_NAMES,ModelCatalog.CLEANUP_IDS,"translate_model","openai/gpt-oss-120b");
-            Ui.space(models,8);
+            if(!AppProduct.isNotes()){
+                models.addView(Daybook.text(this,"Dictation",13,Daybook.accent(this),true));Ui.space(models,4);
+                models.addView(Daybook.text(this,"Speech recognition and optional cleanup for input fields.",12,Daybook.muted(this),false));
+                modelOptions(models,ModelCatalog.TRANSCRIPT_NAMES,ModelCatalog.TRANSCRIPT_IDS,"transcribe_model",CloudApi.DEFAULT_TRANSCRIBE);Ui.space(models,8);
+                modelOptions(models,ModelCatalog.CLEANUP_NAMES,ModelCatalog.CLEANUP_IDS,"polish_model",CloudApi.DEFAULT_POLISH);Ui.space(models,12);
+            }
+            models.addView(Daybook.text(this,AppProduct.isNotes()?"Recordings":"Quick Thoughts",13,Daybook.accent(this),true));Ui.space(models,4);
+            models.addView(Daybook.text(this,"Transcription and summaries for your saved recordings.",12,Daybook.muted(this),false));
+            modelOptions(models,ModelCatalog.TRANSCRIPT_NAMES,ModelCatalog.TRANSCRIPT_IDS,"notes_transcribe_model","whisper-large-v3");Ui.space(models,8);
+            modelOptions(models,ModelCatalog.CLEANUP_NAMES,ModelCatalog.CLEANUP_IDS,"notes_polish_model","openai/gpt-oss-120b");Ui.space(models,8);
         }
         // Dictation
-        LinearLayout dict=card("dictation","Dictation","English · Cloud");
+        LinearLayout dict=AppProduct.isNotes()?null:card("dictation","Dictation","English · Cloud");
         if(dict!=null){
             toggle(dict,"AI cleanup","Fixes punctuation; never changes your words.","ai_polish",false,null);separator(dict);
             settingRow(dict,"Cleanup style",Store.verbatim(this)?"Verbatim":"Basic","cleanup",v->openPanel("cleanup"));separator(dict);
@@ -326,12 +308,12 @@ public final class MainActivity extends Activity {
                 LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-1,-2);cp.bottomMargin=Ui.dp(this,6);chips.addView(chip,cp);}
             dict.addView(chips);dict.addView(Daybook.button(this,"Add word",false,v->openPanel("dictionary")));Ui.space(dict,10);
         }
-        LinearLayout thoughts=card("thoughts","Quick thoughts",Store.quickThoughts(this)?"On":"Off");
+        LinearLayout thoughts=AppProduct.isNotes()?null:card("thoughts","Quick thoughts",Store.quickThoughts(this)?"On":"Off");
         if(thoughts!=null){
             toggle(thoughts,"Quick thoughts","Keep an idle edge dot and a Thoughts card. Turning off hides both; saved thoughts stay on this phone.","quick_thoughts",false,()->{
                 deckReady=false;
                 if(Store.quickThoughts(this)){Notes.back();part=4;deckPages=null;}
-                else{if(Notes.thoughtOpened(this))Notes.back();if(part==4)part=0;}
+                else{if(Notes.thoughtOpened(this))Notes.back();if(part==4)part=firstCard();}
                 render();
             });
             if(Store.quickThoughts(this)){
@@ -345,52 +327,49 @@ public final class MainActivity extends Activity {
             }
             Ui.space(thoughts,10);
         }
-        String backupState=!DriveBackup.configured(this)?"Set up":DriveBackup.needsReconnect(this)?"Reconnect":DriveBackup.listingIncomplete(this)?"Needs attention":!DriveBackup.passwordReady(this)?"Set password":!Store.get(this,"backup_error","").isEmpty()?"Needs attention":"Google Drive";
-        LinearLayout backup=card("backup","Backup",backupState);
-        if(backup!=null){
-            Ui.space(backup,10);
-            TextView backupStatus=Daybook.text(this,DriveBackup.summary(this),11,Daybook.muted(this),false);
-            backupStatus.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
-            backup.addView(backupStatus);
-            DriveBackup.requestSnapshotNote(this,note->{if(!isFinishing()&&!isDestroyed()&&backupStatus.isAttachedToWindow())backupStatus.setText(DriveBackup.summary(this));});
-            Ui.space(backup,10);
-            backup.addView(Daybook.button(this,"Open backup",true,v->{
-                backupReturnFocus=true;
-                startActivity(new Intent(this,BackupActivity.class));
-            }),new LinearLayout.LayoutParams(-1,Ui.dp(this,48)));
-            Ui.space(backup,10);
+        LinearLayout transfer=card("recordings-transfer",AppProduct.isNotes()?"Import recordings":"Previous recordings",AppProduct.isNotes()?"From VonoTation":"Kept on this phone");
+        if(transfer!=null){
+            hint(transfer,AppProduct.isNotes()?"Choose a recordings export from VonoTation. Import asks for confirmation and keeps your existing notes.":"Your earlier voice notes and call recordings remain here. Open them or export a copy for Vono Notes; originals stay on this phone.");
+            transfer.addView(Daybook.button(this,AppProduct.isNotes()?"Import recordings":"Open previous recordings",false,v->startActivity(new Intent(this,RecordingTransferActivity.class))),new LinearLayout.LayoutParams(-1,Ui.dp(this,48)));
+            Ui.space(transfer,10);
+        }
+        if(!AppProduct.isNotes()){
+            LinearLayout backup=card("backup","Backup","On hold");
+            if(backup!=null){hint(backup,"Google Drive backup work is paused. Your existing local history stays on this phone.");Ui.space(backup,10);}
         }
         // Permissions (live)
         boolean notif=android.os.Build.VERSION.SDK_INT<33||checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)==PackageManager.PERMISSION_GRANTED;
-        boolean allSet=microphoneAllowed()&&FlowAccessibility.instance!=null&&notif&&BubbleHealth.ignoringBattery(this);
+        boolean allSet=microphoneAllowed()&&(AppProduct.isNotes()||FlowAccessibility.instance!=null)&&notif&&BubbleHealth.ignoringBattery(this);
         LinearLayout perms=card("permissions","Permissions",allSet?"All set":"Needs setup");
         if(perms!=null){
             settingRow(perms,"Microphone",microphoneAllowed()?"Allowed":"Not allowed","microphone",v->manageMicrophone());separator(perms);
-            settingRow(perms,"Floating microphone",FlowAccessibility.instance!=null?"Connected":floatingEnabled()?"Not connected":"Not enabled","floating",v->discloseAccessibility());separator(perms);
+            if(!AppProduct.isNotes()){settingRow(perms,"Floating microphone",FlowAccessibility.instance!=null?"Connected":floatingEnabled()?"Not connected":"Not enabled","floating",v->discloseAccessibility());separator(perms);}
             settingRow(perms,"Battery",BubbleHealth.ignoringBattery(this)?"Unrestricted":"Optimized","battery",v->{if(BubbleHealth.ignoringBattery(this)){try{startActivity(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));}catch(RuntimeException ignored){}}else BubbleHealth.requestBatteryExemption(this);});
             if(android.os.Build.VERSION.SDK_INT>=33){separator(perms);settingRow(perms,"Notifications",notif?"Allowed":"Not allowed","notifications",v->{if(!notif && !getPreferences(MODE_PRIVATE).getBoolean("notifications_requested",false)){getPreferences(MODE_PRIVATE).edit().putBoolean("notifications_requested",true).apply();requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},21);}else startActivity(new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE,getPackageName()));});}
-            separator(perms);settingRow(perms,"VonoTation keyboard",keyboardSelected()?"Selected":keyboardEnabled()?"Enabled":"Optional","keyboard",v->{if(!keyboardEnabled())startActivity(new Intent(Settings.ACTION_INPUT_METHOD_SETTINGS));else ((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).showInputMethodPicker();});
-            hint(perms,"Status updates when you return. The bubble is always on.");Ui.space(perms,10);
+            if(!AppProduct.isNotes()){separator(perms);settingRow(perms,"VonoTation keyboard",keyboardSelected()?"Selected":keyboardEnabled()?"Enabled":"Optional","keyboard",v->{if(!keyboardEnabled())startActivity(new Intent(Settings.ACTION_INPUT_METHOD_SETTINGS));else ((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).showInputMethodPicker();});
+            hint(perms,"Status updates when you return. The bubble is always on.");}Ui.space(perms,10);
         }
         Ui.space(body,16);
+        if(!AppProduct.isNotes()){
         Button update=Daybook.button(this,"Update",true,v->AppUpdate.start(this));
         update.setContentDescription("Update VonoTation");
         LinearLayout.LayoutParams up=new LinearLayout.LayoutParams(-1,Ui.dp(this,48));up.bottomMargin=Ui.dp(this,6);
         body.addView(update,up);
         TextView updateLine=Daybook.text(this,"",12,Daybook.muted(this),false);updateLine.setGravity(Gravity.CENTER);body.addView(updateLine);
         AppUpdate.bind(this,update,updateLine);
+        }
         Ui.space(body,8);
         String version="";try{version=getPackageManager().getPackageInfo(getPackageName(),0).versionName;}catch(PackageManager.NameNotFoundException ignored){}
-        TextView foot=Daybook.text(this,"VonoTation "+version,11,Daybook.muted(this),false);foot.setGravity(Gravity.CENTER);body.addView(foot);Ui.space(body,12);
+        TextView foot=Daybook.text(this,AppProduct.name()+" "+version,11,Daybook.muted(this),false);foot.setGravity(Gravity.CENTER);body.addView(foot);Ui.space(body,12);
     }
     private String modelSummary(){
-        return modelName(ModelCatalog.TRANSCRIPT_NAMES,ModelCatalog.TRANSCRIPT_IDS,Store.get(this,"transcribe_model",CloudApi.DEFAULT_TRANSCRIBE));
+        return modelName(ModelCatalog.TRANSCRIPT_NAMES,ModelCatalog.TRANSCRIPT_IDS,Store.get(this,AppProduct.isNotes()?"notes_transcribe_model":"transcribe_model",AppProduct.isNotes()?"whisper-large-v3":CloudApi.DEFAULT_TRANSCRIBE));
     }
     private static String lastFour(String key){return key.length()<=4?key:key.substring(key.length()-4);}
     /** Asks the saved endpoint whether this key is accepted. Does not spend a transcription. */
     private void probeConnection(View button,TextView result){
         String key=Vault.get(this);
-        if(key.isEmpty()){result.setTextColor(0xffb34c40);result.setText("Add an API key first.");return;}
+        if(key.isEmpty()){result.setTextColor(Daybook.coral(this));result.setText("Add an API key first.");return;}
         button.setEnabled(false);
         if(button instanceof Button)((Button)button).setText("Checking…");
         result.setTextColor(Daybook.muted(this));result.setText("Reaching the API…");
@@ -403,11 +382,11 @@ public final class MainActivity extends Activity {
                 if(isFinishing()||isDestroyed()||!button.isAttachedToWindow())return;
                 button.setEnabled(true);
                 if(button instanceof Button)((Button)button).setText("Test connection");
-                if(error!=null){result.setTextColor(0xffb34c40);result.setText("Couldn't reach the API. Check your internet and the endpoint.");return;}
+                if(error!=null){result.setTextColor(Daybook.coral(this));result.setText("Couldn't reach the API. Check your internet and the endpoint.");return;}
                 if(status>=200&&status<300){result.setTextColor(Daybook.accent(this));result.setText("Connected. This key works.");return;}
-                if(status==401||status==403){result.setTextColor(0xffb34c40);result.setText("The key was rejected ("+status+"). Open API key and paste a new one.");return;}
-                if(status==429){result.setTextColor(0xffb34c40);result.setText("The key reached the API, but the service is limiting requests right now.");return;}
-                result.setTextColor(0xffb34c40);result.setText("The API replied "+status+". Check the endpoint.");
+                if(status==401||status==403){result.setTextColor(Daybook.coral(this));result.setText("The key was rejected ("+status+"). Open API key and paste a new one.");return;}
+                if(status==429){result.setTextColor(Daybook.coral(this));result.setText("The key reached the API, but the service is limiting requests right now.");return;}
+                result.setTextColor(Daybook.coral(this));result.setText("The API replied "+status+". Check the endpoint.");
             });
         },"api-probe").start();
     }
@@ -441,7 +420,7 @@ public final class MainActivity extends Activity {
         toggle.setOnCheckedChangeListener((button,checked)->{
             if(!checked){Store.prefs(this).edit().putBoolean("daily_recaps_opt_in",false).apply();return;}
             if(Store.bool(this,"daily_recaps_opt_in",false))return;
-            new AlertDialog.Builder(this).setTitle("Turn on daily recaps?").setMessage("VonoTation will send each day’s saved dictations (not password or PIN dictations) and completed Quick Thoughts transcripts to your AI provider ("+Store.get(this,"api_base",CloudApi.DEFAULT_BASE)+"). Dictation uses your cleanup model; Quick Thoughts uses your Voice Notes cleanup model. Each card shows its own 2–3 sentence recap under the day. Your provider may bill for these requests. You can turn this off at any time.").setNegativeButton("Not now",(d,w)->button.setChecked(false)).setOnCancelListener(d->button.setChecked(false)).setPositiveButton("Turn on",(d,w)->{Store.prefs(this).edit().putBoolean("daily_recaps_opt_in",true).apply();Daybook.feedback(button);}).show();
+            new AlertDialog.Builder(this).setTitle("Turn on daily recaps?").setMessage("VonoTation will send each day’s saved dictations (not password or PIN dictations) and completed Quick Thoughts transcripts to your AI provider ("+Store.get(this,"api_base",CloudApi.DEFAULT_BASE)+"). Dictation uses your cleanup model; Quick Thoughts uses its own saved cleanup model. Each card shows its own 2–3 sentence recap under the day. Your provider may bill for these requests. You can turn this off at any time.").setNegativeButton("Not now",(d,w)->button.setChecked(false)).setOnCancelListener(d->button.setChecked(false)).setPositiveButton("Turn on",(d,w)->{Store.prefs(this).edit().putBoolean("daily_recaps_opt_in",true).apply();Daybook.feedback(button);}).show();
         });
         row.addView(toggle);row.setBackground(Daybook.ripple(this,android.graphics.Color.TRANSPARENT,8));row.setOnClickListener(v->toggle.setChecked(!toggle.isChecked()));parent.addView(row);
     }
@@ -538,8 +517,11 @@ public final class MainActivity extends Activity {
         for(String entry:enabled.split(":"))if(own.equals(android.content.ComponentName.unflattenFromString(entry)))return true;
         return false;
     }
-    private String permissionSummary(){return microphoneAllowed()&&FlowAccessibility.instance!=null?"Ready":"Needs setup";}
+    private String permissionSummary(){return microphoneAllowed()&&(AppProduct.isNotes()||FlowAccessibility.instance!=null)?"Ready":"Needs setup";}
     private void permissionsPanel(){
+        if(AppProduct.isNotes()){
+            LinearLayout required=Daybook.card(this);settingRow(required,"Microphone",microphoneAllowed()?"Allowed":"Not allowed","microphone",v->manageMicrophone());body.addView(required);hint(body,"Vono Notes records when you start a recording. It does not use the floating dictation microphone or keyboard.");return;
+        }
         hint(body,"Tap a permission to set it up or manage it. Status updates when you return.");
         groupLabel("Required for floating dictation");
         LinearLayout required=Daybook.card(this);
@@ -608,8 +590,8 @@ public final class MainActivity extends Activity {
         key.setOnFocusChangeListener((v,focus)->{ if(focus && masked[0]) showEntry.run(); });
         key.setOnClickListener(v->{ if(masked[0]) showEntry.run(); });
         update.setOnClickListener(v->{ showEntry.run(); key.requestFocus(); });
-        ModelPicker model=new ModelPicker(form,"Transcript",ModelCatalog.TRANSCRIPT_NAMES,ModelCatalog.TRANSCRIPT_IDS,whisperV3?CloudApi.DEFAULT_TRANSCRIBE:Store.get(this,"transcribe_model",CloudApi.DEFAULT_TRANSCRIBE)); Ui.space(form,12);
-        ModelPicker ai=new ModelPicker(form,"Cleanup",ModelCatalog.CLEANUP_NAMES,ModelCatalog.CLEANUP_IDS,whisperV3?CloudApi.DEFAULT_POLISH:Store.get(this,"polish_model",CloudApi.DEFAULT_POLISH)); Ui.space(form,8); form.addView(Daybook.text(this,"On Groq, Instant and Versatile need enterprise access. OSS models are available alternatives.",12,Daybook.muted(MainActivity.this),false)); TextView error=Daybook.text(this,"",12,0xffb34c40,false); Ui.space(form,10); form.addView(error);
+        ModelPicker model=new ModelPicker(form,"Transcript",ModelCatalog.TRANSCRIPT_NAMES,ModelCatalog.TRANSCRIPT_IDS,whisperV3?(AppProduct.isNotes()?"whisper-large-v3":CloudApi.DEFAULT_TRANSCRIBE):Store.get(this,AppProduct.isNotes()?"notes_transcribe_model":"transcribe_model",AppProduct.isNotes()?"whisper-large-v3":CloudApi.DEFAULT_TRANSCRIBE)); Ui.space(form,12);
+        ModelPicker ai=new ModelPicker(form,"Cleanup",ModelCatalog.CLEANUP_NAMES,ModelCatalog.CLEANUP_IDS,whisperV3?CloudApi.DEFAULT_POLISH:Store.get(this,AppProduct.isNotes()?"notes_polish_model":"polish_model",CloudApi.DEFAULT_POLISH)); Ui.space(form,8); form.addView(Daybook.text(this,"On Groq, Instant and Versatile need enterprise access. OSS models are available alternatives.",12,Daybook.muted(MainActivity.this),false)); TextView error=Daybook.text(this,"",12,Daybook.coral(this),false); Ui.space(form,10); form.addView(error);
         ScrollView scroll=new ScrollView(this); scroll.addView(form);
         AlertDialog.Builder builder=new AlertDialog.Builder(this).setTitle(whisperV3?"Groq defaults":"API key & models").setView(scroll).setNegativeButton("Close",null).setPositiveButton("Save",null);
         builder.setNeutralButton("Remove key",(d,w)->{synchronized(Store.class){Store.prefs(this).edit().remove("api_secret").remove("api_iv").putString("engine","cloud").putBoolean("ai_polish",false).apply();}render();});
@@ -636,7 +618,7 @@ public final class MainActivity extends Activity {
                 runOnUiThread(()->{
                     if(isFinishing()||isDestroyed())return;
                     save.setEnabled(true); keyState.setTextColor(Daybook.accent(this));
-                    if(rejection!=null){ keyState.setTextColor(0xffb34c40); keyState.setText(rejection+(stored[0].isEmpty()?"":" Your previous key is still saved.")); key.requestFocus(); return; }
+                    if(rejection!=null){ keyState.setTextColor(Daybook.coral(this)); keyState.setText(rejection+(stored[0].isEmpty()?"":" Your previous key is still saved.")); key.requestFocus(); return; }
                     try { commitConnection(url,transcribeModel,cleanupModel,typed,whisperV3); }
                     catch(Exception ex){ keyState.setText(""); error.setText("Could not save the key."); return; }
                     stored[0]=typed; render(); showSaved.run(); keyState.setText("✓ API key saved"+saveNote);
@@ -649,7 +631,7 @@ public final class MainActivity extends Activity {
     /** Endpoint, models and (optionally) a new key are committed as one preference snapshot. */
     private void commitConnection(String url,String transcribeModel,String cleanupModel,String newKey,boolean whisperV3) throws Exception {
         synchronized(Store.class){
-            android.content.SharedPreferences.Editor connection=Store.prefs(this).edit().putString("api_base",url).putString("transcribe_model",transcribeModel).putString("polish_model",cleanupModel);
+            android.content.SharedPreferences.Editor connection=Store.prefs(this).edit().putString("api_base",url).putString(AppProduct.isNotes()?"notes_transcribe_model":"transcribe_model",transcribeModel).putString(AppProduct.isNotes()?"notes_polish_model":"polish_model",cleanupModel);
             if(newKey!=null && !newKey.isEmpty()) Vault.write(connection,Vault.prepare(newKey));
             if(whisperV3) connection.putString("engine","cloud");
             connection.apply();

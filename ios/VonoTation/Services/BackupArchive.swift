@@ -74,6 +74,7 @@ struct BackupPayload: Codable {
     var format = "VonoTation-iOS"
     var schema = 1
     var exportedAt = Date()
+    var product: AppProduct? = nil
     var notes: [VonoNote]
     var settings: AppSettings
 
@@ -103,6 +104,16 @@ struct BackupPayload: Codable {
                   note.error == nil else { throw VonoError.message("The backup contains invalid or unfinished notes. Your local data was not changed.") }
         }
         return self
+    }
+    func validated(for receivingProduct: AppProduct) throws -> BackupPayload {
+        let payload = try validated()
+        guard product == receivingProduct || (product == nil && receivingProduct == .vonotation) else {
+            throw VonoError.message("This backup belongs to a different Vono app. Your local data was not changed.")
+        }
+        if product != nil && notes.contains(where: { !receivingProduct.supports($0.kind) }) {
+            throw VonoError.message("This backup contains another app’s note types. Your local data was not changed.")
+        }
+        return payload
     }
     static func validEndpoint(_ value: String) -> Bool {
         guard let url = URLComponents(string: value), url.scheme?.lowercased() == "https",

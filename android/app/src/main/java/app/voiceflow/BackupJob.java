@@ -13,7 +13,7 @@ public final class BackupJob extends JobService {
     }
 
     @Override public boolean onStartJob(JobParameters parameters) {
-        if (!DriveBackup.automaticEnabled(getApplicationContext())) return false;
+        if (!AppProduct.backupEnabled() || !DriveBackup.automaticEnabled(getApplicationContext())) return false;
         final Run run = new Run();
         synchronized (runs) {
             Run previous = runs.put(parameters, run);

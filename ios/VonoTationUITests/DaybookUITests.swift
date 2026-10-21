@@ -62,11 +62,10 @@ final class DaybookUITests: XCTestCase {
         XCTAssertTrue(note.waitForExistence(timeout: 3))
         XCTAssertGreaterThan(day.frame.width, 44)
         XCTAssertLessThanOrEqual(app.staticTexts["page.title"].frame.maxX, app.frame.maxX)
-        openCard("nav.calls")
-        XCTAssertTrue(app.buttons["audio.import"].exists)
-        XCTAssertFalse(app.buttons["record.toggle"].exists)
-        openCard("nav.translate")
-        XCTAssertTrue(app.textFields["translation.language"].exists)
+        XCTAssertFalse(app.buttons["nav.calls"].exists)
+        XCTAssertFalse(app.buttons["nav.voicenotes"].exists)
+        XCTAssertFalse(app.buttons["nav.translate"].exists)
+
     }
 
     func testThoughtDetailShowsDistinctSummaryAndOriginalTranscript() {
@@ -181,4 +180,17 @@ final class DaybookUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Add an API key to transcribe")).firstMatch.waitForExistence(timeout: 5))
         XCTAssertGreaterThanOrEqual(elements(prefix: "note.").count, 2)
     }
+    func testPreviousRecordingsRemainReadOnlyAndShareable() {
+        app.buttons["nav.settings"].tap()
+        let previous = app.buttons["settings.previous"]
+        revealVertically(previous); previous.tap()
+        let row = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "legacy.note.")).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5)); row.tap()
+        XCTAssertTrue(app.staticTexts["note.legacy.notice"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["note.detail.edit"].exists)
+        XCTAssertFalse(app.buttons["note.detail.delete"].exists)
+        XCTAssertFalse(app.buttons["note.detail.retry"].exists)
+        XCTAssertTrue(app.buttons["note.detail.share"].exists)
+    }
+
 }

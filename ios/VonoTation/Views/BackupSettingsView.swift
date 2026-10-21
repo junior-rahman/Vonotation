@@ -26,7 +26,7 @@ struct BackupSettingsView: View {
                             .font(.subheadline).foregroundStyle(Daybook.muted)
                         DaybookCard {
                             Text("Create a backup").font(.headline)
-                            Text("Includes saved notes, dictations and settings. Recordings, Clipboard, cached recaps and API keys are excluded.")
+                            Text("Includes this app’s saved text and settings. Source recordings, Clipboard, cached recaps and API keys are excluded. Previous recordings retained from the combined app stay on this device.")
                                 .font(.caption).foregroundStyle(Daybook.muted)
                             SecureField("Backup password · at least 12 characters", text: $password)
                                 .textContentType(.newPassword).daybookField().accessibilityIdentifier("settings.backup.password")
@@ -86,6 +86,7 @@ struct BackupSettingsView: View {
             }
             .foregroundStyle(Daybook.ink).tint(Daybook.accent)
             .navigationTitle("Backup").navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(Daybook.paper, for: .navigationBar).toolbarBackground(.visible, for: .navigationBar)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { clearSecrets(); dismiss() }.accessibilityIdentifier("settings.backup.done") } }
             .safeAreaInset(edge: .bottom) { if model.isRecording { ActiveRecordingStrip().padding(.horizontal, 16).background(Daybook.paper) } }
             .fileImporter(isPresented: $importing, allowedContentTypes: [.data], allowsMultipleSelection: false) { result in

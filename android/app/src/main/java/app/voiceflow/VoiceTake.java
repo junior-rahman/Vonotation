@@ -91,6 +91,8 @@ final class VoiceTake {
     static void beginCall(Context context,Listener listener,File folder,long id) { open(context,listener,false,false,folder,id,true,false); }
 
     private static synchronized void open(Context context,Listener listener,boolean untilQuiet,boolean needsKey,File folder,long id,boolean call,boolean thought) {
+        if(!ProductProfile.recording(AppProduct.isNotes(),needsKey,call,thought)){listener.failed("This recording belongs in "+(thought?"VonoTation":"Vono Notes")+".");return;}
+        if(call && NoteRecordingService.busy()){listener.failed("Finish the voice note first.");return;}
         if(Dictation.isWorking()){listener.failed("Finish your dictation first.");return;}
         if(current!=null && current.note && current.active){listener.failed("Finish the recording first.");return;}
         if(current!=null && current.note && current.finalizing){listener.failed("The recording is still being saved. Try again in a moment.");return;}

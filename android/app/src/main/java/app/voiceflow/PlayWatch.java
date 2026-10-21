@@ -32,6 +32,8 @@ public final class PlayWatch extends Service {
 
     @Override public IBinder onBind(Intent intent){return null;}
 
+    // Both merged product manifests declare PlayWatch as mediaPlayback; variant lint cannot resolve it.
+    @android.annotation.SuppressLint("ForegroundServiceType")
     @Override public int onStartCommand(Intent intent,int flags,int startId){
         if(intent!=null && STOP.equals(intent.getAction())){Notes.stopFromNotice();stopForeground(STOP_FOREGROUND_REMOVE);stopSelf();return START_NOT_STICKY;}
         String title=intent==null?"Recording":intent.getStringExtra("title");

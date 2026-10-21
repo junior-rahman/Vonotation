@@ -66,8 +66,15 @@ final class Notes {
 
     static boolean back(){if(open<0)return false;stopPlayback();fixing=false;original=false;translating=false;thoughtSourceShown=-1;open=-1;return true;}
     static void stop(){stopPlayback();}
-    static boolean finishRecording(){return VoiceTake.finishNote(liveId);}
-    static void resumeThoughtSummaries(Context context){ThoughtDailySummaries.resume(context);}
+    static boolean finishRecording(){return finishRecording(liveId);}
+    static boolean finishRecording(long id){return id>0 && liveId==id && VoiceTake.finishNote(id);}
+    /** Only the current explicit Cancel action may discard a voice note. */
+    static boolean cancelRecording(Context context,long id){
+        if(!AppProduct.isNotes() || id<=0 || liveId!=id || !VoiceTake.cancelNote(id))return false;
+        liveId=-1;remove(context,id);poke();return true;
+    }
+    private static boolean ownsNote(JSONObject note){return note!=null && (AppProduct.isNotes()!=note.optBoolean("thought"));}
+    static void resumeThoughtSummaries(Context context){if(!AppProduct.isNotes())ThoughtDailySummaries.resume(context);}
     static void pauseThoughtSummaries(){ThoughtDailySummaries.pause();}
     static void refreshThoughtSummaries(){if(ThoughtDailySummaries.active())poke();}
 
@@ -75,6 +82,8 @@ final class Notes {
     static void show(Activity activity,LinearLayout body,android.widget.FrameLayout dock,Runnable refresh) {
         screen=new java.lang.ref.WeakReference<>(activity);onChange=refresh;
         catchUp(activity.getApplicationContext());
+        if(AppProduct.isNotes()==thoughtsOnly)return;
+        if(open>=0 && !ownsNote(find(activity,open)))back();
         if(thoughtsOnly && !Store.quickThoughts(activity))return;
         if(open<0)list(activity,body,dock,refresh);else detail(activity,body,refresh);
     }
@@ -277,35 +286,64 @@ final class Notes {
     }
 
     private static void record(Activity activity,Runnable refresh) {
+        if(!AppProduct.isNotes())return;
         if(Translate.going()){toast(activity,"Translation is still going. Finish it first.");return;}
         if(VoiceTake.callRunning() || LineWire.running()){toast(activity,"A call is being recorded. Wait until it ends.");return;}
         if(VoiceTake.thoughtRunning()){toast(activity,"A Quick Thought is recording. Finish it with the floating control first.");return;}
         if(VoiceTake.noteRunning()){
-            if(!VoiceTake.finishNote(liveId))return;
+            long id=liveId;
+            if(!VoiceTake.finishNote(id))return;
+            NoteRecordingService.finalizing(activity,id);
             if(liveDigits!=null){liveDigits.animate().cancel();liveDigits.setTranslationY(0);liveDigits.setAlpha(1f);liveDigits.setTextSize(16);liveDigits.setText("Saving…");shownFace="";}
             if(liveMeter!=null)liveMeter.setVisibility(android.view.View.GONE);
             if(beat!=null){beat.cancel();beat=null;}
             return;
         }
-        if(busy)return;
+        if(busy || NoteRecordingService.busy())return;
         choosing=false;
-        if(activity.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){activity.requestPermissions(new String[]{android.Manifest.permission.RECORD_AUDIO,android.Manifest.permission.ANSWER_PHONE_CALLS},22);return;}
-        if(activity.checkSelfPermission(android.Manifest.permission.ANSWER_PHONE_CALLS)!=android.content.pm.PackageManager.PERMISSION_GRANTED)activity.requestPermissions(new String[]{android.Manifest.permission.ANSWER_PHONE_CALLS},24);
+        if(activity.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){activity.requestPermissions(new String[]{android.Manifest.permission.RECORD_AUDIO},22);return;}
         stopPlayback();
         Context app=activity.getApplicationContext();
-        long id=System.currentTimeMillis();
-        liveId=id;
-        File folder=dir(app);
-        holdMic(app,true);
-        VoiceTake.beginNote(app,new VoiceTake.Listener(){
-            public void listening(){if(liveDigits!=null && liveDigits.isAttachedToWindow())armTick();}
-            public void failed(String message){liveId=-1;holdMic(app,false);toast(app,message);poke();}
-            public void finished(File file){}
-            public void partReady(List<File> files){remember(app,id,files,pick,true);}
-            public void finishedAll(List<File> files,boolean captureComplete){liveId=-1;holdMic(app,false);remember(app,id,files,pick,true);stamp(app,id,"wave",barsText(VoiceTake.bars()));if(!captureComplete)stamp(app,id,"capture_error","Recording ended before every audio segment could be finalized.");toast(app,captureComplete?(online(app)?"Saved. Writing it up.":"Saved on this phone. I'll write it up when you're online."):"The recording was interrupted. Surviving source audio is saved.");writeUp(app,id);}
-        },folder,id);
-        if(dockHost!=null && VoiceTake.noteRunning() && !VoiceTake.callRunning()){dockHost.removeAllViews();dockHost.addView(actionPill(activity,refresh),new android.widget.FrameLayout.LayoutParams(-2,-2));armTick();}
-        else refresh.run();
+        long id; synchronized(Store.class){id=Store.nextId(all(app),System.currentTimeMillis());while(noteDeleted(app,id))id=Store.nextId(all(app),id+1);}
+        final long captureId=id;
+        final String language=pick;
+        liveId=captureId;
+        // Starting the microphone is owned by the foreground Service. A wake lock
+        // or an accessibility service is not a substitute for mic FGS eligibility.
+        NoteRecordingService.begin(activity,captureId,()->{
+            if(liveId!=captureId){NoteRecordingService.completed(app,captureId);return;}
+            VoiceTake.beginNote(app,new VoiceTake.Listener(){
+                public void listening(){if(liveDigits!=null && liveDigits.isAttachedToWindow())armTick();poke();}
+                public void failed(String message){
+                    if(liveId==captureId)liveId=-1;
+                    markRecordingFailed(app,captureId,message);
+                    NoteRecordingService.completed(app,captureId);toast(app,message);poke();
+                }
+                public void finished(File file){}
+                public void partReady(List<File> files){remember(app,captureId,files,language,true);}
+                public void finishedAll(List<File> files,boolean captureComplete){
+                    try {
+                        if(liveId==captureId)liveId=-1;
+                        remember(app,captureId,files,language,true);
+                        stamp(app,captureId,"wave",barsText(VoiceTake.bars()));
+                        if(!captureComplete)stamp(app,captureId,"capture_error","Recording ended before every audio segment could be finalized.");
+                        toast(app,captureComplete?(online(app)?"Saved. Writing it up.":"Saved on this phone. I'll write it up when you're online."):"The recording was interrupted. Surviving source audio is saved.");
+                    } finally { NoteRecordingService.completed(app,captureId); }
+                    writeUp(app,captureId);
+                }
+            },dir(app),captureId);
+            if(VoiceTake.noteRunning()){
+                // A process death before the first three-minute segment must
+                // still leave a row from which its source audio can be recovered.
+                try{String source=captureId+"-0.m4a";save(app,captureId,"","",false,language,"",source,0,"",true,new JSONArray().put(source));if(find(app,captureId)==null)throw new java.io.IOException("The recording recovery record was not committed.");}
+                catch(Exception failure){VoiceTake.finishNote(captureId);NoteRecordingService.finalizing(app,captureId);toast(app,"Recording started, but its recovery record could not be saved. Finishing safely.");}
+            }
+            if(dockHost!=null && VoiceTake.noteRunning() && !VoiceTake.callRunning()){dockHost.removeAllViews();dockHost.addView(actionPill(activity,refresh),new android.widget.FrameLayout.LayoutParams(-2,-2));armTick();}
+            else refresh.run();
+        },message->{if(liveId==captureId)liveId=-1;toast(app,message);poke();});
+    }
+    private static void markRecordingFailed(Context context,long id,String message){
+        synchronized(Store.class){try{JSONObject captured=find(context,id);if(!ownsNote(captured))return;updateCaptured(context,captured,item->item.put("recording",false).put("pending",!filesOf(context,item).isEmpty()).put("source_interrupted",true).put("capture_error",message==null?"The microphone could not finish this recording.":message));}catch(Exception ignored){}}
     }
 
     private static android.widget.FrameLayout dockHost;
@@ -379,6 +417,8 @@ final class Notes {
     /** Started by the call watcher; each source path stays bound to the owned call id. */
     static void beginCall(Context context) { beginCall(context,System.currentTimeMillis()); }
     static boolean beginCall(Context context,long id) {
+        if(!AppProduct.isNotes())return false;
+        if(NoteRecordingService.busy())return false;
         if(VoiceTake.running() || VoiceTake.updateBusy())return false;
         if(context.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){toast(context,"Allow microphone access first.");return false;}
         liveId=id;callId=id;
@@ -606,16 +646,18 @@ final class Notes {
     static void catchUp(Context context) {
         catchUp(context,false);
     }
-    static void catchUpThoughts(Context context){catchUp(context,true);}
+    static void catchUpThoughts(Context context){if(!AppProduct.isNotes())catchUp(context,true);}
     static boolean hasPendingThoughts(Context context){
+        if(AppProduct.isNotes())return false;
         JSONArray notes=all(context);for(int i=0;i<notes.length();i++){JSONObject note=notes.optJSONObject(i);if(note!=null&&note.optBoolean("thought")&&!note.optBoolean("recording")&&note.optBoolean("pending")&&!filesOf(context,note).isEmpty())return true;}return false;
     }
     private static void catchUp(Context context,boolean thoughtsOnlyDrain) {
-        if(context==null)return;
-        ThoughtJob.schedule(context.getApplicationContext());
+        if(context==null || (AppProduct.isNotes() && thoughtsOnlyDrain))return;
+        if(!AppProduct.isNotes())ThoughtJob.schedule(context.getApplicationContext());
+        ensureThoughtRetry(context);
         JSONArray notes=all(context);
         for(int i=0;i<notes.length();i++){
-            JSONObject note=notes.optJSONObject(i);if(note==null)continue;
+            JSONObject note=notes.optJSONObject(i);if(!ownsNote(note))continue;
             if(thoughtsOnlyDrain&&!note.optBoolean("thought"))continue;
             if(note.optBoolean("thought"))ensureThoughtRetry(context);
             if(note.optBoolean("recording")){
@@ -630,7 +672,7 @@ final class Notes {
     /** One process-lifetime retry hook; it never opens a microphone or an activity. */
     private static synchronized void ensureThoughtRetry(Context context){
         Context app=context.getApplicationContext();
-        if(thoughtRetryAction==null)thoughtRetryAction=()->catchUpThoughts(app);
+        if(thoughtRetryAction==null)thoughtRetryAction=()->catchUp(app,!AppProduct.isNotes());
         if(thoughtRetryPrefs==null){
             thoughtRetryPrefs=(prefs,key)->{if("api_secret".equals(key)||"api_iv".equals(key)||"api_base".equals(key)||"notes_transcribe_model".equals(key))requestThoughtRetry();};
             Store.prefs(app).registerOnSharedPreferenceChangeListener(thoughtRetryPrefs);
@@ -670,18 +712,18 @@ final class Notes {
     }
     private static long segmentIndex(File file){try{String name=file.getName();return Long.parseLong(name.substring(name.lastIndexOf('-')+1,name.length()-4));}catch(RuntimeException invalid){return Long.MAX_VALUE;}}
 
-    static void writeUpThought(Context context,long id){writeUp(context.getApplicationContext(),id);}
+    static void writeUpThought(Context context,long id){if(!AppProduct.isNotes())writeUp(context.getApplicationContext(),id);}
     private static void thoughtToast(Context context,String message){Activity activity=screen.get();if(activity!=null&&!activity.isDestroyed()&&!activity.isFinishing()&&activity.hasWindowFocus())toast(context,message);}
 
     private static void writeUp(Context context,long id) {
-        JSONObject waiting=find(context,id);if(waiting==null || waiting.optBoolean("recording"))return;
+        JSONObject waiting=find(context,id);if(!ownsNote(waiting) || waiting.optBoolean("recording"))return;
         if(!online(context)||Vault.get(context).isEmpty())return;
         synchronized(Notes.class){if(draining||busy)return;draining=true;transcribing=id;}
         poke();
         work.execute(()->{
             JSONObject[] processing={waiting};
             try {
-                JSONObject note=find(context,id);if(note==null||note.optBoolean("recording"))return;processing[0]=note;
+                JSONObject note=find(context,id);if(!ownsNote(note)||note.optBoolean("recording"))return;processing[0]=note;
                 String requestedLanguage=note.optString("retry_language",note.optString("lang","auto"));
                 Transcription result=transcribeNote(context,note,requestedLanguage);
                 if(note.optBoolean("thought")){
@@ -851,11 +893,6 @@ final class Notes {
         return error.getMessage()==null?"Couldn't write it up. The recording is still saved.":error.getMessage();
     }
 
-    private static void holdMic(Context context,boolean on) {
-        try { context.startService(new android.content.Intent(context,FlowAccessibility.class).setAction(on?"app.voiceflow.NOTE_ON":"app.voiceflow.NOTE_OFF")); }
-        catch(RuntimeException ignored) {}
-    }
-
     static void tagLatestCall(Context context,String who){
         if(who==null || who.trim().isEmpty())return;
         JSONArray notes=all(context);
@@ -918,6 +955,7 @@ final class Notes {
     private static boolean updateCaptured(Context context,JSONObject captured,NoteMutation mutation)throws Exception{
         synchronized(Store.class){
             long id=captured.optLong("id");JSONObject current=find(context,id);
+            if(!ownsNote(captured) || !ownsNote(current))return false;
             if(!NoteWorkPolicy.canApply(captured.toString(),current==null?null:current.toString()))return false;
             JSONArray previous=all(context),next=new JSONArray();
             for(int i=0;i<previous.length();i++){JSONObject item=previous.optJSONObject(i);if(item==null)continue;if(item.optLong("id")==id){mutation.apply(item);item.put("revision",item.optLong("revision",1)+1);}next.put(item);}
@@ -971,13 +1009,11 @@ final class Notes {
     }
 
 
-    /** Ordinary voice notes keep their existing 100-entry policy; thoughts are never evicted by it. */
+    /** Adding a recording never evicts another recording or deletes its source audio. */
     private static void appendRetained(JSONArray next,JSONArray previous,long excludedId){
-        int ordinary=0;
-        for(int i=0;i<next.length();i++){JSONObject entry=next.optJSONObject(i);if(entry!=null && !entry.optBoolean("thought"))ordinary++;}
         for(int i=0;i<previous.length();i++){
             JSONObject entry=previous.optJSONObject(i);if(entry==null || entry.optLong("id")==excludedId)continue;
-            if(entry.optBoolean("thought"))next.put(entry);else if(entry.optBoolean("recording")||entry.optBoolean("pending")){next.put(entry);}else if(ordinary<100){next.put(entry);ordinary++;}
+            next.put(entry);
         }
     }
 
@@ -986,6 +1022,7 @@ final class Notes {
         return keepThought(context,requestedId,raw,duration,null);
     }
     static long keepThought(Context context,long requestedId,String raw,long duration,File source) {
+        if(AppProduct.isNotes())return -1;
         List<File> copied=new ArrayList<>();
         synchronized(Store.class){
         if(raw==null || raw.trim().isEmpty())return -1;
@@ -1014,6 +1051,7 @@ final class Notes {
     }
     /** Failed/interrupted capture can save its sealed subset without becoming eligible for a length discard. */
     static long keepThoughtAudio(Context context,long requestedId,List<File> sources,long duration,boolean complete,boolean captureComplete){
+        if(AppProduct.isNotes())return -1;
         long saved=-1;List<File> copied=new ArrayList<>();
         synchronized(Store.class){
             if(requestedId<=0||thoughtDeleted(context,requestedId))return -1;
@@ -1064,6 +1102,7 @@ final class Notes {
     }
 
     static void formatThought(Context context,long id) {
+        if(AppProduct.isNotes())return;
         Context app=context.getApplicationContext();
         JSONObject captured=find(app,id);if(captured==null || !captured.optBoolean("thought") || captured.optBoolean("user_edited"))return;
         final long revision=captured.optLong("revision",1);
@@ -1240,6 +1279,7 @@ final class Notes {
     }
 
     private static void retryThought(Context context,long id){
+        if(AppProduct.isNotes())return;
         synchronized(Store.class){try{String before=Store.get(context,"notes","[]");JSONArray notes=new JSONArray(before);boolean found=false;for(int i=0;i<notes.length();i++){JSONObject note=notes.optJSONObject(i);if(note!=null&&note.optLong("id")==id&&note.optBoolean("thought")&&!note.optBoolean("recording")){note.put("pending",true).put("retry_after",0).put("retry_count",0).put("revision",note.optLong("revision",1)+1);found=true;}}if(!found)return;if(!Store.prefs(context).edit().putString("notes",notes.toString()).commit()){Store.prefs(context).edit().putString("notes",before).commit();return;}}catch(Exception unavailable){return;}}
         ThoughtJob.schedule(context.getApplicationContext());writeUpThought(context,id);
     }
