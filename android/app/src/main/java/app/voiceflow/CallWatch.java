@@ -319,7 +319,10 @@ public final class CallWatch extends Service {
 
     private boolean recordingNotice(){return foreground("Recording this call","Saved in Calls after you hang up.",true);}
 
+    // Notes declares microphone|specialUse; the original product deliberately removes this component.
+    @android.annotation.SuppressLint("ForegroundServiceType")
     private boolean foreground(String title,String text,boolean recording){
+        if(!AppProduct.isNotes())return false;
         NotificationManager notifications=(NotificationManager)getSystemService(NOTIFICATION_SERVICE);
         notifications.createNotificationChannel(new NotificationChannel("callwatch","Call recording",NotificationManager.IMPORTANCE_LOW));
         PendingIntent open=PendingIntent.getActivity(this,44,new Intent(this,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);

@@ -41,20 +41,29 @@ struct FinishVonoRecordingIntent: AppIntent {
     }
 }
 
+// Keep each provider body free of conditional directives: Apple's compile-time
+// shortcut extractor otherwise omits the record phrase from generated metadata.
+#if VONO_NOTES
 struct VonoShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
-        #if VONO_NOTES
         AppShortcut(intent: RecordVoiceNoteIntent(), phrases: [
             "Record a voice note with \(.applicationName)"
         ], shortTitle: "Voice note", systemImageName: "waveform")
-        #else
-        AppShortcut(intent: RecordQuickThoughtIntent(), phrases: [
-            "Record a thought with \(.applicationName)",
-            "Start a Quick Thought in \(.applicationName)"
-        ], shortTitle: "Quick Thought", systemImageName: "note.text")
-        #endif
         AppShortcut(intent: FinishVonoRecordingIntent(), phrases: [
             "Finish recording in \(.applicationName)"
         ], shortTitle: "Finish recording", systemImageName: "stop.circle")
     }
 }
+#else
+struct VonoShortcuts: AppShortcutsProvider {
+    static var appShortcuts: [AppShortcut] {
+        AppShortcut(intent: RecordQuickThoughtIntent(), phrases: [
+            "Record a thought with \(.applicationName)",
+            "Start a Quick Thought in \(.applicationName)"
+        ], shortTitle: "Quick Thought", systemImageName: "note.text")
+        AppShortcut(intent: FinishVonoRecordingIntent(), phrases: [
+            "Finish recording in \(.applicationName)"
+        ], shortTitle: "Finish recording", systemImageName: "stop.circle")
+    }
+}
+#endif

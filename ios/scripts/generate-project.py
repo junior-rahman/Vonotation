@@ -44,7 +44,10 @@ def render():
                 resources.append(bkey)
             obj("file:Info", 'isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "VonoTation/Info.plist"; sourceTree = SOURCE_ROOT;')
             child_keys.append("file:Info")
-        obj(f"group:{target}", f"isa = PBXGroup; name = {quote(target)}; children = {ids(child_keys)} sourceTree = {quote('<group>')};")
+        # Both apps compile the same file references, which must have a single
+        # navigator group parent. Target membership lives in the build phases.
+        if target != "VonoNotes":
+            obj(f"group:{target}", f"isa = PBXGroup; name = {quote(target)}; children = {ids(child_keys)} sourceTree = {quote('<group>')};")
         obj(f"sources:{target}", f"isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = {ids(source_keys)} runOnlyForDeploymentPostprocessing = 0;")
         obj(f"resources:{target}", f"isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = {ids(resources)} runOnlyForDeploymentPostprocessing = 0;")
         obj(f"frameworks:{target}", "isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0;")
@@ -92,7 +95,7 @@ def render():
             obj(f"config:{target}:{config}", f"isa = XCBuildConfiguration; buildSettings = {{ {body} }}; name = {config};")
         obj(f"configlist:{target}", f"isa = XCConfigurationList; buildConfigurations = {ids([f'config:{target}:Debug', f'config:{target}:Release'])} defaultConfigurationIsVisible = 0; defaultConfigurationName = Release;")
     obj("products", f"isa = PBXGroup; children = {ids(['product:' + x for x in targets])} name = Products; sourceTree = {quote('<group>')};")
-    obj("group:main", f"isa = PBXGroup; children = {ids(['group:' + x for x in targets] + ['products'])} sourceTree = {quote('<group>')};")
+    obj("group:main", f"isa = PBXGroup; children = {ids(['group:' + x for x in targets if x != 'VonoNotes'] + ['products'])} sourceTree = {quote('<group>')};")
     for config in ("Debug", "Release"):
         obj("project-config:" + config, f"isa = XCBuildConfiguration; buildSettings = {{ CLANG_ENABLE_MODULES = YES; CLANG_ENABLE_OBJC_ARC = YES; GCC_C_LANGUAGE_STANDARD = gnu17; GCC_WARN_INHIBIT_ALL_WARNINGS = NO; SWIFT_VERSION = 5.0; }}; name = {config};")
     obj("project-configlist", f"isa = XCConfigurationList; buildConfigurations = {ids(['project-config:Debug', 'project-config:Release'])} defaultConfigurationIsVisible = 0; defaultConfigurationName = Release;")

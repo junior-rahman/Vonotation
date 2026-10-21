@@ -8,6 +8,7 @@ import android.content.SharedPreferences;
 import android.content.ComponentName;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.content.pm.ServiceInfo;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.Rect;
@@ -209,20 +210,30 @@ public final class VisualPaletteTest extends Instrumentation {
         PackageInfo info=context.getPackageManager().getPackageInfo(expected,PackageManager.GET_PERMISSIONS);
         java.util.Set<String> permissions=new java.util.HashSet<>();
         if(info.requestedPermissions!=null)java.util.Collections.addAll(permissions,info.requestedPermissions);
+        require(!hasService("CallService"),"Legacy unused call service became an application component");
+        requireServiceType("PlayWatch",ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
         if(AppProduct.isNotes()){
             require(!hasService("FlowAccessibility")&&!hasService("FlowKeyboard"),"Notes app exposes dictation accessibility or keyboard");
             require(!hasService("ClipboardExpiryJob")&&!hasService("ThoughtJob"),"Notes app exposes thought or clipboard jobs");
             require(hasService("NoteRecordingService")&&hasService("CallWatch"),"Notes app is missing its recording services");
+            requireServiceType("NoteRecordingService",ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE);
+            requireServiceType("CallWatch",ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE|ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
         }else{
             for(String permission:new String[]{"READ_PHONE_STATE","ANSWER_PHONE_CALLS","READ_CALL_LOG","FOREGROUND_SERVICE_SPECIAL_USE","CHANGE_WIFI_MULTICAST_STATE"})
                 require(!permissions.contains("android.permission."+permission),"Dictation app retains call-only permission: "+permission);
             require(hasService("FlowAccessibility")&&hasService("FlowKeyboard"),"Dictation app is missing its input services");
+            requireServiceType("FlowAccessibility",ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE);
+            requireServiceType("FlowKeyboard",ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE);
             require(!hasService("CallWatch")&&!hasService("NoteRecordingService"),"Dictation app exposes ordinary/call recording services");
         }
     }
     private boolean hasService(String name) throws Exception {
         try{context.getPackageManager().getServiceInfo(new ComponentName(context.getPackageName(),"app.voiceflow."+name),0);return true;}
         catch(PackageManager.NameNotFoundException absent){return false;}
+    }
+    private void requireServiceType(String name,int expected) throws Exception {
+        ServiceInfo service=context.getPackageManager().getServiceInfo(new ComponentName(context.getPackageName(),"app.voiceflow."+name),0);
+        require(service.getForegroundServiceType()==expected,"Merged manifest foreground service type is incorrect for "+name);
     }
     private void verifyLegacyRetention() throws Exception {
         JSONArray saved=new JSONArray(Store.get(context,"notes","[]"));boolean voice=false,call=false;

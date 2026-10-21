@@ -77,6 +77,8 @@ public final class NoteRecordingService extends Service {
     @Override public IBinder onBind(Intent intent){return null;}
     @Override public void onCreate(){super.onCreate();instance=this;}
 
+    // Only the Notes manifest declares this microphone service; the guard also rejects other products.
+    @android.annotation.SuppressLint("ForegroundServiceType")
     @Override public int onStartCommand(Intent intent,int flags,int startId){
         if(!AppProduct.isNotes()){stopSelf(startId);return START_NOT_STICKY;}
         long id=intent==null?-1:intent.getLongExtra("note_id",-1);

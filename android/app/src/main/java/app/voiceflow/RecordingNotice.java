@@ -28,7 +28,11 @@ final class RecordingNotice {
     private RecordingNotice() {}
 
     /** Starts the notice if Android allows it; never throws. Returns the resulting mode. */
+    // Generic Service hides the concrete component from lint. Both permitted bound services declare
+    // microphone in VonoTation; Notes removes those accessibility and keyboard components entirely.
+    @android.annotation.SuppressLint("ForegroundServiceType")
     static String start(Service service, int id, String text, Intent stopIntent) {
+        if(AppProduct.isNotes())return NONE;
         boolean allowed;
         try { allowed = ((NotificationManager) service.getSystemService(Service.NOTIFICATION_SERVICE)).areNotificationsEnabled(); }
         catch (RuntimeException e) { allowed = false; }
