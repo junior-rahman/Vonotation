@@ -35,7 +35,7 @@ public final class ThoughtJob extends JobService {
 
     /** Existing queued/active jobs retain their backoff and schedule. */
     static void schedule(Context context) {
-        if (context == null) return;
+        if (context == null || AppProduct.isNotes()) return;
         Context app = context.getApplicationContext();
         long request = SCHEDULE_REQUEST.incrementAndGet();
         try {
@@ -78,6 +78,7 @@ public final class ThoughtJob extends JobService {
     }
 
     @Override public boolean onStartJob(JobParameters parameters) {
+        if(AppProduct.isNotes())return false;
         final Run run = new Run();
         synchronized (runs) {
             if (runs.containsKey(parameters)) return true;

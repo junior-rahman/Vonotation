@@ -61,6 +61,7 @@ final class AppUpdate {
         button=new WeakReference<>(action);line=new WeakReference<>(status);render(context);
     }
     static void resume(Activity activity){
+        if(AppProduct.isNotes())return;
         foreground=new WeakReference<>(activity);
         if(busy){render(activity);return;}
         Release release=saved(activity);String phase=prefs(activity).getString("phase",IDLE);
@@ -83,6 +84,7 @@ final class AppUpdate {
     }
     static void pause(Activity activity){Activity current=foreground==null?null:foreground.get();if(current==activity)foreground=null;}
     static void start(Activity activity){
+        if(AppProduct.isNotes())return;
         if(busy)return;foreground=new WeakReference<>(activity);
         String phase=prefs(activity).getString("phase",IDLE);
         if(activeSession(activity)||(phase.equals(INSTALLING)&&installerInFlight(activity))){state(activity,INSTALLING,"Installing…","Android is preparing the installation. Please wait a moment.");return;}

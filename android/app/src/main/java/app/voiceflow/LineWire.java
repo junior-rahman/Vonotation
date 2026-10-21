@@ -35,7 +35,7 @@ final class LineWire {
     private static final java.util.concurrent.atomic.AtomicInteger pending=new java.util.concurrent.atomic.AtomicInteger();
     private LineWire() {}
 
-    static boolean paired(Context context){return Store.bool(context,"line_paired",false);}
+    static boolean paired(Context context){return AppProduct.isNotes() && Store.bool(context,"line_paired",false);}
     static boolean running(){Session active=session;return active!=null && active.going;}
     /** Includes stop-time encoding and handing the saved audio to Notes. */
     static boolean updateBusy(){return pending.get()>0;}
@@ -55,6 +55,7 @@ final class LineWire {
     }
 
     static End find(Context context,String type) {
+        if(!AppProduct.isNotes())return null;
         NsdManager nsd=(NsdManager)context.getSystemService(Context.NSD_SERVICE);
         if(nsd==null)return null;
         if(type.contains("connect")){End known=cached;if(known!=null)return known;}
@@ -107,6 +108,7 @@ final class LineWire {
     }
 
     static void pair(Context context,String code) throws Exception {
+        if(!AppProduct.isNotes())throw new IllegalStateException("Call recording is available in Vono Notes.");
         LineWatch.hold();
         try{
             End end=find(context,"_adb-tls-pairing._tcp.");
@@ -129,7 +131,7 @@ final class LineWire {
     }
 
     static synchronized boolean start(Context context,long owner,File dest,Callback done) {
-        if(session!=null || !paired(context))return false;
+        if(session!=null || !paired(context) || NoteRecordingService.busy())return false;
         CaptureGate.Lease lease=CaptureBarrier.begin(context);
         if(lease==null)return false;
         Session active=new Session(owner,lease);session=active;

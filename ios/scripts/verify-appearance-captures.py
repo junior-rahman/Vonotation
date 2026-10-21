@@ -2,6 +2,7 @@
 """Record real Simulator appearance and screenshot bytes for visual review."""
 import hashlib
 import json
+import os
 from pathlib import Path
 import struct
 import sys
@@ -13,7 +14,7 @@ for family in ("iPhone", "iPad"):
         observed = (output / f"{family}-{appearance}-appearance.txt").read_text().strip().lower()
         if observed != appearance:
             raise SystemExit(f"Expected {appearance} appearance for {family}, observed {observed!r}")
-        for screen in ("home", "dictations", "thoughts", "clipboard", "settings"):
+        for screen in (("home", "calls", "settings") if os.environ.get("VONO_SCHEME") == "VonoNotes" else ("home", "dictations", "thoughts", "clipboard", "settings")):
             path = output / directory / f"{family}-{screen}.png"
             data = path.read_bytes()
             if not data.startswith(b"\x89PNG\r\n\x1a\n") or data[12:16] != b"IHDR":

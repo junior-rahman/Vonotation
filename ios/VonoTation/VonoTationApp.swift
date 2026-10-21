@@ -9,6 +9,7 @@ import SwiftUI
 
     static func begin(kind: NoteKind) async throws {
         try await waitUntilLoaded()
+        guard model.product.supports(kind) else { throw VonoError.message("This recording belongs in the other Vono app.") }
         guard kind != .thought || model.settings.quickThoughts else {
             throw VonoError.message("Turn on Quick Thoughts in VonoTation Settings first.")
         }

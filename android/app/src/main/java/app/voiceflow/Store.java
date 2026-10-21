@@ -16,9 +16,9 @@ final class Store {
      */
     static String engine(Context c) { return "cloud"; }
     /** The floating bubble is always on (the old "Show bubble" switch was removed). */
-    static boolean bubble(Context c) { return true; }
+    static boolean bubble(Context c) { return !AppProduct.isNotes(); }
     /** Optional no-input capture; disabling hides the feature and retains saved thoughts. */
-    static boolean quickThoughts(Context c) { return bool(c,"quick_thoughts",false); }
+    static boolean quickThoughts(Context c) { return !AppProduct.isNotes() && bool(c,"quick_thoughts",false); }
     /** English only: Cloud transcription is sent language=en; English-letter conversion is retired. */
     static String language(Context c) { return "en"; }
     static boolean romanize(Context c) { return false; }
@@ -27,6 +27,7 @@ final class Store {
      * behaviour: Cloud engine, bubble on, English, no English-letter conversion.
      */
     static void migrate(Context c) {
+        if(AppProduct.isNotes())return;
         android.content.SharedPreferences p = prefs(c);
         if (!"cloud".equals(p.getString("engine", null)) || !p.getBoolean("bubble", true) || p.getBoolean("romanize", false) || !"en-US".equals(p.getString("language", "en-US")))
             p.edit().putString("engine", "cloud").putBoolean("bubble", true).putBoolean("romanize", false).putString("language", "en-US").apply();

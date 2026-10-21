@@ -7,7 +7,7 @@ actor LocalStore {
     init(rootURL: URL) { self.rootURL = rootURL }
     static var defaultRoot: URL {
         (FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first ?? FileManager.default.temporaryDirectory)
-            .appendingPathComponent("VonoTation", isDirectory: true)
+            .appendingPathComponent(AppProduct.current.storageDirectory, isDirectory: true)
     }
     func prepare() throws {
         try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true)

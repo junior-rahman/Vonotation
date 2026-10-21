@@ -26,7 +26,7 @@ struct BackupSettingsView: View {
                             .font(.subheadline).foregroundStyle(Daybook.muted)
                         DaybookCard {
                             Text("Create a backup").font(.headline)
-                            Text("Includes saved notes, dictations and settings. Recordings, Clipboard, cached recaps and API keys are excluded.")
+                            Text("Includes this app’s saved text and settings. Source recordings, Clipboard, cached recaps and API keys are excluded. Previous recordings retained from the combined app stay on this device.")
                                 .font(.caption).foregroundStyle(Daybook.muted)
                             SecureField("Backup password · at least 12 characters", text: $password)
                                 .textContentType(.newPassword).daybookField().accessibilityIdentifier("settings.backup.password")

@@ -6,7 +6,7 @@ android {
     defaultConfig { applicationId 'app.voiceflow'; minSdk 26; targetSdk 35; versionCode 89; versionName '0.1.17-preview' }
     compileOptions { sourceCompatibility JavaVersion.VERSION_1_8; targetCompatibility JavaVersion.VERSION_1_8 }
     kotlinOptions { jvmTarget = '1.8' }
-    buildFeatures { aidl true }
+    buildFeatures { aidl true; buildConfig true }
     packaging { resources { excludes += ['META-INF/versions/9/OSGI-INF/MANIFEST.MF','META-INF/DEPENDENCIES','META-INF/LICENSE','META-INF/LICENSE.txt','META-INF/NOTICE','META-INF/NOTICE.txt'] } }
     signingConfigs {
         preview {
@@ -15,11 +15,33 @@ android {
             keyAlias 'voiceflow'
             keyPassword 'android'
         }
+        notesPreview {
+            storeFile rootProject.file(System.getenv('VONO_NOTES_KEYSTORE') ?: 'notes-signing/vononotes.keystore')
+            storePassword System.getenv('VONO_NOTES_KEYSTORE_PASSWORD') ?: 'android'
+            keyAlias 'voiceflow'
+            keyPassword System.getenv('VONO_NOTES_KEY_PASSWORD') ?: 'android'
+        }
+    }
+    flavorDimensions 'product'
+    productFlavors {
+        vonotation {
+            dimension 'product'
+            applicationId 'app.voiceflow'
+            versionCode 90
+            versionName '0.1.18-split-preview'
+            if (System.getenv('VONO_UNSIGNED_BUILDS') != 'true') signingConfig signingConfigs.preview
+        }
+        notes {
+            dimension 'product'
+            applicationId 'app.vonotation.notes'
+            versionCode 1
+            versionName '0.1.0-preview'
+            if (System.getenv('VONO_UNSIGNED_BUILDS') != 'true') signingConfig signingConfigs.notesPreview
+        }
     }
     buildTypes {
         preview {
             initWith release
-            signingConfig signingConfigs.preview
             debuggable false
             minifyEnabled false
             matchingFallbacks = ['release']

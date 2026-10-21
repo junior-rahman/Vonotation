@@ -48,6 +48,7 @@ final class LineWatch {
     }
 
     static void start(Context context,Runnable changed) {
+        if(!AppProduct.isNotes())return;
         if(Looper.myLooper()!=Looper.getMainLooper()){main.post(()->start(context,changed));return;}
         app=context.getApplicationContext();
         LineLink.INSTANCE.install(app);
@@ -169,7 +170,7 @@ final class LineWatch {
             if(result==LineConnectionState.Result.UNAVAILABLE){up=false;settled=true;publish();lost();return;}
             if(result==LineConnectionState.Result.RETRY_AUTH){main.postDelayed(()->probe.execute(()->check(host,port)),30000);return;}
             stale=true;
-            warn(app,"VonoTation is disconnected","Wireless debugging is on, but calls won't hear both sides until you pair again.");
+            warn(app,AppProduct.name()+" is disconnected","Wireless debugging is on, but calls won't hear both sides until you pair again.");
             publish();
         });
     }

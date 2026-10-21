@@ -7,7 +7,7 @@ struct ProviderCredentials: Codable {
 }
 
 enum KeychainStore {
-    private static let service = "app.voiceflow.ios.provider"
+    private static var service: String { AppProduct.current.keychainService }
     private static let account = "api-key"
     static func read() throws -> ProviderCredentials? {
         let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword,

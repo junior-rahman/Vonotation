@@ -3,6 +3,22 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 command -v xcodebuild >/dev/null || { printf '%s\n' 'Xcode is required; this script cannot validate iOS on Linux.' >&2; exit 2; }
+# Running this entrypoint without a selected scheme verifies both independent products.
+if [[ -z "${VONO_SCHEME:-}" ]]; then
+  task_combined_output="${VONOTATION_CI_OUTPUT:-$PWD/build/ci}"
+  VONO_SCHEME=VonoTation VONOTATION_CI_OUTPUT="$task_combined_output" bash "$PWD/scripts/run-ios-ci.sh"
+  VONO_SCHEME=VonoNotes VONOTATION_CI_OUTPUT="$task_combined_output/notes" bash "$PWD/scripts/run-ios-ci.sh"
+  python3 scripts/verify-product-isolation.py "$task_combined_output/DerivedData/Build/Products/Debug-iphonesimulator/VonoTation.app" "$task_combined_output/notes/DerivedData/Build/Products/Debug-iphonesimulator/VonoNotes.app" "$task_combined_output"
+  exit 0
+fi
+task_scheme="$VONO_SCHEME"
+case "$task_scheme" in
+  VonoTation) task_bundle=app.vonotation.ios; task_screens="home dictations thoughts clipboard settings" ;;
+  VonoNotes) task_bundle=app.vonotation.notes.ios; task_screens="home calls settings" ;;
+  *) printf '%s\n' 'Unknown Vono app scheme.' >&2; exit 2 ;;
+esac
+export VONO_SCHEME
+
 task_output="${VONOTATION_CI_OUTPUT:-$PWD/build/ci}"
 mkdir -p "$task_output/logs" "$task_output/screenshots" "$task_output/screenshots-dark"
 collect_failure_evidence() {
@@ -32,17 +48,17 @@ xcodebuild -version > "$task_output/xcode-version.txt"
 xcrun simctl list runtimes --json > "$task_output/runtimes.json"
 python3 scripts/select-simulators.py > "$task_output/simulators.json"
 task_derived="$task_output/DerivedData"
-task_common=(-project VonoTation.xcodeproj -scheme VonoTation -derivedDataPath "$task_derived" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO)
+task_common=(-project VonoTation.xcodeproj -scheme "$task_scheme" -derivedDataPath "$task_derived" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO)
 xcodebuild "${task_common[@]}" -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' build-for-testing 2>&1 | tee "$task_output/logs/build-for-testing.log"
-python3 scripts/validate-intent-metadata.py "$task_derived/Build/Products/Debug-iphonesimulator/VonoTation.app" "$task_output"
+python3 scripts/validate-intent-metadata.py "$task_derived/Build/Products/Debug-iphonesimulator/$task_scheme.app" "$task_output"
 for task_family in iPhone iPad; do
   task_udid="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))[sys.argv[2]]["udid"])' "$task_output/simulators.json" "$task_family")"
   task_device_state="$(xcrun simctl list devices --json | python3 -c 'import json,sys; print(next(d["state"] for a in json.load(sys.stdin)["devices"].values() for d in a if d["udid"] == sys.argv[1]))' "$task_udid")"
   if [[ "$task_device_state" != 'Booted' ]]; then xcrun simctl boot "$task_udid"; fi
   xcrun simctl bootstatus "$task_udid" -b
   xcrun simctl ui "$task_udid" appearance light
-  xcrun simctl install "$task_udid" "$task_derived/Build/Products/Debug-iphonesimulator/VonoTation.app"
-  xcrun simctl privacy "$task_udid" grant microphone app.vonotation.ios
+  xcrun simctl install "$task_udid" "$task_derived/Build/Products/Debug-iphonesimulator/$task_scheme.app"
+  xcrun simctl privacy "$task_udid" grant microphone "$task_bundle"
   xcodebuild "${task_common[@]}" -configuration Debug -destination "platform=iOS Simulator,id=$task_udid" -parallel-testing-enabled NO -resultBundlePath "$task_output/$task_family.xcresult" test-without-building 2>&1 | tee "$task_output/logs/test-$task_family.log"
   xcrun xcresulttool get test-results summary --path "$task_output/$task_family.xcresult" > "$task_output/$task_family-test-summary.json"
   xcrun xcresulttool get test-results tests --path "$task_output/$task_family.xcresult" > "$task_output/$task_family-test-tree.json"
@@ -51,22 +67,22 @@ for task_family in iPhone iPad; do
     xcrun simctl ui "$task_udid" appearance > "$task_output/$task_family-$task_appearance-appearance.txt"
     task_screenshot_directory="$task_output/screenshots"
     if [[ "$task_appearance" == dark ]]; then task_screenshot_directory="$task_output/screenshots-dark"; fi
-    for task_screen in home dictations thoughts clipboard settings; do
+    for task_screen in $task_screens; do
       # terminate can report 'not running'; launching and screenshot failures remain fatal.
-      xcrun simctl terminate "$task_udid" app.vonotation.ios 2>/dev/null || true
-      xcrun simctl launch "$task_udid" app.vonotation.ios --ui-testing --ui-fixtures --ui-screen "$task_screen"
+      xcrun simctl terminate "$task_udid" "$task_bundle" 2>/dev/null || true
+      xcrun simctl launch "$task_udid" "$task_bundle" --ui-testing --ui-fixtures --ui-screen "$task_screen"
       # Native XCTest already asserts readiness; allow SwiftUI's first rendering pass to finish.
       sleep 2
       xcrun simctl io "$task_udid" screenshot "$task_screenshot_directory/$task_family-$task_screen.png"
     done
   done
-  xcrun simctl terminate "$task_udid" app.vonotation.ios
+  xcrun simctl terminate "$task_udid" "$task_bundle"
   xcrun simctl shutdown "$task_udid"
 done
 python3 scripts/verify-appearance-captures.py "$task_output"
 xcodebuild "${task_common[@]}" -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -resultBundlePath "$task_output/device-sdk.xcresult" build 2>&1 | tee "$task_output/logs/device-sdk-build.log"
 xcrun xcresulttool get build-results --path "$task_output/device-sdk.xcresult" > "$task_output/device-sdk-build.json"
-xcodebuild "${task_common[@]}" -configuration Release -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -archivePath "$task_output/VonoTation-Simulator.xcarchive" archive 2>&1 | tee "$task_output/logs/simulator-archive.log"
-ditto -c -k --sequesterRsrc --keepParent "$task_output/VonoTation-Simulator.xcarchive/Products/Applications/VonoTation.app" "$task_output/VonoTation-iOS-Simulator.zip"
+xcodebuild "${task_common[@]}" -configuration Release -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -archivePath "$task_output/$task_scheme-Simulator.xcarchive" archive 2>&1 | tee "$task_output/logs/simulator-archive.log"
+ditto -c -k --sequesterRsrc --keepParent "$task_output/$task_scheme-Simulator.xcarchive/Products/Applications/$task_scheme.app" "$task_output/$task_scheme-iOS-Simulator.zip"
 python3 scripts/verification-manifest.py "$task_output"
 printf '%s\n' 'Native iPhone and iPad tests, unsigned device SDK build and simulator archive completed.'

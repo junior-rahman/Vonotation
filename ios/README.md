@@ -1,3 +1,26 @@
+# Two independent Vono apps
+
+The source now builds two native products while retaining the approved forest/ivory/copper Daybook design:
+
+| Scheme | App and bundle | Version | Main cards |
+| --- | --- | --- | --- |
+| `VonoTation` | VonoTation, `app.vonotation.ios` | 0.1.18 (90) | Dictation, Quick Thoughts, Clipboard |
+| `VonoNotes` | Vono Notes, `app.vonotation.notes.ios` | 0.1.0 (1) | Voice Notes, Calls |
+
+Both apps require iOS/iPadOS 17+. Vono Notes imports existing call audio from Files; it cannot record other apps’ calls. Each bundle has its own application container, provider Keychain service, URL scheme and backup product marker. No app group, shared credential access or silent data migration is configured. Existing VonoTation storage and provider-key names are unchanged.
+
+The original app retains voice notes, calls and translations from its earlier combined version. They remain reachable in **Settings → Previous recordings**, where text and source audio can be read, played and shared without editing or deletion. Original recordings do not automatically appear in Vono Notes; share an audio copy and import it explicitly. Previous pending work is retained and is not automatically sent to a provider by the other product. Translation is retained as archived data; neither split product exposes a Translate card.
+
+Google Drive/OAuth work remains paused. The existing iOS encrypted Files backup stays available with its audio/Clipboard/key exclusions and explicit restore confirmation. New archives declare their product; cross-product restore is rejected before changing local data. Unmarked pre-split iOS archives are accepted by the original app only. Restoring active-product text preserves the original app’s inactive historical notes and sources. Android backup interoperability is not included.
+
+Run `python3 scripts/generate-project.py` after source additions. Both schemes and their test targets are generated from the same dependency-free project. `bash scripts/run-ios-ci.sh` verifies both products sequentially: native iPhone/iPad tests, per-product recording-intent metadata, actual SDK bundle identities, light/dark native screenshots, unsigned iPhoneOS compilation and Simulator archives. `VONO_SCHEME=VonoTation` or `VONO_SCHEME=VonoNotes` selects a single product. Current source defines 45 tests per device for VonoTation and 6 per device for Vono Notes. Native results must be read from the matching CI run; local Python/shell checks do not establish Apple SDK or device execution.
+
+Physical-device audio/provider behavior, user signing/provisioning and distribution remain unverified. A Simulator archive is not an installable IPA. Neither product bundles Apple credentials or provider keys. Existing signing/provisioning must be supplied by the owner before physical distribution.
+
+---
+
+The following 0.1.17 notes describe the prior combined preview and its historical validation, not a native test result for the split above.
+
 # VonoTation for iPhone and iPad
 
 Native SwiftUI preview, version **0.1.17 (89)**, for **iOS/iPadOS 17 or later**. The Daybook colors, stacked cards, expandable days, transcript-first notes and compact settings follow the Android app.

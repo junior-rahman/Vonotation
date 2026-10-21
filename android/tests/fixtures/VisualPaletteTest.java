@@ -5,6 +5,9 @@ import android.app.Instrumentation;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.ComponentName;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.Rect;
@@ -37,10 +40,14 @@ public final class VisualPaletteTest extends Instrumentation {
     private int page, checks;
     private String appearance;
     private Context context;
+    private String requestedProduct;
+    private String legacyVoice, legacyCall;
+    private File legacyAudio;
     private final AtomicInteger requests = new AtomicInteger();
 
     @Override public void onCreate(Bundle arguments) {
         appearance = arguments == null ? "" : arguments.getString("appearance", "");
+        requestedProduct = arguments == null ? "" : arguments.getString("product", "");
         super.onCreate(arguments); start();
     }
     @Override public void callActivityOnCreate(Activity target, Bundle state) {
@@ -58,6 +65,7 @@ public final class VisualPaletteTest extends Instrumentation {
         Map<String, ?> previous = preferences.getAll();
         try {
             require(appearance.equals("light") || appearance.equals("dark"), "Explicit light/dark mode required");
+            require(requestedProduct.equals(AppProduct.isNotes()?"notes":"vonotation"), "Instrumentation product does not match app variant");
             require(Vault.get(context).isEmpty(), "Only a disposable installation without a provider key may run this fixture");
             require(Store.get(context, "history", "[]").equals("[]") && Store.get(context, "notes", "[]").equals("[]"), "Only a fresh disposable installation may run this fixture");
             URL.setURLStreamHandlerFactory(protocol -> protocol.equals("http") || protocol.equals("https") ? new URLStreamHandler() {
@@ -65,11 +73,13 @@ public final class VisualPaletteTest extends Instrumentation {
                     requests.incrementAndGet(); throw new IOException("Palette fixture blocks network requests");
                 }
             } : null);
+            checks+=RecordingTransferChecks.run(context,AppProduct.isNotes());
             seed(preferences);
+            verifyProductManifest();
             setInTouchMode(true);
-            int[] pages = {0, 3, 4, 5};
-            String[] names = {"home", "dictations", "thoughts", "clipboard"};
-            String[] headings = {"Voice notes", "Dictation", "Thoughts", "Clipboard"};
+            int[] pages = AppProduct.isNotes()?new int[]{0,1}:new int[]{3,4,5};
+            String[] names = AppProduct.isNotes()?new String[]{"voice-notes","calls"}:new String[]{"dictations","thoughts","clipboard"};
+            String[] headings = AppProduct.isNotes()?new String[]{"Voice notes","Call Recordings"}:new String[]{"Dictation","Thoughts","Clipboard"};
             for (int i = 0; i < pages.length; i++) {
                 page = pages[i];
                 activity = startActivitySync(new Intent(context, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK));
@@ -77,9 +87,12 @@ public final class VisualPaletteTest extends Instrumentation {
                 boolean dark = (activity.getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
                 require(dark == appearance.equals("dark"), "Native appearance does not match requested theme");
                 require(findText(headings[i]) != null, "Missing production card heading: " + headings[i]);
+                String[] excluded = AppProduct.isNotes()?new String[]{"Dictation","Thoughts","Clipboard","Translate"}:new String[]{"Voice notes","Call","Call Recordings","Translate"};
+                for(String heading:excluded)require(findText(heading)==null,"Excluded card leaked into the product: "+heading);
                 if (pages[i] == 4) require(findText(THOUGHT_TITLE) != null, "Synthetic Thought did not appear in the production timeline");
                 if (pages[i] == 5) require(findText(ClipboardText.preview(CLIP)) != null, "Synthetic Clipboard copy did not appear in the production timeline");
                 capture(names[i]);
+                verifyLegacyRetention();
                 if (i == 0) {
                     View settings = findDescription("Settings");
                     tap(settings); waitForIdleSync(); SystemClock.sleep(300);
@@ -91,10 +104,11 @@ public final class VisualPaletteTest extends Instrumentation {
             }
             require(requests.get() == 0, "Unexpected external request attempted");
             result.putInt("executed_checks", checks);
-            result.putInt("native_screenshots", 5);
+            result.putInt("native_screenshots", pages.length+1);
+            result.putString("product", requestedProduct);
             result.putString("appearance", appearance);
             result.putString("capture_directory", captureDirectory().getAbsolutePath());
-            result.putString("result", "PASS: five actual production native screens in " + appearance + "; synthetic QA data; saved-state card selection; one physical Settings tap; no provider calls. Visual fixture only.");
+            result.putString("result", "PASS: " + (pages.length+1) + " actual production native screens for " + requestedProduct + " in " + appearance + "; manifest/card separation and retained legacy data; synthetic QA data; saved-state card selection; one physical Settings tap; no provider calls. Split and visual fixture only.");
         } catch (Throwable failure) {
             result.putString("failure", android.util.Log.getStackTraceString(failure));
             result.putInt("executed_checks", checks);
@@ -113,15 +127,56 @@ public final class VisualPaletteTest extends Instrumentation {
             .put("summary_version", QuickThoughtPolicy.SUMMARY_VERSION).put("summary_local", false).put("pending", false).put("revision", 1L).put("user_edited", true);
         JSONObject note = new JSONObject().put("id", now - 2000).put("created", now - 2000)
             .put("text", "Synthetic QA: finish the project outline, then share it tomorrow.").put("raw", "Synthetic QA: finish the project outline, then share it tomorrow.")
-            .put("summary", "Project outline and tomorrow's follow-up.").put("pending", false);
+            .put("summary", "Project outline and tomorrow's follow-up.").put("pending", false).put("audio","legacy-voice.m4a");
+        JSONObject call = new JSONObject().put("id", now - 4000).put("created", now - 4000).put("call",true)
+            .put("text","Synthetic QA: an earlier call recording.").put("raw","Synthetic QA: an earlier call recording.")
+            .put("summary","Earlier call.").put("pending",false).put("audio","legacy-voice.m4a");
+        legacyVoice=note.toString();legacyCall=call.toString();
+        File sources=new File(context.getFilesDir(),"notes");require(sources.isDirectory()||sources.mkdirs(),"Could not create synthetic legacy source directory");
+        legacyAudio=new File(sources,"legacy-voice.m4a");
+        // A retained binary source marker, not a microphone recording or playback fixture.
+        try(FileOutputStream out=new FileOutputStream(legacyAudio)){out.write(new byte[]{0x51,0x41,0x2d,0x31});}
         JSONObject dictation = new JSONObject().put("id", now - 3000).put("text", "Synthetic QA: a clear place for everything I want to remember.")
             .put("raw", "Synthetic QA: a clear place for everything I want to remember.").put("duration", 1200).put("words", 14);
         require(preferences.edit().clear().putBoolean("quick_thoughts", true).putBoolean("bubble", false)
             .putBoolean("daily_recaps_opt_in", false).putString("backup_frequency", "off")
-            .putString("history", new JSONArray().put(dictation).toString()).putString("notes", new JSONArray().put(thought).put(note).toString()).commit(), "Could not seed synthetic visual data");
+            .putString("history", new JSONArray().put(dictation).toString()).putString("notes", new JSONArray().put(thought).put(note).put(call).toString()).commit(), "Could not seed synthetic visual data");
         require(ClipList.days(context).isEmpty(), "Only an empty disposable Clipboard archive may run this fixture");
-        ClipList.remember(context, CLIP);
-        require(!ClipList.days(context).isEmpty(), "Could not seed the current SQLite Clipboard archive");
+        if(!AppProduct.isNotes()){
+            ClipList.remember(context, CLIP);
+            require(!ClipList.days(context).isEmpty(), "Could not seed the current SQLite Clipboard archive");
+        }
+    }
+    private void verifyProductManifest() throws Exception {
+        String expected=AppProduct.isNotes()?"app.vonotation.notes":"app.voiceflow";
+        require(expected.equals(context.getPackageName()),"Product application ID changed");
+        File own=context.getFilesDir().getCanonicalFile();
+        require(own.getPath().contains("/"+expected+"/"),"Product storage is not inside its own application directory");
+        PackageInfo info=context.getPackageManager().getPackageInfo(expected,PackageManager.GET_PERMISSIONS);
+        java.util.Set<String> permissions=new java.util.HashSet<>();
+        if(info.requestedPermissions!=null)java.util.Collections.addAll(permissions,info.requestedPermissions);
+        if(AppProduct.isNotes()){
+            require(!hasService("FlowAccessibility")&&!hasService("FlowKeyboard"),"Notes app exposes dictation accessibility or keyboard");
+            require(!hasService("ClipboardExpiryJob")&&!hasService("ThoughtJob"),"Notes app exposes thought or clipboard jobs");
+            require(hasService("NoteRecordingService")&&hasService("CallWatch"),"Notes app is missing its recording services");
+        }else{
+            for(String permission:new String[]{"READ_PHONE_STATE","ANSWER_PHONE_CALLS","READ_CALL_LOG","FOREGROUND_SERVICE_SPECIAL_USE","CHANGE_WIFI_MULTICAST_STATE"})
+                require(!permissions.contains("android.permission."+permission),"Dictation app retains call-only permission: "+permission);
+            require(hasService("FlowAccessibility")&&hasService("FlowKeyboard"),"Dictation app is missing its input services");
+            require(!hasService("CallWatch")&&!hasService("NoteRecordingService"),"Dictation app exposes ordinary/call recording services");
+        }
+    }
+    private boolean hasService(String name) throws Exception {
+        try{context.getPackageManager().getServiceInfo(new ComponentName(context.getPackageName(),"app.voiceflow."+name),0);return true;}
+        catch(PackageManager.NameNotFoundException absent){return false;}
+    }
+    private void verifyLegacyRetention() throws Exception {
+        JSONArray saved=new JSONArray(Store.get(context,"notes","[]"));boolean voice=false,call=false;
+        long voiceId=new JSONObject(legacyVoice).getLong("id"),callId=new JSONObject(legacyCall).getLong("id");
+        for(int i=0;i<saved.length();i++){JSONObject note=saved.optJSONObject(i);if(note==null)continue;if(note.optLong("id")==voiceId)voice=legacyVoice.equals(note.toString());if(note.optLong("id")==callId)call=legacyCall.equals(note.toString());}
+        require(voice&&call,"Opening a split product mutated or removed historical recordings");
+        require(legacyAudio.isFile()&&java.util.Arrays.equals(java.nio.file.Files.readAllBytes(legacyAudio.toPath()),new byte[]{0x51,0x41,0x2d,0x31}),"Opening a split product lost historical source audio");
+        if(AppProduct.isNotes())require(ClipList.days(context).isEmpty(),"Notes app collected Clipboard data");
     }
     private void finishActivity() {
         if (activity != null && !activity.isDestroyed()) runOnMainSync(() -> activity.finish());

@@ -10,7 +10,9 @@ import zipfile
 
 root = Path(__file__).resolve().parents[1]
 out = Path(sys.argv[1]).resolve()
-simulator_zip = out / "VonoTation-iOS-Simulator.zip"
+scheme = os.environ.get("VONO_SCHEME", "VonoTation")
+version, build = ("0.1.0", 1) if scheme == "VonoNotes" else ("0.1.18", 90)
+simulator_zip = out / f"{scheme}-iOS-Simulator.zip"
 required = [out / "iPhone.xcresult", out / "iPad.xcresult", out / "logs/device-sdk-build.log", out / "logs/simulator-archive.log", simulator_zip]
 for path in required:
     if not path.exists():
@@ -20,7 +22,7 @@ def sha(path):
 source_paths = [p for p in sorted(root.rglob("*")) if p.is_file() and not {"build", "__pycache__", "xcuserdata", "DerivedData"}.intersection(p.relative_to(root).parts) and not any(part.startswith(".") and part != ".gitignore" for part in p.relative_to(root).parts) and p.suffix not in {".pyc", ".ipa", ".p12", ".mobileprovision"}]
 sources = {str(p.relative_to(root)): sha(p) for p in source_paths}
 test_summaries = {}
-expected_tests = sum(len(re.findall(r"func\s+test\w+\s*\(", p.read_text())) for folder in ("VonoTationTests", "VonoTationUITests") for p in (root / folder).rglob("*.swift"))
+expected_tests = sum(len(re.findall(r"func\s+test\w+\s*\(", p.read_text())) for folder in (scheme + "Tests", scheme + "UITests") for p in (root / folder).rglob("*.swift"))
 for family in ("iPhone", "iPad"):
     summary = json.loads((out / f"{family}-test-summary.json").read_text())
     counts = {key: summary.get(key) for key in ("totalTestCount", "passedTests", "failedTests", "skippedTests")}
@@ -29,7 +31,7 @@ for family in ("iPhone", "iPad"):
     if counts["failedTests"] != 0 or counts["skippedTests"] != 0 or counts["passedTests"] != expected_tests or counts["totalTestCount"] != expected_tests:
         raise SystemExit(f"Native tests incomplete for {family}: expected {expected_tests}, actual {counts}")
     test_summaries[family] = {"counts": counts, "summary_sha256": sha(out / f"{family}-test-summary.json"), "tree_sha256": sha(out / f"{family}-test-tree.json")}
-source_zip = out / "VonoTation-iOS-0.1.17-source.zip"
+source_zip = out / f"{scheme}-iOS-{version}-source.zip"
 intent_report_path = out / "intent-metadata-validation.json"
 intent_report = json.loads(intent_report_path.read_text())
 if not intent_report.get("checks") or not all(intent_report["checks"].values()):
@@ -38,7 +40,8 @@ with zipfile.ZipFile(source_zip, "w", compression=zipfile.ZIP_DEFLATED) as bundl
     for path in source_paths:
         bundle.write(path, "VonoTation-iOS/" + path.relative_to(root).as_posix())
 manifest = {
-    "version": "0.1.17", "build": 89, "commit": os.environ.get("GITHUB_SHA", "local"),
+    "product": scheme, "bundle_identifier": "app.vonotation.notes.ios" if scheme == "VonoNotes" else "app.vonotation.ios",
+    "version": version, "build": build, "commit": os.environ.get("GITHUB_SHA", "local"),
     "xcode": (out / "xcode-version.txt").read_text().strip(),
     "simulators": json.loads((out / "simulators.json").read_text()),
     "native_test_results": test_summaries,

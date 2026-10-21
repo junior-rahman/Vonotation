@@ -21,7 +21,7 @@ concurrency:
 jobs:
   native-ios:
     runs-on: macos-15
-    timeout-minutes: 55
+    timeout-minutes: 85
     defaults:
       run:
         working-directory: ios
@@ -46,6 +46,14 @@ jobs:
             ios/build/ci/screenshots-dark
             ios/build/ci/failure-attachments
             ios/build/ci/intent-metadata
+            ios/build/ci/notes/*.xcresult
+            ios/build/ci/notes/*.json
+            ios/build/ci/notes/*.txt
+            ios/build/ci/notes/logs
+            ios/build/ci/notes/screenshots
+            ios/build/ci/notes/screenshots-dark
+            ios/build/ci/notes/failure-attachments
+            ios/build/ci/notes/intent-metadata
           if-no-files-found: error
           retention-days: 30
       - name: Preserve simulator app after verification
@@ -54,7 +62,11 @@ jobs:
           name: VonoTation-iOS-Simulator-${{ github.sha }}
           path: |
             ios/build/ci/VonoTation-iOS-Simulator.zip
-            ios/build/ci/VonoTation-iOS-0.1.17-source.zip
+            ios/build/ci/VonoTation-iOS-0.1.18-source.zip
             ios/build/ci/VERIFICATION.json
+            ios/build/ci/PRODUCT-ISOLATION.json
+            ios/build/ci/notes/VonoNotes-iOS-Simulator.zip
+            ios/build/ci/notes/VonoNotes-iOS-0.1.0-source.zip
+            ios/build/ci/notes/VERIFICATION.json
           if-no-files-found: error
           retention-days: 30

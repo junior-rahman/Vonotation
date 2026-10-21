@@ -34,6 +34,8 @@ final class AppModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var statusMessage: String?
 
+    let product: AppProduct
+    var previousNotes: [VonoNote] { notes.filter { !product.supports($0.kind) } }
     private let store: LocalStore
     private let cloud: CloudAPI
     private let credentialProvider: ((String) -> String?)?
@@ -52,7 +54,8 @@ final class AppModel: ObservableObject {
     private var testFixtures = false
     private var storeWriteError = false
 
-    init(rootURL: URL? = nil, cloud: CloudAPI = CloudAPI(), credentialProvider: ((String) -> String?)? = nil) {
+    init(rootURL: URL? = nil, cloud: CloudAPI = CloudAPI(), credentialProvider: ((String) -> String?)? = nil, product: AppProduct = .current) {
+        self.product = product
         var root = rootURL ?? LocalStore.defaultRoot
         #if DEBUG
         let args = ProcessInfo.processInfo.arguments
@@ -117,6 +120,7 @@ final class AppModel: ObservableObject {
     }
 
     func startRecording(kind: NoteKind) async {
+        guard product.supports(kind) else { errorMessage = "This recording belongs in the other Vono app."; return }
         guard isLoaded else { errorMessage = "Wait for your saved notes to load."; return }
         guard !isRecording, !isStarting, !isFinalizing, !isBackingUp else { errorMessage = "Finish the current action first."; return }
         guard kind != .call else { errorMessage = "Import a call recording to create call notes. iOS does not share system-call audio with this app."; return }
@@ -196,6 +200,7 @@ final class AppModel: ObservableObject {
     }
 
     func importAudio(from url: URL, kind: NoteKind) async {
+        guard product.supports(kind) else { errorMessage = "This recording belongs in the other Vono app."; return }
         guard isLoaded, !isBackingUp, !isStarting else { return }
         let allowed = url.startAccessingSecurityScopedResource()
         defer { if allowed { url.stopAccessingSecurityScopedResource() } }
@@ -220,8 +225,9 @@ final class AppModel: ObservableObject {
     }
 
     func retry(_ note: VonoNote) async {
+        guard product.supports(note.kind) else { return }
         guard isLoaded, !isBackingUp, !isStarting, jobs[note.id] == nil, session?.id != note.id,
-              let current = notes.first(where: { $0.id == note.id }), current.revision == note.revision else { return }
+              let current = notes.first(where: { $0.id == note.id }), product.supports(current.kind), current.revision == note.revision else { return }
         guard let key = providerKey() else {
             if let i = notes.firstIndex(where: { $0.id == note.id }) {
                 notes[i].state = .pending; notes[i].error = "Audio saved. Add your provider API key in Settings, then tap Retry."
@@ -334,7 +340,8 @@ final class AppModel: ObservableObject {
     }
 
     func updateNote(_ note: VonoNote, title: String, transcript: String) {
-        guard isLoaded, !isBackingUp, !isStarting, !isFinalizing, session?.id != note.id, let i = notes.firstIndex(where: { $0.id == note.id }) else { return }
+        guard product.supports(note.kind) else { return }
+        guard isLoaded, !isBackingUp, !isStarting, !isFinalizing, session?.id != note.id, let i = notes.firstIndex(where: { $0.id == note.id }), product.supports(notes[i].kind) else { return }
         jobs[note.id]?.cancel(); jobs.removeValue(forKey: note.id); jobTokens.removeValue(forKey: note.id)
         if title != notes[i].title { notes[i].userEditedTitle = true }
         if transcript != notes[i].transcript { notes[i].userEditedTranscript = true }
@@ -353,6 +360,7 @@ final class AppModel: ObservableObject {
     }
     @discardableResult
     func deleteNote(_ note: VonoNote) -> Bool {
+        guard let saved = notes.first(where: { $0.id == note.id }), product.supports(saved.kind) else { return false }
         guard isLoaded else {
             errorMessage = "Wait for your saved notes to load before deleting."
             return false
@@ -384,6 +392,7 @@ final class AppModel: ObservableObject {
     }
 
     func captureClipboard(_ text: String) {
+        guard product.supportsClipboard else { return }
         guard isLoaded else { return }
         if isBackingUp { clipboardDeferred.append(text); return }
         refreshExpiry()
@@ -396,6 +405,7 @@ final class AppModel: ObservableObject {
         captureClipboard(text)
     }
     func deleteClip(_ clip: ClipItem) {
+        guard product.supportsClipboard else { return }
         guard !isBackingUp else { return }
         clips.removeAll { $0.id == clip.id }; persistSoon()
     }
@@ -426,6 +436,7 @@ final class AppModel: ObservableObject {
     private func refreshKeyState() { hasAPIKey = providerKey() != nil }
 
     func generateRecap(for kind: NoteKind, on day: Date) async {
+        guard product.supports(kind) else { return }
         guard isLoaded, settings.showDailyRecaps, !isBackingUp, let key = providerKey() else {
             statusMessage = "Add an API key and enable daily recaps in Settings."; return
         }
@@ -466,11 +477,11 @@ final class AppModel: ObservableObject {
         guard isLoaded, !isRecording, !isStarting, !isFinalizing, !isProcessing, !isBackingUp else { throw VonoError.message("Finish recording and processing before creating a backup.") }
         isBackingUp = true
         defer { completeBackup() }
-        let completed = notes.filter { !$0.transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.map { note -> VonoNote in
+        let completed = notes.filter { product.supports($0.kind) && !$0.transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.map { note -> VonoNote in
             var saved = note; saved.audioFileName = nil; saved.error = nil
             saved.state = .ready; saved.mayFilterShortThought = false; return saved
         }
-        let payload = try BackupPayload(notes: completed, settings: settings).validated()
+        let payload = try BackupPayload(product: product, notes: completed, settings: settings).validated(for: product)
         let json = try LocalStore.encoder().encode(payload)
         let data = try await Task.detached(priority: .userInitiated) { try BackupArchive.encrypt(json: json, password: password) }.value
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("VonoTation-\(UUID().uuidString).vonobackup")
@@ -487,12 +498,19 @@ final class AppModel: ObservableObject {
         let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
         guard size > 0, size <= BackupArchive.maximumBytes + 64 else { throw VonoError.message("Choose a complete iOS backup under 8 MB.") }
         let archive = try Data(contentsOf: url, options: .mappedIfSafe)
+        let receivingProduct = product
         let imported = try await Task.detached(priority: .userInitiated) {
             let plain = try BackupArchive.decrypt(archive: archive, password: password)
-            return try LocalStore.decoder().decode(BackupPayload.self, from: plain).validated()
+            return try LocalStore.decoder().decode(BackupPayload.self, from: plain).validated(for: receivingProduct)
         }.value
         var candidate = AppSnapshot()
         candidate.notes = BackupMergePolicy.merge(imported: imported.notes, local: notes)
+        // Restoring active-product text must not erase recordings retained from the combined app.
+        for legacy in notes where !product.supports(legacy.kind) {
+            candidate.notes.removeAll { $0.id == legacy.id }
+            candidate.notes.append(legacy)
+        }
+        candidate.notes.sort { $0.createdAt > $1.createdAt }
         candidate.clips = ClipboardPolicy.retained(clips); candidate.settings = imported.settings; candidate.recaps = []
         let endpointChanged = Self.normalizedEndpoint(settings.endpoint) != Self.normalizedEndpoint(imported.settings.endpoint)
         // One atomic commit precedes publishing restored state. Failure keeps current UI/store.
@@ -519,7 +537,7 @@ final class AppModel: ObservableObject {
     }
     private func resumePending() {
         guard isLoaded, !isBackingUp, !isStarting, !isFinalizing, providerKey() != nil else { return }
-        let waiting = notes.filter { $0.state == .pending && $0.id != session?.id && !($0.error?.hasPrefix("Recording was interrupted") ?? false) }
+        let waiting = notes.filter { product.supports($0.kind) && $0.state == .pending && $0.id != session?.id && !($0.error?.hasPrefix("Recording was interrupted") ?? false) }
         for note in waiting { Task { await retry(note) } }
     }
     private func snapshot() -> AppSnapshot { AppSnapshot(notes: notes, clips: clips, recaps: recaps, settings: settings) }
@@ -570,8 +588,10 @@ final class AppModel: ObservableObject {
         var yesterday = today; yesterday.id = UUID(); yesterday.title = "Yesterday fixture"
         yesterday.createdAt = Calendar.current.date(byAdding: .day, value: -1, to: Date()) ?? Date().addingTimeInterval(-86400)
         yesterday.updatedAt = yesterday.createdAt
-        notes = [thought, today, yesterday]
-        clips = [ClipItem(text: String(repeating: "A long clipboard fixture keeps every word. ", count: 80) + "END OF UI CLIPBOARD FIXTURE")]
+        var voice = today; voice.id = UUID(); voice.kind = .voiceNote; voice.title = "UI fixture voice note"
+        var call = voice; call.id = UUID(); call.kind = .call; call.title = "UI fixture call"
+        notes = product == .notes ? [voice, call] : [thought, today, yesterday, voice, call]
+        clips = product.supportsClipboard ? [ClipItem(text: String(repeating: "A long clipboard fixture keeps every word. ", count: 80) + "END OF UI CLIPBOARD FIXTURE")] : []
     }
     #endif
 }

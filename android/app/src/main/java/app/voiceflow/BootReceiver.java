@@ -17,13 +17,14 @@ public final class BootReceiver extends BroadcastReceiver {
         if (!Intent.ACTION_BOOT_COMPLETED.equals(action) && !Intent.ACTION_MY_PACKAGE_REPLACED.equals(action)) return;
         final PendingResult pending = goAsync();
         final Context app = context.getApplicationContext();
-        ClipboardExpiryJob.schedule(app);
+        DriveBackup.pauseScheduling(app);
+        if(!AppProduct.isNotes())ClipboardExpiryJob.schedule(app);
         // Give Android a few seconds to bind the service before deciding it didn't start (receiver limit is 10 s).
         new Handler(Looper.getMainLooper()).postDelayed(() -> {
             try {
-                BubbleHealth.checkAfterRestart(app, action.endsWith("BOOT_COMPLETED") ? "boot" : "update");
+                if(!AppProduct.isNotes())BubbleHealth.checkAfterRestart(app, action.endsWith("BOOT_COMPLETED") ? "boot" : "update");
                 // Reload the saved ADB identity and rediscover its new port; never re-pair or start a microphone at boot.
-                LineWatch.start(app,null);
+                if(AppProduct.isNotes())LineWatch.start(app,null);
             }
             finally { pending.finish(); }
         }, 7000);

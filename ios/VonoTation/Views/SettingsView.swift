@@ -9,6 +9,7 @@ struct SettingsView: View {
     @State private var removeKey = false
     @State private var showBackup = false
     @State private var recapsConsent = false
+    @State private var showPrevious = false
 
     var body: some View {
         NavigationStack {
@@ -17,7 +18,7 @@ struct SettingsView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
                         settingsCard("Cloud setup", value: model.hasAPIKey ? "Key saved" : "Needs key", key: "cloud") {
-                            Text(model.hasAPIKey ? "A provider key is saved securely in Keychain. Enter a new key to replace it." : "Add your provider key to transcribe, summarize and translate. Offline recordings save first and can be retried later.")
+                            Text(model.hasAPIKey ? "A provider key is saved securely in Keychain. Enter a new key to replace it." : "Add your provider key to transcribe and summarize. Offline recordings save first and can be retried later.")
                                 .font(.caption).foregroundStyle(Daybook.muted)
                             SecureField(model.hasAPIKey ? "•••••••• · replace key" : "Provider API key", text: $key)
                                 .textContentType(.password).textInputAutocapitalization(.never).autocorrectionDisabled()
@@ -39,12 +40,12 @@ struct SettingsView: View {
                             Text("Use model IDs supported by your provider. English transcription follows the Android version.")
                                 .font(.caption).foregroundStyle(Daybook.muted)
                             labeledField("Transcription", text: $model.settings.transcriptionModel, identifier: "settings.model.transcription")
-                            labeledField("Dictation cleanup", text: $model.settings.cleanupModel, identifier: "settings.model.cleanup")
-                            labeledField("Notes & thoughts", text: $model.settings.noteModel, identifier: "settings.model.notes")
-                            labeledField("Translation", text: $model.settings.translationModel, identifier: "settings.model.translation")
-                            Toggle("Clean up dictated text", isOn: $model.settings.aiCleanup).accessibilityIdentifier("settings.cleanup")
+                            if model.product == .vonotation { labeledField("Dictation cleanup", text: $model.settings.cleanupModel, identifier: "settings.model.cleanup") }
+                            labeledField(model.product == .notes ? "Notes & calls" : "Quick Thoughts", text: $model.settings.noteModel, identifier: "settings.model.notes")
+                            if model.product == .vonotation { Toggle("Clean up dictated text", isOn: $model.settings.aiCleanup).accessibilityIdentifier("settings.cleanup") }
                         }
                         settingsCard("Your Daybook", value: "Capture & feedback", key: "daybook") {
+                            if model.product == .vonotation {
                             Toggle(isOn: $model.settings.quickThoughts) {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text("Quick Thoughts")
@@ -52,8 +53,10 @@ struct SettingsView: View {
                                 }
                             }.accessibilityIdentifier("settings.quickThoughts")
                             Divider().overlay(Daybook.line)
+                            }
                             Toggle("Touch feedback", isOn: $model.settings.haptics).accessibilityIdentifier("settings.haptics")
                                 .onChange(of: model.settings.haptics) { _, enabled in Daybook.feedback(enabled) }
+                            if model.product == .vonotation {
                             Divider().overlay(Daybook.line)
                             Toggle("Save dictation history", isOn: $model.settings.saveDictations).accessibilityIdentifier("settings.saveDictations")
                             Divider().overlay(Daybook.line)
@@ -65,6 +68,14 @@ struct SettingsView: View {
                                     Text("Separate summaries for Dictation and Thoughts.").font(.caption).foregroundStyle(Daybook.muted)
                                 }
                             }.accessibilityIdentifier("settings.dailyRecaps")
+                            }
+                        }
+                        if !model.previousNotes.isEmpty {
+                            DaybookCard {
+                                Text("Previous recordings").font(.headline)
+                                Text("Voice notes, calls and translations saved in the combined app stay here. Open them read only or share a copy. Installing Vono Notes does not move or delete them.").font(.caption).foregroundStyle(Daybook.muted)
+                                Button("Open previous recordings") { showPrevious = true }.buttonStyle(DaybookButtonStyle()).accessibilityIdentifier("settings.previous")
+                            }
                         }
                         DaybookCard {
                             HStack {
@@ -78,9 +89,9 @@ struct SettingsView: View {
                                 .buttonStyle(DaybookButtonStyle(primary: true)).accessibilityIdentifier("settings.backup")
                         }
                         settingsCard("About & installation", value: "iOS preview", key: "about") {
-                            Text("VonoTation for iOS").font(.subheadline.weight(.semibold))
+                            Text(model.product.displayName + " for iOS").font(.subheadline.weight(.semibold))
                             Text(versionText).font(.caption).foregroundStyle(Daybook.muted)
-                            Text("This preview uses native iOS recording, Files and explicit clipboard paste. iOS does not provide Android’s floating control, background clipboard history, or microphone access from a custom keyboard.")
+                            Text(model.product == .notes ? "Record voice notes or import call recordings from Files. iOS does not provide access to other apps’ call audio." : "This preview uses native iOS dictation, Quick Thoughts and explicit clipboard paste. iOS does not provide Android’s floating control, background clipboard history, or microphone access from a custom keyboard.")
                                 .font(.caption).foregroundStyle(Daybook.muted)
                             Text("A GitHub download cannot be installed simply by signing in with an Apple ID. A device build must be signed through Xcode or a compatible signing tool using the owner’s Apple developer identity. No Apple account sign-in is needed inside VonoTation.")
                                 .font(.caption).foregroundStyle(Daybook.muted)
@@ -98,6 +109,7 @@ struct SettingsView: View {
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { key = ""; dismiss() }.accessibilityIdentifier("settings.done") } }
             .safeAreaInset(edge: .bottom) { if model.isRecording { ActiveRecordingStrip().padding(.horizontal, 16).background(Daybook.paper) } }
             .sheet(isPresented: $showBackup) { BackupSettingsView().environmentObject(model) }
+            .sheet(isPresented: $showPrevious) { PreviousRecordingsView().environmentObject(model) }
             .confirmationDialog("Remove the saved provider key?", isPresented: $removeKey, titleVisibility: .visible) {
                 Button("Remove key", role: .destructive) { model.saveAPIKey("") }
                 Button("Keep key", role: .cancel) { }
@@ -108,7 +120,7 @@ struct SettingsView: View {
             } message: {
                 Text("Creating a recap sends that day’s saved text to your configured AI provider. Your provider may charge for requests. You choose when to create each recap.")
             }
-            .alert("VonoTation", isPresented: Binding(get: { model.errorMessage != nil && !showBackup }, set: { if !$0 && !showBackup { model.acknowledgeError() } })) {
+            .alert(AppProduct.current.displayName, isPresented: Binding(get: { model.errorMessage != nil && !showBackup }, set: { if !$0 && !showBackup { model.acknowledgeError() } })) {
                 Button("OK") { model.acknowledgeError() }
             } message: { Text(model.errorMessage ?? "") }
         }

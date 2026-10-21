@@ -42,7 +42,7 @@ public final class CallWatch extends Service {
 
     @Override public void onCreate(){super.onCreate();active=this;}
 
-    static boolean on(Context context){return Store.bool(context,"record_calls",false);}
+    static boolean on(Context context){return AppProduct.isNotes() && Store.bool(context,"record_calls",false);}
     private static volatile boolean expect;
 
     static void expectCall(){expect=true;}
@@ -51,6 +51,7 @@ public final class CallWatch extends Service {
 
     /** Rejects a ringing call so a voice note is not cut off. */
     static void decline(Context context){
+        if(!AppProduct.isNotes())return;
         if(Build.VERSION.SDK_INT<28){
             android.widget.Toast.makeText(context,"An incoming call may interrupt this recording on this Android version.",android.widget.Toast.LENGTH_LONG).show();
             return;
@@ -68,7 +69,7 @@ public final class CallWatch extends Service {
     static void wake(Context context){LineWatch.start(context,null);}
 
     static void recordNow(Context context){
-        if(!on(context) || finishedUntilIdle || CaptureBarrier.installPending(context))return;
+        if(!on(context) || finishedUntilIdle || NoteRecordingService.busy() || CaptureBarrier.installPending(context))return;
         Intent intent=new Intent(context,CallWatch.class).setAction(NOW);
         try{if(Build.VERSION.SDK_INT>=26)context.startForegroundService(intent);else context.startService(intent);}
         catch(RuntimeException error){android.util.Log.w("VonoTation","Android did not allow call recording to start",error);}
@@ -106,7 +107,7 @@ public final class CallWatch extends Service {
             finishOwned();
             return START_NOT_STICKY;
         }
-        if(!on(this) || finishedUntilIdle || CaptureBarrier.installPending(this)){finishOwned();return START_NOT_STICKY;}
+        if(!on(this) || finishedUntilIdle || NoteRecordingService.busy() || CaptureBarrier.installPending(this)){finishOwned();return START_NOT_STICKY;}
         if(ending && call.id()>=0){
             // A new OFFHOOK may arrive while the previous source is still finalizing.
             call.queueStart();
