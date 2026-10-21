@@ -69,20 +69,25 @@ final class RecordingTransferChecks {
                 check(Store.get(context,"notes","").equals(seeded),"Rejected original-app import changed notes");
             } else {
                 long collision=System.currentTimeMillis();JSONObject existing=new JSONObject().put("id",collision).put("created",collision).put("text","KEEP_EXISTING_RECORDING");
-                check(prefs.edit().putString("notes",new JSONArray().put(existing).toString()).commit(),"Could not seed existing Notes recording");
+                JSONObject sameDate=new JSONObject().put("id",collision+1).put("created",collision).put("text","KEEP_EXISTING_TIE");
+                JSONObject middle=new JSONObject().put("id",150L).put("text","KEEP_EXISTING_MIDDLE");
+                check(prefs.edit().putString("notes",new JSONArray().put(existing).put(sameDate).put(middle).toString()).commit(),"Could not seed existing Notes recordings");
                 int imported=(Integer)importer.invoke(null,context,prepared);JSONArray result=new JSONArray(Store.get(context,"notes","[]"));
-                check(imported==2&&result.length()==3,"Import did not add recordings without replacement");
-                Set<Long> ids=new HashSet<>();boolean kept=false;int added=0;
+                check(imported==2&&result.length()==5,"Import did not add recordings without replacement");
+                check(result.getJSONObject(0).toString().equals(existing.toString())&&result.getJSONObject(1).toString().equals(sameDate.toString()),"Import changed newest existing records or their stable tie order");
+                check(result.getJSONObject(2).getLong("created")==200L&&result.getJSONObject(3).toString().equals(middle.toString())&&result.getJSONObject(4).getLong("created")==100L,"Import did not merge older recordings in newest-first order");
+                Set<Long> ids=new HashSet<>();int kept=0,added=0;long previous=Long.MAX_VALUE;
                 for(int i=0;i<result.length();i++) {
                     JSONObject entry=result.getJSONObject(i);check(ids.add(entry.getLong("id")),"Imported recording IDs collided");
-                    if("KEEP_EXISTING_RECORDING".equals(entry.optString("text"))){kept=entry.getLong("id")==collision;continue;}
+                    long created=entry.optLong("created",entry.optLong("id"));check(created<=previous,"Import split chronological recording groups");previous=created;
+                    if(entry.optString("text").startsWith("KEEP_EXISTING_")){kept++;continue;}
                     added++;check(!entry.optBoolean("thought")&&!entry.optBoolean("recording")&&!entry.optBoolean("pending"),"Import enabled unsupported capture or automatic transcription");
                     JSONArray parts=entry.getJSONArray("parts");check(parts.length()==1,"Imported recording lost its source");
                     String name=parts.getString(0);check(name.startsWith("import-")&&!name.equals(voice.getName())&&!name.equals(call.getName()),"Import reused original source names");
                     File file=new File(Notes.sourceDirectory(context),name);owned.add(file);check(file.isFile()&&file.length()==4096,"Imported source bytes are missing");
                     check(digest(file).equals(digest(entry.optBoolean("call")?call:voice)),"Imported source bytes do not match their recording");
                 }
-                check(kept&&added==2,"Import replaced existing data");
+                check(kept==3&&added==2,"Import replaced existing data");
                 check(voice.length()==4096&&call.length()==4096&&thought.length()==4096,"Import moved or removed original source audio");
             }
         } finally {

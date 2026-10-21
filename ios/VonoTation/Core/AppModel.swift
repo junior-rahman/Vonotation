@@ -504,7 +504,9 @@ final class AppModel: ObservableObject {
             return try LocalStore.decoder().decode(BackupPayload.self, from: plain).validated(for: receivingProduct)
         }.value
         var candidate = AppSnapshot()
-        candidate.notes = BackupMergePolicy.merge(imported: imported.notes, local: notes)
+        // Inactive legacy recordings are restored unchanged below. Feeding them
+        // through the active merge could clone a conflicting source with a new ID.
+        candidate.notes = BackupMergePolicy.merge(imported: imported.notes, local: notes.filter { product.supports($0.kind) })
         // Restoring active-product text must not erase recordings retained from the combined app.
         for legacy in notes where !product.supports(legacy.kind) {
             candidate.notes.removeAll { $0.id == legacy.id }

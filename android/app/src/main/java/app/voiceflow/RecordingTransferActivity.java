@@ -219,7 +219,7 @@ public final class RecordingTransferActivity extends Activity {
     private static List<File> sourceFiles(Context context,JSONObject note) {
         List<File> result=new ArrayList<>();Set<String> seen=new HashSet<>();JSONArray parts=note.optJSONArray("parts");
         if(parts==null||parts.length()==0)parts=new JSONArray().put(note.optString("audio"));
-        for(int i=0;i<parts.length();i++)try{String name=parts.getString(i);if(!name.isEmpty()&&seen.add(name)){File file=source(context,name);if(file.isFile())result.add(file);}}catch(Exception ignored){}
+        for(int i=0;i<parts.length();i++)try{String name=parts.getString(i);if(!name.isEmpty()&&seen.add(name)){File file=source(context,name);if(file.isFile()&&file.length()>0)result.add(file);}}catch(Exception ignored){}
         return result;
     }
     private static JSONObject clean(JSONObject source)throws Exception {
@@ -238,15 +238,19 @@ public final class RecordingTransferActivity extends Activity {
     }
     private static File buildExport(Context context)throws Exception {
         JSONArray all; synchronized(Store.class){all=local(context);}
-        JSONArray entries=new JSONArray();Map<String,File> audio=new LinkedHashMap<>();
+        JSONArray entries=new JSONArray();Map<String,File> audio=new LinkedHashMap<>();long manifestBytes=256;
         for(int i=0;i<all.length();i++) {
             JSONObject item=all.optJSONObject(i);if(item==null||item.optBoolean("thought")||item.optBoolean("recording"))continue;
             if(entries.length()>=RecordingTransferPolicy.MAX_RECORDINGS)throw new IOException("This transfer supports up to 1,000 recordings. Your recordings have not been changed.");
+            JSONArray declared=item.optJSONArray("parts");if(declared!=null&&declared.length()>RecordingTransferPolicy.MAX_PARTS)throw new IOException("A recording contains too many source parts for one transfer.");
             JSONObject saved=clean(item);JSONArray parts=new JSONArray();List<File> files=sourceFiles(context,item);
-            for(File file:files){parts.put(file.getName());audio.put(file.getName(),file);}
-            JSONArray declared=item.optJSONArray("parts");boolean missing=declared!=null&&declared.length()>files.size();
+            for(File file:files){if(file.length()>RecordingTransferPolicy.MAX_AUDIO)throw new IOException("A source recording is too large for one transfer.");parts.put(file.getName());audio.put(file.getName(),file);if(audio.size()>RecordingTransferPolicy.MAX_PARTS)throw new IOException("The transfer contains too many source files.");}
+            boolean missing=declared!=null&&declared.length()>files.size();
             if(declared==null&&!item.optString("audio").isEmpty()&&files.isEmpty())missing=true;
-            saved.put("parts",parts).put("audio",parts.optString(0,"")).put("source_missing",missing||saved.optBoolean("source_missing"));entries.put(saved);
+            saved.put("parts",parts).put("audio",parts.optString(0,"")).put("source_missing",missing||saved.optBoolean("source_missing"));
+            long bytes=saved.toString().getBytes(StandardCharsets.UTF_8).length+1L;
+            if(bytes>RecordingTransferPolicy.MAX_MANIFEST-manifestBytes)throw new IOException("The recording transfer text is too large. Your recordings have not been changed.");
+            manifestBytes+=bytes;entries.put(saved);
         }
         if(entries.length()==0)throw new IOException("No completed voice notes or calls are available to export.");
         byte[] manifest=new JSONObject().put("format",FORMAT).put("schema",1).put("created_at",System.currentTimeMillis()).put("entries",entries).toString().getBytes(StandardCharsets.UTF_8);
@@ -302,12 +306,13 @@ public final class RecordingTransferActivity extends Activity {
     private static int importPrepared(Context context,Prepared prepared)throws Exception {
         if(!"app.vonotation.notes".equals(context.getPackageName()))throw new IOException("Recordings can only be imported into Vono Notes.");
         List<File> copied=new ArrayList<>();JSONArray added=new JSONArray();boolean committed=false,keepFiles=false;
+        RecordingTransferPolicy.Budget copyBudget=new RecordingTransferPolicy.Budget();
         try {
             for(int i=0;i<prepared.entries.length();i++) {
                 JSONObject item=new JSONObject(prepared.entries.getJSONObject(i).toString());JSONArray original=item.getJSONArray("parts"),parts=new JSONArray();
                 for(int j=0;j<original.length();j++) {
-                    File from=prepared.audio.get(original.getString(j));String name="import-"+UUID.randomUUID()+".m4a";File dest=source(context,name);copied.add(dest);
-                    try(InputStream in=new FileInputStream(from);FileOutputStream out=new FileOutputStream(dest)){copy(in,out,null);out.getFD().sync();}parts.put(name);
+                    File from=prepared.audio.get(original.getString(j));String name="import-"+UUID.randomUUID()+".m4a";File dest=source(context,name);copyBudget.begin("audio/"+name);copied.add(dest);
+                    try(InputStream in=new FileInputStream(from);FileOutputStream out=new FileOutputStream(dest)){copy(in,out,copyBudget);out.getFD().sync();}parts.put(name);
                 }
                 boolean pending=item.optBoolean("pending")||item.optBoolean("partial_transcript");
                 item.put("parts",parts).put("audio",parts.optString(0,"")).put("recording",false).put("pending",false).put("revision",1L).put("retry_after",0L);
@@ -316,10 +321,12 @@ public final class RecordingTransferActivity extends Activity {
             }
             synchronized(Store.class) {
                 if(Thread.currentThread().isInterrupted()||VoiceTake.updateBusy()||LineWire.updateBusy()||Notes.updateBusy())throw new IOException("Finish processing audio before importing recordings.");
-                String before=Store.get(context,"notes","[]");JSONArray existing=new JSONArray(before),merged=new JSONArray();Set<Long> used=new HashSet<>();
-                for(int i=0;i<existing.length();i++){JSONObject item=existing.optJSONObject(i);if(item!=null)used.add(item.optLong("id"));}
-                long candidate=System.currentTimeMillis();for(int i=0;i<added.length();i++){JSONObject item=added.getJSONObject(i);long id=RecordingTransferPolicy.nextId(used,candidate);if(id<Long.MAX_VALUE)candidate=id+1;item.put("id",id);merged.put(item);}
-                for(int i=0;i<existing.length();i++)merged.put(existing.get(i));
+                String before=Store.get(context,"notes","[]");JSONArray existing=new JSONArray(before),merged=new JSONArray();Set<Long> used=new HashSet<>();List<Object> ordered=new ArrayList<>();
+                for(int i=0;i<existing.length();i++){Object value=existing.get(i);ordered.add(value);if(value instanceof JSONObject)used.add(((JSONObject)value).optLong("id"));}
+                long candidate=System.currentTimeMillis();for(int i=0;i<added.length();i++){JSONObject item=added.getJSONObject(i);long id=RecordingTransferPolicy.nextId(used,candidate);if(id<Long.MAX_VALUE)candidate=id+1;item.put("id",id);ordered.add(item);}
+                // Stable sorting keeps existing identities and their relative order when dates match.
+                java.util.Collections.sort(ordered,(a,b)->Long.compare(created(b),created(a)));
+                for(Object item:ordered)merged.put(item);
                 if(!Store.prefs(context).edit().putString("notes",merged.toString()).commit()) {
                     keepFiles=!Store.prefs(context).edit().putString("notes",before).commit();
                     throw new IOException(keepFiles?"The phone could not finish saving. Original recordings are retained; check available storage before retrying.":"The new recordings could not be saved. Previous recordings were kept.");
@@ -329,6 +336,7 @@ public final class RecordingTransferActivity extends Activity {
             return added.length();
         }finally{if(!committed&&!keepFiles)for(File file:copied)file.delete();}
     }
+    private static long created(Object value){if(!(value instanceof JSONObject))return 0L;JSONObject item=(JSONObject)value;return item.optLong("created",item.optLong("id"));}
     private static void copy(InputStream input,OutputStream output,RecordingTransferPolicy.Budget budget)throws IOException {
         byte[] buffer=new byte[16384];int read;
         while((read=input.read(buffer))!=-1){if(Thread.currentThread().isInterrupted())throw new IOException("The local transfer was interrupted.");if(budget!=null)budget.add(read);output.write(buffer,0,read);}

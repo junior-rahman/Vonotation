@@ -1009,13 +1009,11 @@ final class Notes {
     }
 
 
-    /** Incomplete recordings never displace completed notes; original-app legacy rows are retained for transfer. */
+    /** Adding a recording never evicts another recording or deletes its source audio. */
     private static void appendRetained(JSONArray next,JSONArray previous,long excludedId){
-        int ordinary=0;
-        for(int i=0;i<next.length();i++){JSONObject entry=next.optJSONObject(i);if(entry!=null && !entry.optBoolean("thought") && !entry.optBoolean("recording") && !entry.optBoolean("pending"))ordinary++;}
         for(int i=0;i<previous.length();i++){
             JSONObject entry=previous.optJSONObject(i);if(entry==null || entry.optLong("id")==excludedId)continue;
-            if(entry.optBoolean("thought") || !AppProduct.isNotes())next.put(entry);else if(entry.optBoolean("recording")||entry.optBoolean("pending")){next.put(entry);}else if(ordinary<100){next.put(entry);ordinary++;}
+            next.put(entry);
         }
     }
 

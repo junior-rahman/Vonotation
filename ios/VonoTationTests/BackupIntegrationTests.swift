@@ -112,4 +112,40 @@ final class BackupIntegrationTests: XCTestCase {
         XCTAssertEqual(Set(durable.notes.map(\.id)), Set([previous.id, imported.id]))
     }
 
+    func testUnmarkedCombinedBackupCannotCloneAConflictingLegacyAudioSource() async throws {
+        let previous = fixture(VonoNote(kind: .voiceNote, title: "Local recording", transcript: "Current local voice text", rawTranscript: "Current local voice source", summary: "Local summary", audioFileName: "legacy.m4a", state: .ready))
+        let active = fixture(VonoNote(kind: .dictation, title: "Active text", transcript: "Old active text", state: .ready))
+        let value = try await loaded(AppSnapshot(notes: [previous, active]))
+        let store = LocalStore(rootURL: root)
+        let source = try XCTUnwrap(store.audioURL(fileName: "legacy.m4a"))
+        let bytes = Data("LEGACY AUDIO MUST HAVE ONLY ONE NOTE OWNER".utf8)
+        try bytes.write(to: source)
+
+        var olderCopy = previous
+        olderCopy.title = "Older cloud recording"
+        olderCopy.transcript = "Different older voice transcript"
+        olderCopy.rawTranscript = "Different older voice source"
+        olderCopy.audioFileName = nil
+        let imported = fixture(VonoNote(kind: .dictation, title: "Imported active text", transcript: "New active transcript", state: .ready))
+        // No product marker: this is a pre-split combined-app archive.
+        let payload = BackupPayload(notes: [olderCopy, imported], settings: AppSettings())
+        let password = "Legacy restore conflict passphrase"
+        let archive = try BackupArchive.encrypt(json: LocalStore.encoder().encode(payload), password: password)
+        let input = root.appendingPathComponent("legacy-combined.vonobackup")
+        try archive.write(to: input)
+
+        // A repeat restore must also remain idempotent for the retained recording.
+        for _ in 0..<2 {
+            try await value.importBackup(from: input, password: password)
+            XCTAssertEqual(value.notes.count, 2)
+            XCTAssertEqual(Set(value.notes.map(\.id)), Set([previous.id, imported.id]))
+            XCTAssertEqual(value.previousNotes, [previous])
+            XCTAssertEqual(value.notes.filter { $0.audioFileName == "legacy.m4a" }.count, 1)
+            XCTAssertEqual(try Data(contentsOf: source), bytes)
+            let durable = try await LocalStore(rootURL: root).load()
+            XCTAssertEqual(durable.notes.count, 2)
+            XCTAssertEqual(durable.notes.first(where: { $0.id == previous.id }), previous)
+            XCTAssertEqual(durable.notes.filter { $0.audioFileName == "legacy.m4a" }.count, 1)
+        }
+    }
 }

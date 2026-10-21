@@ -74,6 +74,7 @@ public final class VisualPaletteTest extends Instrumentation {
                 }
             } : null);
             checks+=RecordingTransferChecks.run(context,AppProduct.isNotes());
+            verifyRecordingGrowth();
             seed(preferences);
             verifyProductManifest();
             setInTouchMode(true);
@@ -117,6 +118,59 @@ public final class VisualPaletteTest extends Instrumentation {
             catch (Throwable cleanup) { result.putString("failure", result.getString("failure", "") + "\nCleanup: " + cleanup); }
         }
         finish(result.containsKey("failure") ? Activity.RESULT_CANCELED : Activity.RESULT_OK, result);
+    }
+    /** Actual Notes save/delete paths must preserve an imported library above the old 100-row cap. */
+    private void verifyRecordingGrowth() throws Exception {
+        String before=Store.get(context,"notes","[]"),deleted=Store.get(context,"note_deletions","[]"),thoughtDeleted=Store.get(context,"thought_deletions","[]");
+        File directory=Notes.sourceDirectory(context);
+        java.util.List<File> created=new java.util.ArrayList<>();
+        final long first=1000000L,capture=first+2000;
+        final byte[] source={0x51,0x41,0x2d,0x47};
+        try {
+            JSONArray imported=new JSONArray();
+            for(int i=0;i<1000;i++){
+                long id=first+i;String name="growth-qa-"+id+".m4a";
+                File audio=new File(directory,name);require(!audio.exists(),"Recording retention fixture source already exists");created.add(audio);
+                try(FileOutputStream output=new FileOutputStream(audio)){output.write(source);}
+                imported.put(new JSONObject().put("id",id).put("created",id).put("audio",name).put("raw","Imported source "+i).put("text","Imported source "+i).put("pending",false).put("recording",false).put("revision",1L));
+            }
+            require(Store.prefs(context).edit().putString("notes",imported.toString()).commit(),"Could not stage 1,000 imported recordings for retention check");
+            if(AppProduct.isNotes()){
+                File audio=new File(directory,"growth-qa-capture.m4a");require(!audio.exists(),"Capture retention fixture source already exists");created.add(audio);
+                try(FileOutputStream output=new FileOutputStream(audio)){output.write(source);}
+                java.lang.reflect.Method save=Notes.class.getDeclaredMethod("save",Context.class,long.class,String.class,String.class,boolean.class,String.class,String.class,String.class,long.class,String.class,boolean.class,JSONArray.class);
+                save.setAccessible(true);
+                save.invoke(null,context,capture,"","",false,"auto","",audio.getName(),0L,"",true,new JSONArray().put(audio.getName()));
+                verifyImportedGrowth(first,1001,source);
+                save.invoke(null,context,capture,"Saved capture","Saved capture",false,"auto","",audio.getName(),0L,"",false,new JSONArray().put(audio.getName()));
+                verifyImportedGrowth(first,1001,source);
+            }else{
+                require(Notes.keepThought(context,capture,"Synthetic thought after retaining the previous recording library.",0L)==capture,"Could not save new thought beside retained legacy recordings");
+                verifyImportedGrowth(first,1001,source);
+            }
+            // Cancellation/deletion removes only the newly owned entry. This
+            // exercises the same production metadata commit and audio cleanup.
+            java.lang.reflect.Method remove=Notes.class.getDeclaredMethod("remove",Context.class,long.class);remove.setAccessible(true);
+            remove.invoke(null,context,capture);
+            verifyImportedGrowth(first,1000,source);
+        } finally {
+            require(Store.prefs(context).edit().putString("notes",before).putString("note_deletions",deleted).putString("thought_deletions",thoughtDeleted).commit(),"Recording retention fixture preferences were not restored");
+            for(File file:created)if(file.exists())require(file.delete(),"Recording retention fixture source was not removed");
+        }
+    }
+    private void verifyImportedGrowth(long first,int expected,byte[] source) throws Exception {
+        JSONArray saved=new JSONArray(Store.get(context,"notes","[]"));require(saved.length()==expected,"Saving or cancelling a new recording evicted imported rows");
+        java.util.Set<Long> ids=new java.util.HashSet<>();
+        for(int i=0;i<saved.length();i++){
+            JSONObject item=saved.getJSONObject(i);long id=item.optLong("id");
+            if(id<first||id>=first+1000)continue;
+            require(ids.add(id),"Imported recording id was duplicated");
+            String expectedName="growth-qa-"+id+".m4a";
+            require(expectedName.equals(item.optString("audio"))&&("Imported source "+(id-first)).equals(item.optString("raw")),"Imported recording metadata changed while saving another capture");
+            File audio=new File(Notes.sourceDirectory(context),expectedName);
+            require(audio.isFile()&&java.util.Arrays.equals(java.nio.file.Files.readAllBytes(audio.toPath()),source),"Saving or cancelling a capture deleted imported source audio");
+        }
+        require(ids.size()==1000,"An imported recording disappeared from the retained library");
     }
     private void seed(SharedPreferences preferences) throws Exception {
         long now = System.currentTimeMillis();

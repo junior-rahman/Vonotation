@@ -7,6 +7,10 @@ on:
     paths:
       - 'android/**'
       - '.github/workflows/android-visual-ci.yml'
+  pull_request:
+    paths:
+      - 'android/**'
+      - '.github/workflows/android-visual-ci.yml'
 
 permissions:
   contents: read
