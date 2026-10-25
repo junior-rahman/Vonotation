@@ -143,19 +143,16 @@ public final class VisualPaletteTest extends Instrumentation {
         waitForIdleSync();awaitFocusedWindow();SystemClock.sleep(600);waitForIdleSync();require(findText("Restore")!=null,"Deleted item has no explicit Restore action");capture("recently-deleted");
         tap(findText("Restore"));waitForIdleSync();SystemClock.sleep(400);require(Store.history(context).length()>0,"Native Restore action did not restore dictation");finishActivity();
         page=3;activity=startActivitySync(new Intent(context,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TASK));waitForIdleSync();awaitFocusedWindow();
-        final int[] revealed={0};FlowAccessibility previous=FlowAccessibility.instance;
-        try{
-            FlowAccessibility.instance=new FlowAccessibility(){@Override void revealCopiedDictation(String value){revealed[0]++;}};
-            runOnMainSync(()->{
-                Ui.copy(activity,"Ordinary copy");
-                Recovery.keep(activity,"Kept","Kept",1,false,false,false);
-                Recovery.keep(activity,"Inserted","Inserted",1,true,false,true);
-                Recovery.keep(activity,"Private","Private",1,false,true,true);
-            });require(revealed[0]==0,"Ordinary/private/inserted text opened recovery fan");
-            runOnMainSync(()->Recovery.keep(activity,"Lost input","Lost input transcript",1,false,false,true));
-            require(revealed[0]==1,"Successful lost-input copy did not notify fan exactly once");
-            require(Store.history(context).toString().contains("Lost input transcript"),"Fallback transcript was not kept");
-        }finally{FlowAccessibility.instance=previous;PrivatePending.discard();}
+        android.content.ClipboardManager clipboard=(android.content.ClipboardManager)context.getSystemService(Context.CLIPBOARD_SERVICE);
+        runOnMainSync(()->Ui.copy(activity,"Ordinary copy"));
+        runOnMainSync(()->{
+            Recovery.keep(activity,"Inserted","Inserted",1,true,false,true);
+            Recovery.keep(activity,"Private","Private",1,false,true,true);
+        });
+        require(clipboard.getPrimaryClip()!=null&&"Ordinary copy".contentEquals(clipboard.getPrimaryClip().getItemAt(0).getText()),"Inserted/private recovery changed the clipboard");
+        runOnMainSync(()->Recovery.keep(activity,"Lost input","Lost input transcript",1,false,false,true));
+        require(clipboard.getPrimaryClip()!=null&&"Lost input transcript".contentEquals(clipboard.getPrimaryClip().getItemAt(0).getText()),"Lost-input recovery did not copy the exact transcript");
+        require(Store.history(context).toString().contains("Lost input transcript"),"Fallback transcript was not kept");PrivatePending.discard();
         runOnMainSync(()->{
             android.widget.ScrollView scroll=new android.widget.ScrollView(activity);android.widget.LinearLayout column=Ui.column(activity);column.setPadding(Ui.dp(activity,20),Ui.dp(activity,40),Ui.dp(activity,20),Ui.dp(activity,24));column.setBackgroundColor(Daybook.paper(activity));scroll.addView(column);
             column.addView(Daybook.text(activity,"Voitation · artwork states",22,Daybook.ink(activity),true));
