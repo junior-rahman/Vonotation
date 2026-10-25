@@ -8,6 +8,8 @@ final class AudioCapture: NSObject, AVAudioRecorderDelegate {
     private var interruption: NSObjectProtocol?
     private var routeChange: NSObjectProtocol?
     private var tick: Timer?
+    private(set) var isPaused = false
+    private var pausedDuration: TimeInterval = 0
     private(set) var url: URL?
     var onDuration: ((TimeInterval) -> Void)?
     var onInterruption: ((String) -> Void)?
@@ -36,7 +38,7 @@ final class AudioCapture: NSObject, AVAudioRecorderDelegate {
             try? FileManager.default.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: url.path)
             UIApplication.shared.isIdleTimerDisabled = true
             tick = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
-                Task { @MainActor in guard let self = self else { return }; self.onDuration?(self.recorder?.currentTime ?? 0) }
+                Task { @MainActor in guard let self = self else { return }; self.onDuration?(self.isPaused ? self.pausedDuration : self.recorder?.currentTime ?? 0) }
             }
             interruption = NotificationCenter.default.addObserver(forName: AVAudioSession.interruptionNotification, object: session, queue: .main) { [weak self] note in
                 guard let type = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
@@ -52,6 +54,17 @@ final class AudioCapture: NSObject, AVAudioRecorderDelegate {
             try? session.setActive(false, options: .notifyOthersOnDeactivation)
             UIApplication.shared.isIdleTimerDisabled = false
             throw error
+        }
+    }
+    func togglePause() throws {
+        guard let recorder else { throw VonoError.message("The recording is no longer active.") }
+        if isPaused {
+            guard recorder.record() else { throw VonoError.message("Could not resume. Finish to keep the captured audio.") }
+            isPaused = false
+        } else {
+            pausedDuration = recorder.currentTime
+            recorder.pause(); isPaused = true
+            onDuration?(pausedDuration)
         }
     }
     func finish() -> URL? {
@@ -74,7 +87,7 @@ final class AudioCapture: NSObject, AVAudioRecorderDelegate {
         tick?.invalidate(); tick = nil
         if let interruption = interruption { NotificationCenter.default.removeObserver(interruption) }
         if let routeChange = routeChange { NotificationCenter.default.removeObserver(routeChange) }
-        interruption = nil; routeChange = nil; recorder = nil; url = nil
+        interruption = nil; routeChange = nil; recorder = nil; url = nil; isPaused = false; pausedDuration = 0
         UIApplication.shared.isIdleTimerDisabled = false
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }

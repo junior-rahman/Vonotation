@@ -37,6 +37,9 @@ struct VonoNote: Identifiable, Codable, Equatable {
     var mayFilterShortThought = false
     var userEditedTranscript = false
     var userEditedTitle = false
+    var pinned: Bool?
+    var deletedAt: Date?
+    var captureWarning: String?
 }
 
 struct ClipItem: Identifiable, Codable, Equatable {
@@ -103,6 +106,15 @@ struct RecordingJournal: Codable {
 }
 enum ProcessingPolicy {
     static func canApply(id: UUID, revision: Int, to notes: [VonoNote]) -> Bool {
-        notes.contains { $0.id == id && $0.revision == revision }
+        notes.contains { $0.id == id && $0.revision == revision && $0.deletedAt == nil }
+    }
+}
+
+// Locale-aware matching keeps Bengali text intact and supports canonically equivalent strings.
+enum RecordingSearch {
+    static func matches(_ query: String, note: VonoNote) -> Bool {
+        let words = query.split(whereSeparator: { $0.isWhitespace })
+        let source = [note.title, note.transcript, note.rawTranscript].joined(separator: " ")
+        return words.allSatisfy { source.localizedStandardContains(String($0)) }
     }
 }

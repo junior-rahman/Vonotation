@@ -66,7 +66,7 @@ def render():
                 "IPHONEOS_DEPLOYMENT_TARGET": "17.0", "TARGETED_DEVICE_FAMILY": "1,2",
                 "SUPPORTED_PLATFORMS": "iphoneos iphonesimulator", "SDKROOT": "iphoneos",
                 "CODE_SIGN_STYLE": "Automatic", "DEVELOPMENT_TEAM": "",
-                "CURRENT_PROJECT_VERSION": "1" if host == "VonoNotes" else "90", "MARKETING_VERSION": "0.1.0" if host == "VonoNotes" else "0.1.18",
+                "CURRENT_PROJECT_VERSION": "2" if host == "VonoNotes" else "90", "MARKETING_VERSION": "0.1.1" if host == "VonoNotes" else "0.1.18",
                 "SWIFT_STRICT_CONCURRENCY": "minimal", "ENABLE_USER_SCRIPT_SANDBOXING": "YES",
                 "LD_RUNPATH_SEARCH_PATHS": "$(inherited) @executable_path/Frameworks",
                 "PRODUCT_BUNDLE_IDENTIFIER": ("app.vonotation.notes.ios" if host == "VonoNotes" else "app.vonotation.ios") + ("" if is_app else "." + target),
@@ -84,7 +84,7 @@ def render():
                 if host == "VonoNotes": settings["SWIFT_ACTIVE_COMPILATION_CONDITIONS"] = ("DEBUG " if config == "Debug" else "") + "VONO_NOTES $(inherited)"
                 settings.update({"INFOPLIST_FILE": "VonoTation/Info.plist", "GENERATE_INFOPLIST_FILE": "NO", "SUPPORTS_MACCATALYST": "NO"})
                 if (ROOT / "VonoTation/Assets.xcassets/AppIcon.appiconset").is_dir():
-                    settings["ASSETCATALOG_COMPILER_APPICON_NAME"] = "AppIcon"
+                    settings["ASSETCATALOG_COMPILER_APPICON_NAME"] = "VocadingIcon" if host == "VonoNotes" else "AppIcon"
             else:
                 settings.update({"GENERATE_INFOPLIST_FILE": "YES", "SKIP_INSTALL": "YES"})
                 if target.endswith("Tests") and not target.endswith("UITests"):

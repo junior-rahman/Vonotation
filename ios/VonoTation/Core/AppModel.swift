@@ -26,6 +26,8 @@ final class AppModel: ObservableObject {
     }
     @Published private(set) var isLoaded = false
     @Published private(set) var isRecording = false
+    @Published private(set) var isRecordingPaused = false
+    @Published private(set) var libraryBusy = false
     @Published private(set) var recordingKind: NoteKind?
     @Published private(set) var recordingDuration: TimeInterval = 0
     @Published private(set) var isProcessing = false
@@ -35,7 +37,8 @@ final class AppModel: ObservableObject {
     @Published var statusMessage: String?
 
     let product: AppProduct
-    var previousNotes: [VonoNote] { notes.filter { !product.supports($0.kind) } }
+    var previousNotes: [VonoNote] { notes.filter { !product.supports($0.kind) && $0.deletedAt == nil } }
+    var deletedNotes: [VonoNote] { notes.filter { product.supports($0.kind) && $0.deletedAt != nil }.sorted { ($0.deletedAt ?? .distantPast) > ($1.deletedAt ?? .distantPast) } }
     private let store: LocalStore
     private let cloud: CloudAPI
     private let credentialProvider: ((String) -> String?)?
@@ -94,11 +97,13 @@ final class AppModel: ObservableObject {
                     notes[index].state = .pending
                     notes[index].mayFilterShortThought = false
                     notes[index].error = "Recording was interrupted. The source was kept; tap Retry to transcribe it."
+                    notes[index].captureWarning = notes[index].error
                 } else {
                     var recovered = VonoNote(kind: journal.kind, title: "Recovered recording")
                     recovered.id = journal.id; recovered.createdAt = journal.createdAt; recovered.updatedAt = Date()
                     recovered.audioFileName = journal.audioFileName; recovered.state = .pending
                     recovered.error = "Recording was interrupted. The source was kept; tap Retry to transcribe it."
+                    recovered.captureWarning = recovered.error
                     notes.append(recovered)
                 }
             }
@@ -122,7 +127,7 @@ final class AppModel: ObservableObject {
     func startRecording(kind: NoteKind) async {
         guard product.supports(kind) else { errorMessage = "This recording belongs in the other app."; return }
         guard isLoaded else { errorMessage = "Wait for your saved notes to load."; return }
-        guard !isRecording, !isStarting, !isFinalizing, !isBackingUp else { errorMessage = "Finish the current action first."; return }
+        guard !isRecording, !isStarting, !isFinalizing, !isBackingUp, !libraryBusy else { errorMessage = "Finish the current action first."; return }
         guard kind != .call else { errorMessage = "Import a call recording to create call notes. iOS does not share system-call audio with this app."; return }
         guard kind != .thought || settings.quickThoughts else { return }
         isStarting = true
@@ -147,6 +152,11 @@ final class AppModel: ObservableObject {
             try? FileManager.default.removeItem(at: source)
             errorMessage = safeMessage(error)
         }
+    }
+    func toggleRecordingPause() {
+        guard product == .notes, isRecording, !isFinalizing else { return }
+        do { try capture.togglePause(); isRecordingPaused = capture.isPaused }
+        catch { errorMessage = safeMessage(error) }
     }
     func finishRecording() async {
         guard let fixed = session, isRecording, !isFinalizing else { return }
@@ -189,19 +199,19 @@ final class AppModel: ObservableObject {
         if let index = notes.firstIndex(where: { $0.id == fixed.id }) {
             notes[index].title = "Interrupted recording"; notes[index].state = .pending
             notes[index].mayFilterShortThought = false
-            notes[index].error = message; notes[index].updatedAt = Date()
+            notes[index].error = message; notes[index].captureWarning = message; notes[index].updatedAt = Date()
         }
         do { try await persistNow(); try await store.clearJournal(expectedID: fixed.id) }
         catch { errorMessage = "The recording source was kept. Its recovery status could not be saved." }
         statusMessage = message
     }
     private func clearRecordingState() {
-        isRecording = false; recordingKind = nil; recordingDuration = 0; session = nil
+        isRecording = false; isRecordingPaused = false; recordingKind = nil; recordingDuration = 0; session = nil
     }
 
     func importAudio(from url: URL, kind: NoteKind) async {
         guard product.supports(kind) else { errorMessage = "This recording belongs in the other app."; return }
-        guard isLoaded, !isBackingUp, !isStarting else { return }
+        guard isLoaded, !isBackingUp, !isStarting, !libraryBusy else { return }
         let allowed = url.startAccessingSecurityScopedResource()
         defer { if allowed { url.stopAccessingSecurityScopedResource() } }
         let ext = url.pathExtension.lowercased()
@@ -227,7 +237,7 @@ final class AppModel: ObservableObject {
     func retry(_ note: VonoNote) async {
         guard product.supports(note.kind) else { return }
         guard isLoaded, !isBackingUp, !isStarting, jobs[note.id] == nil, session?.id != note.id,
-              let current = notes.first(where: { $0.id == note.id }), product.supports(current.kind), current.revision == note.revision else { return }
+              let current = notes.first(where: { $0.id == note.id }), product.supports(current.kind), current.revision == note.revision, current.deletedAt == nil else { return }
         guard let key = providerKey() else {
             if let i = notes.firstIndex(where: { $0.id == note.id }) {
                 notes[i].state = .pending; notes[i].error = "Audio saved. Add your provider API key in Settings, then tap Retry."
@@ -341,7 +351,7 @@ final class AppModel: ObservableObject {
 
     func updateNote(_ note: VonoNote, title: String, transcript: String) {
         guard product.supports(note.kind) else { return }
-        guard isLoaded, !isBackingUp, !isStarting, !isFinalizing, session?.id != note.id, let i = notes.firstIndex(where: { $0.id == note.id }), product.supports(notes[i].kind) else { return }
+        guard isLoaded, !isBackingUp, !isStarting, !isFinalizing, !libraryBusy, session?.id != note.id, let i = notes.firstIndex(where: { $0.id == note.id }), product.supports(notes[i].kind), notes[i].deletedAt == nil else { return }
         jobs[note.id]?.cancel(); jobs.removeValue(forKey: note.id); jobTokens.removeValue(forKey: note.id)
         if title != notes[i].title { notes[i].userEditedTitle = true }
         if transcript != notes[i].transcript { notes[i].userEditedTranscript = true }
@@ -386,6 +396,49 @@ final class AppModel: ObservableObject {
         }
         return true
     }
+    func recordingStatus(_ note: VonoNote) -> String {
+        if session?.id == note.id { return isRecordingPaused ? "Paused · Resume or Finish" : "Recording · not finished" }
+        if audioURL(for: note) == nil { return "Source audio unavailable · saved text kept" }
+        if note.captureWarning != nil { return "Interrupted · inspect saved audio" }
+        if note.state == .processing { return "Audio saved · transcribing" }
+        if note.state == .failed { return "Audio saved · retry needed" }
+        if note.state == .pending { return hasAPIKey ? "Audio saved · waiting to process" : "Audio saved · add provider key" }
+        return "Saved"
+    }
+    func togglePin(_ note: VonoNote) {
+        guard product == .notes, !isBackingUp, !libraryBusy, let index = notes.firstIndex(where: { $0.id == note.id && $0.deletedAt == nil }) else { return }
+        notes[index].pinned = !(notes[index].pinned ?? false); persistSoon()
+    }
+    @discardableResult func moveToTrash(_ note: VonoNote) async -> Bool {
+        guard product == .notes, isLoaded, !isBackingUp, !isStarting, !isFinalizing, !libraryBusy, session?.id != note.id,
+              let index = notes.firstIndex(where: { $0.id == note.id && $0.deletedAt == nil }) else { return false }
+        libraryBusy = true; defer { libraryBusy = false }
+        let previous = notes[index]
+        jobs[note.id]?.cancel(); jobs.removeValue(forKey: note.id); jobTokens.removeValue(forKey: note.id)
+        notes[index].deletedAt = Date(); notes[index].revision += 1
+        if notes[index].state == .processing { notes[index].state = .pending }
+        isProcessing = !jobs.isEmpty || !recapJobs.isEmpty
+        do { try await persistNow(); return true }
+        catch { if let current = notes.firstIndex(where: { $0.id == note.id }) { notes[current] = previous }; errorMessage = "Could not save deletion. Your recording was kept."; return false }
+    }
+    @discardableResult func restoreNote(_ note: VonoNote) async -> Bool {
+        guard product == .notes, isLoaded, !isBackingUp, !libraryBusy, let index = notes.firstIndex(where: { $0.id == note.id && $0.deletedAt != nil }) else { return false }
+        libraryBusy = true; defer { libraryBusy = false }; let previous = notes[index]
+        notes[index].deletedAt = nil; notes[index].revision += 1
+        do { try await persistNow(); return true }
+        catch { if let current = notes.firstIndex(where: { $0.id == note.id }) { notes[current] = previous }; errorMessage = "Could not restore the recording. It remains in Recently deleted."; return false }
+    }
+    @discardableResult func permanentlyDelete(_ note: VonoNote) async -> Bool {
+        guard product == .notes, isLoaded, !isBackingUp, !libraryBusy, let saved = notes.first(where: { $0.id == note.id && $0.deletedAt != nil }) else { return false }
+        libraryBusy = true; defer { libraryBusy = false }
+        notes.removeAll { $0.id == saved.id }
+        do {
+            try await persistNow()
+            if let name = saved.audioFileName, !notes.contains(where: { $0.audioFileName == name }), let source = store.audioURL(fileName: name), FileManager.default.fileExists(atPath: source.path) { try FileManager.default.removeItem(at: source) }
+            return true
+        } catch { notes.append(saved); notes.sort { $0.createdAt > $1.createdAt }; try? await persistNow(); errorMessage = "Permanent deletion could not be saved. Your source audio was kept."; return false }
+    }
+
     func audioURL(for note: VonoNote) -> URL? {
         guard let name = note.audioFileName, let url = store.audioURL(fileName: name), FileManager.default.fileExists(atPath: url.path) else { return nil }
         return url
@@ -474,10 +527,10 @@ final class AppModel: ObservableObject {
     private func invalidateRecaps() { recaps.removeAll() }
 
     func exportBackup(password: String) async throws -> URL {
-        guard isLoaded, !isRecording, !isStarting, !isFinalizing, !isProcessing, !isBackingUp else { throw VonoError.message("Finish recording and processing before creating a backup.") }
+        guard isLoaded, !isRecording, !isStarting, !isFinalizing, !isProcessing, !isBackingUp, !libraryBusy else { throw VonoError.message("Finish recording and processing before creating a backup.") }
         isBackingUp = true
         defer { completeBackup() }
-        let completed = notes.filter { product.supports($0.kind) && !$0.transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.map { note -> VonoNote in
+        let completed = notes.filter { product.supports($0.kind) && $0.deletedAt == nil && !$0.transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.map { note -> VonoNote in
             var saved = note; saved.audioFileName = nil; saved.error = nil
             saved.state = .ready; saved.mayFilterShortThought = false; return saved
         }
@@ -490,7 +543,7 @@ final class AppModel: ObservableObject {
         return url
     }
     func importBackup(from url: URL, password: String) async throws {
-        guard isLoaded, !isRecording, !isStarting, !isFinalizing, !isProcessing, !isBackingUp else { throw VonoError.message("Finish recording and processing before restoring a backup.") }
+        guard isLoaded, !isRecording, !isStarting, !isFinalizing, !isProcessing, !isBackingUp, !libraryBusy else { throw VonoError.message("Finish recording and processing before restoring a backup.") }
         isBackingUp = true
         defer { completeBackup() }
         let access = url.startAccessingSecurityScopedResource()
@@ -539,7 +592,7 @@ final class AppModel: ObservableObject {
     }
     private func resumePending() {
         guard isLoaded, !isBackingUp, !isStarting, !isFinalizing, providerKey() != nil else { return }
-        let waiting = notes.filter { product.supports($0.kind) && $0.state == .pending && $0.id != session?.id && !($0.error?.hasPrefix("Recording was interrupted") ?? false) }
+        let waiting = notes.filter { product.supports($0.kind) && $0.deletedAt == nil && $0.state == .pending && $0.id != session?.id && !($0.error?.hasPrefix("Recording was interrupted") ?? false) }
         for note in waiting { Task { await retry(note) } }
     }
     private func snapshot() -> AppSnapshot { AppSnapshot(notes: notes, clips: clips, recaps: recaps, settings: settings) }

@@ -17,15 +17,22 @@ enum DayLabels {
 struct NotesTimeline: View {
     @EnvironmentObject private var model: AppModel
     let kind: NoteKind
+    var query = ""
+    var pinnedOnly = false
 
-    private var notes: [VonoNote] { model.notes.filter { $0.kind == kind } }
+    private var notes: [VonoNote] { model.notes.filter { $0.kind == kind && $0.deletedAt == nil && (!pinnedOnly || $0.pinned == true) && RecordingSearch.matches(query, note: $0) } }
+    private var pinned: [VonoNote] { notes.filter { $0.pinned == true } }
     private var days: [Date] {
-        Set(notes.map { Calendar.current.startOfDay(for: $0.createdAt) }).sorted(by: >)
+        Set(notes.filter { $0.pinned != true }.map { Calendar.current.startOfDay(for: $0.createdAt) }).sorted(by: >)
     }
 
     var body: some View {
-        if days.isEmpty && model.isLoaded {
-            EmptyDaybook(title: emptyTitle, detail: emptyDetail, symbol: kind == .thought ? "note.text" : "waveform")
+        if notes.isEmpty && model.isLoaded {
+            EmptyDaybook(title: query.isEmpty && !pinnedOnly ? emptyTitle : "No matching recordings.", detail: query.isEmpty && !pinnedOnly ? emptyDetail : "Try another search or show all recordings.", symbol: kind == .thought ? "note.text" : "waveform")
+        }
+        if !pinned.isEmpty {
+            Text("Pinned").font(.subheadline.weight(.semibold)).foregroundStyle(Daybook.accent)
+            ForEach(pinned) { note in NavigationLink(value: note.id) { NoteTimelineRow(note: note) }.buttonStyle(.plain).accessibilityIdentifier("note.\(note.id.uuidString)") }
         }
         ForEach(days, id: \.self) { day in
             DayTimelineSection(day: day, count: entries(on: day).count, first: day == days.first) {
@@ -45,7 +52,7 @@ struct NotesTimeline: View {
         }
     }
     private func entries(on day: Date) -> [VonoNote] {
-        notes.filter { Calendar.current.isDate($0.createdAt, inSameDayAs: day) }
+        notes.filter { $0.pinned != true && Calendar.current.isDate($0.createdAt, inSameDayAs: day) }
     }
     private var emptyTitle: String {
         kind == .thought ? "A place for passing thoughts." : kind == .call ? "No imported calls yet." : "Your words belong here."
@@ -109,6 +116,7 @@ struct DayTimelineSection<Content: View>: View {
 }
 
 struct NoteTimelineRow: View {
+    @EnvironmentObject private var model: AppModel
     let note: VonoNote
     var body: some View {
         VStack(spacing: 0) {
@@ -119,7 +127,9 @@ struct NoteTimelineRow: View {
                     .frame(width: 58, alignment: .leading).padding(.top, 3)
                 VStack(alignment: .leading, spacing: 5) {
                     Text(primaryText).font(.body).foregroundStyle(Daybook.ink).lineLimit(2)
-                    if note.state != .ready {
+                    if model.product == .notes {
+                        Text(model.recordingStatus(note)).font(.caption).foregroundStyle(Daybook.muted)
+                    } else if note.state != .ready {
                         Label(statusText, systemImage: note.state == .processing ? "arrow.triangle.2.circlepath" : "clock")
                             .font(.caption).foregroundStyle(Daybook.muted)
                     } else if note.kind != .dictation && !note.summary.isEmpty {
@@ -272,5 +282,49 @@ struct ClipboardPasteControl: UIViewRepresentable {
         override func canPaste(_ itemProviders: [NSItemProvider]) -> Bool {
             itemProviders.contains { $0.canLoadObject(ofClass: NSString.self) }
         }
+    }
+}
+
+
+struct RecentlyDeletedView: View {
+    @EnvironmentObject private var model: AppModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var deleting: VonoNote?
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Recordings stay here until you restore or permanently delete them. They still use device storage.")
+                        .font(.caption).foregroundStyle(Daybook.muted)
+                    if model.deletedNotes.isEmpty { Text("No deleted recordings.").accessibilityIdentifier("deleted.empty") }
+                    ForEach(model.deletedNotes) { note in
+                        DaybookCard {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text(note.title).font(.headline)
+                                Text(note.createdAt, style: .date).font(.caption)
+                                ViewThatFits(in: .horizontal) {
+                                    HStack { restore(note); remove(note) }
+                                    VStack(alignment: .leading) { restore(note); remove(note) }
+                                }
+                            }
+                        }
+                    }
+                    if let error = model.errorMessage { Text(error).foregroundStyle(Daybook.coral) }
+                }.padding(20)
+            }
+            .background(Daybook.paper).foregroundStyle(Daybook.ink).tint(Daybook.accent)
+            .navigationTitle("Recently deleted").navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+            .confirmationDialog("Delete permanently?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {
+                if let note = deleting { Button("Delete permanently", role: .destructive) { Task { _ = await model.permanentlyDelete(note); deleting = nil } } }
+                Button("Keep", role: .cancel) { deleting = nil }
+            } message: { Text("The text and source audio will be removed. This cannot be undone.") }
+        }
+    }
+    private func restore(_ note: VonoNote) -> some View {
+        Button("Restore") { Task { _ = await model.restoreNote(note) } }.buttonStyle(DaybookButtonStyle()).disabled(model.libraryBusy).accessibilityIdentifier("deleted.restore.\(note.id.uuidString)")
+    }
+    private func remove(_ note: VonoNote) -> some View {
+        Button("Delete permanently", role: .destructive) { deleting = note }.buttonStyle(DaybookButtonStyle()).disabled(model.libraryBusy)
     }
 }

@@ -95,6 +95,7 @@ public final class VisualPaletteTest extends Instrumentation {
                 for(String heading:excluded)require(findText(heading)==null,"Excluded card leaked into the product: "+heading);
                 if (pages[i] == 4) require(findText(THOUGHT_TITLE) != null, "Synthetic Thought did not appear in the production timeline");
                 if (pages[i] == 5) require(findText(ClipboardText.preview(CLIP)) != null, "Synthetic Clipboard copy did not appear in the production timeline");
+                if(AppProduct.isNotes()&&i==0){checks+=VocadingAudioChecks.run(this,activity);runOnMainSync(Notes::recordingChanged);waitForIdleSync();}
                 capture(names[i]);
                 verifyLegacyRetention();
                 if (i == 0) {

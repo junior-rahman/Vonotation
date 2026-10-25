@@ -188,12 +188,13 @@ final class Notes {
             TextView metaLine=Daybook.text(activity,meta,12,Daybook.muted(activity),false);
             metaLine.setMaxLines(1);metaLine.setEllipsize(android.text.TextUtils.TruncateAt.END);
             words.addView(metaLine);
-            words.addView(Daybook.text(activity,status(activity,note,keyed,connected),12,Daybook.muted(activity),false));
+            TextView state=Daybook.text(activity,status(activity,note,keyed,connected),12,Daybook.muted(activity),false);
+            VocadingIcons.attach(state,coming?"transcribing":note.optBoolean("recording")?"recording":note.optBoolean("pending")||note.optBoolean("source_interrupted")?"retry":"saved",0);words.addView(state);
             row.addView(words,new LinearLayout.LayoutParams(0,-2,1));
             boolean on=playing==id&&!paused;
             Button play=Daybook.button(activity,on?"Pause":"Play",false,v->togglePlay(activity,note,refresh));
             if(filesOf(activity,note).isEmpty())play.setEnabled(false);
-            LinearLayout.LayoutParams playLp=new LinearLayout.LayoutParams(Ui.dp(activity,72),Ui.dp(activity,40));playLp.leftMargin=Ui.dp(activity,8);
+            LinearLayout.LayoutParams playLp=new LinearLayout.LayoutParams(Ui.dp(activity,100),Ui.dp(activity,48));playLp.leftMargin=Ui.dp(activity,8);
             row.addView(play,playLp);
             card.addView(row);
             String preview=previewOf(note);
@@ -319,7 +320,7 @@ final class Notes {
         if(note.optBoolean("recording")){toast(activity,"Finish recording before editing.");return;}
         LinearLayout fields=Ui.column(activity);int pad=Ui.dp(activity,20);fields.setPadding(pad,pad,pad,pad);
         android.widget.EditText title=Daybook.field(activity,titleOf(note),"Title",false);title.setSingleLine(true);fields.addView(title);
-        android.widget.EditText text=Daybook.field(activity,note.optString("text"),"Transcript",true);text.setMinLines(4);text.setMaxLines(9);fields.addView(text);
+        android.widget.EditText text=Daybook.field(activity,note.optString("text"),"Transcript",false);text.setMinLines(4);text.setMaxLines(9);fields.addView(text);
         fields.addView(Daybook.text(activity,"Original transcript and source audio are kept.",13,Daybook.muted(activity),false));
         android.widget.ScrollView scroll=new android.widget.ScrollView(activity);scroll.addView(fields);
         android.app.AlertDialog dialog=new android.app.AlertDialog.Builder(activity).setTitle("Edit recording").setView(scroll).setNegativeButton("Cancel",null).setPositiveButton("Save",null).create();
@@ -343,8 +344,10 @@ final class Notes {
     private static void shareAudio(Activity activity,JSONObject note){
         if(note.optBoolean("recording")){toast(activity,"Finish recording before sharing.");return;}
         toast(activity,"Preparing source audio…");Context app=activity.getApplicationContext();long id=note.optLong("id");
-        mediaWork.execute(()->{try{android.net.Uri uri;
-            synchronized(Store.class){JSONObject current=find(app,id);if(!ownsNote(current))throw new java.io.IOException("The recording is no longer available.");List<File> files=filesOf(app,current);JSONArray declared=current.optJSONArray("parts");if(declared!=null&&declared.length()>files.size())throw new java.io.IOException("A source segment is missing. No incomplete copy was shared.");uri=RecordingShare.prepare(app,files);}
+        mediaWork.execute(()->{try{List<File> sources;
+            synchronized(Store.class){JSONObject current=find(app,id);if(!ownsNote(current))throw new java.io.IOException("The recording is no longer available.");List<File> files=filesOf(app,current);JSONArray declared=current.optJSONArray("parts");if(declared!=null&&declared.length()>files.size())throw new java.io.IOException("A source segment is missing. No incomplete copy was shared.");sources=new ArrayList<>(files);}
+            android.net.Uri uri=RecordingShare.prepare(app,sources);
+            synchronized(Store.class){if(!ownsNote(find(app,id)))throw new java.io.IOException("The recording is no longer available.");}
             activity.runOnUiThread(()->{if(activity.isDestroyed()||activity.isFinishing())return;android.content.Intent send=new android.content.Intent(android.content.Intent.ACTION_SEND).setType(uri.getLastPathSegment().endsWith(".zip")?"application/zip":"audio/mp4").putExtra(android.content.Intent.EXTRA_STREAM,uri).addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION);send.setClipData(android.content.ClipData.newRawUri("Source audio",uri));activity.startActivity(android.content.Intent.createChooser(send,"Share source audio"));});
         }catch(Exception error){toast(app,error.getMessage()==null?"Could not prepare source audio.":error.getMessage());}});
     }
@@ -352,6 +355,7 @@ final class Notes {
     private static TextView quiet(Activity activity,String label,android.view.View.OnClickListener click) {
         TextView word=Daybook.text(activity,label,13,Daybook.accent(activity),true);
         word.setPadding(0,Ui.dp(activity,8),Ui.dp(activity,14),Ui.dp(activity,8));word.setMinHeight(Ui.dp(activity,48));word.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        if(!label.equals("Copy")&&!label.equals("Share"))VocadingIcons.label(word,label,Daybook.accent(activity));
         word.setOnClickListener(v->{Daybook.feedback(v);click.onClick(v);});
         return word;
     }
@@ -462,6 +466,7 @@ final class Notes {
             TextView label=Daybook.text(activity,(busy||NoteRecordingService.busy())?"Saving…":"Record",16,Daybook.actionInk(activity),true);
             label.setGravity(android.view.Gravity.CENTER);
             label.setMinHeight(Ui.dp(activity,32));
+            VocadingIcons.attach(label,(busy||NoteRecordingService.busy())?"saving":held?"disabled":activity.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED?"mic-blocked":"ready",0);
             pill.addView(label);
             pill.setOnClickListener(v->{Daybook.feedback(v);record(activity,refresh);});
             pill.setContentDescription((busy||NoteRecordingService.busy())?"Saving":"Record");pill.setEnabled(!busy&&!NoteRecordingService.busy()&&!held);
@@ -469,7 +474,7 @@ final class Notes {
         }
         TextView title=Daybook.text(activity,VoiceTake.notePaused()?"Paused":"Recording",12,Daybook.actionInk(activity),true);
         title.setGravity(android.view.Gravity.CENTER);
-        pill.addView(title);
+        VocadingIcons.attach(title,VoiceTake.notePaused()?"pause":"recording",0);pill.addView(title);
         LinearLayout row=Ui.row(activity);row.setGravity(android.view.Gravity.CENTER);
         android.view.View dot=new android.view.View(activity);
         android.graphics.drawable.GradientDrawable mark=new android.graphics.drawable.GradientDrawable();

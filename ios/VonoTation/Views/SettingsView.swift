@@ -177,13 +177,17 @@ struct ActiveRecordingStrip: View {
     var body: some View {
         VStack(spacing: 10) {
             HStack(spacing: 8) {
-                Image(systemName: "record.circle.fill").foregroundStyle(Daybook.coral)
-                Text("Recording \(model.recordingKind?.title ?? "audio")").font(.subheadline.weight(.semibold))
+                if model.product == .notes { VocadingSymbol(model.isRecordingPaused ? "pause" : "recording") } else { Image(systemName: "record.circle.fill").foregroundStyle(Daybook.coral) }
+                Text(model.isRecordingPaused ? "Recording paused" : "Recording \(model.recordingKind?.title ?? "audio")").font(.subheadline.weight(.semibold))
                 Spacer(minLength: 8)
                 Text(clock(model.recordingDuration)).font(.caption.monospacedDigit())
             }
             HStack(spacing: 10) {
                 Button("Cancel", role: .destructive) { confirmCancel = true }.buttonStyle(DaybookButtonStyle()).accessibilityIdentifier("record.cancel")
+                if model.product == .notes {
+                    Button { model.toggleRecordingPause() } label: { HStack { VocadingSymbol(model.isRecordingPaused ? "play" : "pause", size: 18); Text(model.isRecordingPaused ? "Resume" : "Pause") } }
+                        .buttonStyle(DaybookButtonStyle()).accessibilityIdentifier("record.pause")
+                }
                 Button {
                     Daybook.feedback(model.settings.haptics, strong: true)
                     Task { await model.finishRecording() }
@@ -198,7 +202,7 @@ struct ActiveRecordingStrip: View {
         .confirmationDialog("Discard this recording?", isPresented: $confirmCancel, titleVisibility: .visible) {
             Button("Discard recording", role: .destructive) { model.cancelRecording() }
             Button("Keep recording", role: .cancel) { }
-        } message: { Text("Your recording continues until you choose Finish or Discard recording.") }
+        } message: { Text(model.isRecordingPaused ? "The recording is paused. Choose Finish to keep it or Discard recording to remove it." : "Your recording continues until you choose Finish or Discard recording.") }
     }
     private func clock(_ seconds: TimeInterval) -> String { String(format: "%d:%02d", Int(seconds) / 60, Int(seconds) % 60) }
 }

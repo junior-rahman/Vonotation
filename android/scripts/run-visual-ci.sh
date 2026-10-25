@@ -100,6 +100,10 @@ for task_product in vonotation notes; do
   if [[ "$task_product" == notes ]]; then task_package=app.vonotation.notes; else task_package=app.voiceflow; fi
   adb install --no-incremental "app/build/outputs/apk/$task_product/preview/app-$task_product-preview.apk"
   adb install --no-incremental "build/tests/visual/$task_product/$task_product-visual-fixture.apk"
+  if [[ "$task_product" == notes ]]; then
+    adb shell pm grant "$task_package" android.permission.RECORD_AUDIO
+    adb shell pm grant "$task_package" android.permission.POST_NOTIFICATIONS
+  fi
   adb shell dumpsys package "$task_package" > "$task_output/$task_product/installed-package.txt"
 done
 adb logcat -c
@@ -109,6 +113,10 @@ for task_product in vonotation notes; do
   # A brand-new target app data directory each time; no user data or credentials exist.
   adb shell am force-stop "$task_package"
   adb shell pm clear "$task_package"
+  if [[ "$task_product" == notes ]]; then
+    adb shell pm grant "$task_package" android.permission.RECORD_AUDIO
+    adb shell pm grant "$task_package" android.permission.POST_NOTIFICATIONS
+  fi
   if [[ "$task_appearance" == dark ]]; then adb shell cmd uimode night yes; else adb shell cmd uimode night no; fi
   adb shell cmd uimode night > "$task_output/$task_product/uimode-$task_appearance.txt"
   timeout 120 "$ANDROID_SDK_ROOT/platform-tools/adb" -s "$task_serial" shell am instrument -w -e product "$task_product" -e appearance "$task_appearance" "$task_package.visual.fixture/app.voiceflow.VisualPaletteTest" > "$task_output/$task_product/logs/instrumentation-$task_appearance.txt" 2>&1

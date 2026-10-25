@@ -9,7 +9,7 @@ struct NoteDetailView: View {
     @State private var deleting = false
     @State private var transcriptExpanded = false
 
-    private var note: VonoNote? { model.notes.first { $0.id == noteID } }
+    private var note: VonoNote? { model.notes.first { $0.id == noteID && $0.deletedAt == nil } }
     private var archived: Bool { note.map { !model.product.supports($0.kind) } ?? false }
 
     var body: some View {
@@ -27,7 +27,11 @@ struct NoteDetailView: View {
                         if archived {
                             Text("Previous recording · Read only. Your original text and source stay on this device. Share a copy to move it to Vocading.")
                                 .font(.caption).foregroundStyle(Daybook.muted).accessibilityIdentifier("note.legacy.notice")
-                        } else if note.state != .ready { processingCard(note) }
+                        } else {
+                            if model.product == .notes { Text(model.recordingStatus(note)).font(.caption.weight(.semibold)).foregroundStyle(Daybook.accent) }
+                            if let warning = note.captureWarning { Text(warning).font(.caption).foregroundStyle(Daybook.coral) }
+                            if note.state != .ready { processingCard(note) }
+                        }
                         if note.kind == .translation && !note.translation.isEmpty {
                             textSection("Translation", note.translation, identifier: "note.detail.translation")
                         }
@@ -65,7 +69,7 @@ struct NoteDetailView: View {
                         if let url = model.audioURL(for: note) {
                             DisclosureGroup {
                                 SourceAudioView(url: url).padding(.top, 9)
-                                if archived { ShareLink(item: url) { Label("Share source audio", systemImage: "square.and.arrow.up") }.accessibilityIdentifier("note.legacy.shareAudio") }
+                                if archived || model.product == .notes { ShareLink(item: url) { Label("Share source audio", systemImage: "square.and.arrow.up") }.accessibilityIdentifier("note.legacy.shareAudio") }
                             } label: {
                                 Label("Source audio", systemImage: "waveform").font(.subheadline).foregroundStyle(Daybook.accent).frame(minHeight: 44)
                                     .accessibilityIdentifier("note.audio")
@@ -91,12 +95,15 @@ struct NoteDetailView: View {
             }
         }
         .sheet(isPresented: $editing) { if let note { EditNoteView(note: note).environmentObject(model) } }
-        .confirmationDialog("Delete this note?", isPresented: $deleting, titleVisibility: .visible) {
-            Button("Delete note and source audio", role: .destructive) {
-                if let note, model.deleteNote(note) { dismiss() }
+        .confirmationDialog(model.product == .notes ? "Move to Recently deleted?" : "Delete this note?", isPresented: $deleting, titleVisibility: .visible) {
+            Button(model.product == .notes ? "Move to Recently deleted" : "Delete note and source audio", role: .destructive) {
+                if let note {
+                    if model.product == .notes { Task { if await model.moveToTrash(note) { dismiss() } } }
+                    else if model.deleteNote(note) { dismiss() }
+                }
             }
             Button("Keep note", role: .cancel) { }
-        } message: { Text("The saved text and its source recording will be removed from this device.") }
+        } message: { Text(model.product == .notes ? "Text and source audio are kept until you restore or permanently delete them." : "The saved text and its source recording will be removed from this device.") }
     }
 
     private func textSection(_ title: String, _ text: String, identifier: String) -> some View {
@@ -144,6 +151,9 @@ struct NoteDetailView: View {
             .buttonStyle(DaybookButtonStyle()).disabled(shareText(note).isEmpty)
             .accessibilityIdentifier("note.detail.share")
         if !archived {
+            if model.product == .notes {
+                Button { model.togglePin(note) } label: { Label(note.pinned == true ? "Unpin" : "Pin", systemImage: note.pinned == true ? "pin.slash" : "pin") }.buttonStyle(DaybookButtonStyle()).disabled(model.libraryBusy).accessibilityIdentifier("note.detail.pin")
+            }
             Button(role: .destructive) { deleting = true } label: { Label("Delete", systemImage: "trash") }
                 .buttonStyle(DaybookButtonStyle()).disabled(model.isBackingUp).accessibilityIdentifier("note.detail.delete")
         }
@@ -209,6 +219,7 @@ struct EditNoteView: View {
     @Published var duration: TimeInterval = 0
     @Published var current: TimeInterval = 0
     @Published var error: String?
+    @Published var speed: Float = 1
     weak var recordingModel: AppModel?
     private var player: AVAudioPlayer?
     private var timer: Timer?
@@ -216,7 +227,7 @@ struct EditNoteView: View {
     func toggle(url: URL) {
         if let player {
             if player.isPlaying { player.pause(); playing = false; timer?.invalidate(); timer = nil }
-            else { player.play(); playing = true; tick() }
+            else { guard player.play() else { error = "Playback could not resume."; return }; playing = true; tick() }
             return
         }
         do {
@@ -225,6 +236,7 @@ struct EditNoteView: View {
             try session.setActive(true)
             let player = try AVAudioPlayer(contentsOf: url)
             player.delegate = self
+            player.enableRate = true; player.rate = speed
             player.prepareToPlay()
             duration = player.duration
             guard player.play() else { error = "The source audio could not start."; return }
@@ -233,7 +245,8 @@ struct EditNoteView: View {
             tick()
         } catch { self.error = "This source audio could not be played: \(error.localizedDescription)" }
     }
-    func seek(_ time: TimeInterval) { player?.currentTime = time; current = time }
+    func seek(_ time: TimeInterval) { let position = min(max(0, time), duration); player?.currentTime = position; current = position }
+    func setSpeed(_ rate: Float) { speed = rate; player?.rate = rate }
     func stop(releaseSession: Bool = true) {
         let ownedPlayback = player != nil
         timer?.invalidate(); timer = nil; player?.stop(); player = nil; playing = false; current = 0
@@ -264,13 +277,22 @@ struct EditNoteView: View {
                 guard !model.isRecording else { return }
                 player.toggle(url: url)
                 Daybook.feedback(model.settings.haptics)
-            } label: { Label(player.playing ? "Pause source" : "Play source", systemImage: player.playing ? "pause.fill" : "play.fill") }
+            } label: { if model.product == .notes { HStack { VocadingSymbol(player.playing ? "pause" : "play"); Text(player.playing ? "Pause source" : "Play source") } } else { Label(player.playing ? "Pause source" : "Play source", systemImage: player.playing ? "pause.fill" : "play.fill") } }
                 .buttonStyle(DaybookButtonStyle()).disabled(model.isRecording)
                 .accessibilityIdentifier("note.detail.audio.play")
             if player.duration > 0 {
                 Slider(value: Binding(get: { player.current }, set: { player.seek($0) }), in: 0...max(1, player.duration))
                     .accessibilityLabel("Source audio position")
                 Text("\(clock(player.current)) / \(clock(player.duration))").font(.caption.monospacedDigit()).foregroundStyle(Daybook.muted)
+                HStack {
+                    Button("−5s") { player.seek(player.current - 5) }.frame(minWidth: 44, minHeight: 44).accessibilityLabel("Back five seconds")
+                    Spacer()
+                    Menu {
+                        ForEach([Float(0.75), 1, 1.25, 1.5, 2], id: \.self) { rate in Button("\(rate.formatted())×") { player.setSpeed(rate) } }
+                    } label: { Text("\(player.speed.formatted())×").frame(minWidth: 44, minHeight: 44) }.accessibilityLabel("Playback speed").accessibilityIdentifier("audio.speed")
+                    Spacer()
+                    Button("+5s") { player.seek(player.current + 5) }.frame(minWidth: 44, minHeight: 44).accessibilityLabel("Forward five seconds")
+                }
             }
         }
         .onAppear { player.recordingModel = model }

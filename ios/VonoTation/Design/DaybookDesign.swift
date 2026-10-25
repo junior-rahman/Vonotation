@@ -94,7 +94,8 @@ struct DaybookMark: View {
     var size: CGFloat = 30
     var color: Color = Daybook.brand
     var body: some View {
-        Canvas { context, size in
+        if AppProduct.current == .notes { VocadingSymbol("mark", size: size) }
+        else { Canvas { context, size in
             let scale = min(size.width / 30, size.height / 31)
             context.scaleBy(x: scale, y: scale)
             context.translateBy(x: 15, y: 15)
@@ -112,6 +113,7 @@ struct DaybookMark: View {
         }
         .frame(width: size, height: size * 31 / 30)
         .accessibilityHidden(true)
+        }
     }
 }
 
@@ -160,5 +162,17 @@ struct DaybookSectionTitle: View {
         Text(title.uppercased()).font(.caption.weight(.semibold)).tracking(0.6).foregroundStyle(Daybook.accent)
             .padding(.top, 8)
             .accessibilityAddTraits(.isHeader)
+    }
+}
+
+
+struct VocadingSymbol: View {
+    let name: String
+    var size: CGFloat = 22
+    init(_ name: String, size: CGFloat = 22) { self.name = name; self.size = size }
+    private var isFeature: Bool { ["voice", "call", "import", "transcript", "share", "delete", "stop", "settings"].contains(name) }
+    var body: some View {
+        Image("Vocading-" + name).resizable().renderingMode(isFeature ? .template : .original)
+            .scaledToFit().frame(width: size, height: size).accessibilityHidden(true)
     }
 }

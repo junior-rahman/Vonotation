@@ -24,6 +24,10 @@ final class NotesUITests: XCTestCase {
         app.buttons["record.toggle"].tap()
         let finish = app.buttons["record.finish"]
         XCTAssertTrue(finish.waitForExistence(timeout: 10))
+        let pause = app.buttons["record.pause"]
+        XCTAssertTrue(pause.waitForExistence(timeout: 5)); pause.tap()
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Resume")).firstMatch.waitForExistence(timeout: 5))
+        pause.tap()
         app.buttons["nav.calls"].tap()
         XCTAssertEqual(app.otherElements["record.active"].value as? String, "voiceNote")
         XCUIDevice.shared.press(.home); app.activate()

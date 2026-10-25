@@ -46,6 +46,9 @@ struct DaybookHome: View {
     @State private var page: DaybookPage = AppProduct.current == .notes ? .voiceNotes : .dictations
     @State private var showSettings = false
     @State private var importAudio = false
+    @State private var search = ""
+    @State private var pinnedOnly = false
+    @State private var showDeleted = false
 
     private var pages: [DaybookPage] {
         let supported: [DaybookPage] = model.product == .notes ? [.voiceNotes, .calls] : [.dictations, .thoughts, .clipboard]
@@ -82,6 +85,7 @@ struct DaybookHome: View {
             .tint(Daybook.action)
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: UUID.self) { id in NoteDetailView(noteID: id) }
+            .sheet(isPresented: $showDeleted) { RecentlyDeletedView().environmentObject(model) }
             .sheet(isPresented: $showSettings) {
                 SettingsView().environmentObject(model)
             }
@@ -149,7 +153,8 @@ struct DaybookHome: View {
                             withAnimation(reduceMotion ? nil : .spring(response: 0.34, dampingFraction: 0.85)) { page = candidate }
                         } label: {
                             HStack(spacing: 6) {
-                                if candidate == .thoughts {
+                                if model.product == .notes { VocadingSymbol(candidate == .calls ? "call" : "voice", size: 17) }
+                                else if candidate == .thoughts {
                                     ThoughtMark().stroke(style: StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round)).frame(width: 16, height: 17)
                                 } else if candidate == .dictations {
                                     DaybookMark(size: 16, color: page == candidate ? Daybook.actionInk : Daybook.accent)
@@ -184,13 +189,28 @@ struct DaybookHome: View {
                 Text(page.title).font(.title2.weight(.bold)).accessibilityAddTraits(.isHeader).accessibilityIdentifier("page.title")
                 Spacer(minLength: 12)
                 if page == .calls || page == .voiceNotes {
-                    Button { importAudio = true } label: { Image(systemName: "square.and.arrow.down").frame(width: 44, height: 44) }
+                    Button { importAudio = true } label: { if model.product == .notes { VocadingSymbol("import").frame(width: 44, height: 44) } else { Image(systemName: "square.and.arrow.down").frame(width: 44, height: 44) } }
                         .accessibilityLabel(page == .calls ? "Import call audio" : "Import audio")
                         .accessibilityIdentifier("audio.import")
                 }
             }
             .padding(.horizontal, 18).padding(.top, 12)
 
+            if model.product == .notes {
+                VStack(spacing: 6) {
+                    TextField("Search title or transcript", text: $search)
+                        .textInputAutocapitalization(.never).autocorrectionDisabled()
+                        .padding(10).background(Daybook.soft, in: RoundedRectangle(cornerRadius: 12))
+                        .accessibilityIdentifier("notes.search")
+                    HStack {
+                        Button { pinnedOnly.toggle() } label: { Label(pinnedOnly ? "Show all" : "Pinned", systemImage: pinnedOnly ? "line.3.horizontal.decrease.circle.fill" : "pin") }
+                            .frame(minHeight: 44).accessibilityIdentifier("notes.pinned")
+                        Spacer()
+                        Button { showDeleted = true } label: { Label("Recently deleted", systemImage: "trash") }
+                            .frame(minHeight: 44).accessibilityIdentifier("notes.deleted")
+                    }.font(.caption)
+                }.padding(.horizontal, 18)
+            }
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     if !model.isLoaded { ProgressView("Opening your Daybook…").padding(.vertical, 20) }
@@ -206,7 +226,7 @@ struct DaybookHome: View {
                     if page == .clipboard {
                         ClipboardTimeline()
                     } else if let kind = page.kind {
-                        NotesTimeline(kind: kind)
+                        NotesTimeline(kind: kind, query: model.product == .notes ? search : "", pinnedOnly: model.product == .notes && pinnedOnly)
                     }
                 }
                 .padding(.horizontal, 18).padding(.top, 10).padding(.bottom, 24)
@@ -263,8 +283,7 @@ struct DaybookHome: View {
                 Daybook.feedback(model.settings.haptics, strong: true)
                 Task { await model.startRecording(kind: kind) }
             } label: {
-                Label(page == .dictations ? "Dictate" : page == .translate ? "Record translation" : "Record", systemImage: "waveform")
-                    .frame(minWidth: 130)
+                HStack { if model.product == .notes { VocadingSymbol("ready", size: 28) } else { Image(systemName: "waveform") }; Text(page == .dictations ? "Dictate" : page == .translate ? "Record translation" : "Record") }.frame(minWidth: 130)
             }
             .buttonStyle(DaybookButtonStyle(primary: true))
             .disabled(model.isBackingUp)
@@ -279,7 +298,7 @@ struct DaybookHome: View {
             Text(model.product.displayName).font(.headline)
             Spacer()
             Button { Daybook.feedback(model.settings.haptics); showSettings = true } label: {
-                Image(systemName: "slider.horizontal.3").font(.title3).frame(width: 44, height: 44)
+                Group { if model.product == .notes { VocadingSymbol("settings") } else { Image(systemName: "slider.horizontal.3").font(.title3) } }.frame(width: 44, height: 44)
                     .background(Daybook.surface, in: RoundedRectangle(cornerRadius: 14))
             }
             .accessibilityLabel("Settings").accessibilityIdentifier("nav.settings")
