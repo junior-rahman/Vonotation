@@ -1,0 +1,65 @@
+name: Verify public split downloads and finalize release links
+
+on:
+  push:
+    branches: [release/split-verified-previews]
+    paths: ['.github/workflows/finalize-split-previews.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    if: github.repository_id == '1416658953' && github.repository == 'junior-rahman/Vonotation' && github.ref == 'refs/heads/release/split-verified-previews'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Verify anonymous public downloads and update the companion release note
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, sys, urllib.request
+          sys.path.insert(0, 'release-assets')
+          from publish_voitation import api, SOURCE
+          expected = {
+              'v0.1.18-split-preview': {
+                  'Voitation-0.1.18-preview.apk': '1facc7cf489b1531817683d753256d4ca0f5f9bee96c31a395f935b701459f9c',
+                  'Voitation-Vocading-source.zip': 'bf09638c2a7f40b6a0cc2afa09d4209bfdc189dc55fc2601a90ad64d06d5da1a'},
+              'vocading-v0.1.0-preview': {
+                  'Vocading-0.1.0-preview.apk': 'a5d87eaff11931186137b5618a2840393829ab3f3af861dd91e3cadd8fdf1eb8'},
+              'split-ios-v0.1.18-preview': {
+                  'Voitation-iOS-Simulator.zip': '3a101bc2ebcb34ae99286eff2f9c331bbeb6f14a23a10ff1f2a4dc3b17d9d5d5',
+                  'Vocading-iOS-Simulator.zip': 'd0b984814854b7aaff3e839dbceff419df9b416c79205057546aa0f95c41ee48',
+                  'Voitation-iOS-source.zip': '6e90588290d53324aa9c3cd79a952560d7958f734c04435f9401802a1468c8e2',
+                  'Vocading-iOS-source.zip': '6e90588290d53324aa9c3cd79a952560d7958f734c04435f9401802a1468c8e2'}
+          }
+          releases = {}
+          for tag, files in expected.items():
+              r = api('/releases/tags/' + tag)
+              assert not r['draft'] and r['prerelease'] and r['target_commitish'] == SOURCE
+              releases[tag] = r
+              assets = {a['name']: a for a in r['assets']}
+              for name, checksum in files.items():
+                  a = assets[name]
+                  assert a['digest'] == 'sha256:' + checksum
+                  with urllib.request.urlopen(a['browser_download_url'], timeout=60) as response:
+                      payload = response.read()
+                  assert len(payload) == a['size'] and hashlib.sha256(payload).hexdigest() == checksum
+                  print('Verified anonymous public download:', tag, name)
+          r = releases['vocading-v0.1.0-preview']
+          marker = '<!-- vocading-verified-preview:' + SOURCE + ' -->'
+          assert marker in r['body']
+          start = r['body'].index('This release contains the Vocading APK only.')
+          end = r['body'].index(marker)
+          paragraph = '''This release contains the Vocading APK only. The compatible [Voitation Sand & Cocoa update](https://github.com/junior-rahman/Vonotation/releases/tag/v0.1.18-split-preview) is now published: its original signing key was recovered privately and verified, and the main update feed points to that signed APK. Keep Voitation installed and update it in place; its new Previous recordings screen supports explicit local export into Vocading. [Both iOS Simulator previews and source](https://github.com/junior-rahman/Vonotation/releases/tag/split-ios-v0.1.18-preview) are also published; those ZIPs are not installable iPhone apps. Backup/OAuth remains paused. Attached RELEASE-NOTES.md records the original publication state; this paragraph records the completed companion delivery.
+
+          '''
+          body = r['body'][:start] + paragraph + r['body'][end:]
+          if body != r['body']:
+              api('/releases/' + str(r['id']), 'PATCH', {'body': body})
+          print('All public APK/Simulator/source bytes verified; companion release links finalized.')
+          PY
