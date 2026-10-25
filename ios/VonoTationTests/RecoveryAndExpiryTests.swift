@@ -29,7 +29,7 @@ final class RecoveryAndExpiryTests: XCTestCase {
         XCTAssertTrue(model.clips.isEmpty)
     }
     func testUndoKeepsClipboardOriginalExpiryAndCompleteText() async throws {
-        let clip = ClipItem(text: String(repeating: "Original complete text. ", count: 1000))
+        let clip = ClipItem(text: String(repeating: "Original complete text. ", count: 1000), createdAt: Date(timeIntervalSince1970: floor(Date().timeIntervalSince1970)))
         let model = try await load(AppSnapshot(clips: [clip]))
         model.deleteClip(clip)
         XCTAssertTrue(model.clips.isEmpty)

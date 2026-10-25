@@ -428,7 +428,13 @@ final class AppModel: ObservableObject {
     }
     func restoreDeleted(_ id: UUID) {
         guard isLoaded, !isBackingUp, let item = deleted.first(where: { $0.id == id }), item.expiresAt > Date() else { refreshExpiry(); return }
-        if var note = item.note, !notes.contains(where: { $0.id == note.id }) {
+        if let note = item.note, notes.contains(where: { $0.id == note.id }) {
+            errorMessage = "An item with this identity already exists. The deleted copy was kept."; return
+        }
+        if let clip = item.clip, clips.contains(where: { $0.id == clip.id }) {
+            errorMessage = "This clipboard item is already present. The deleted copy was kept."; return
+        }
+        if var note = item.note {
             note.revision += 1; note.mayFilterShortThought = false
             notes.append(note); notes.sort { $0.createdAt > $1.createdAt }; invalidateRecaps()
         }
