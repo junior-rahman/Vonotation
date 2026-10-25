@@ -270,18 +270,19 @@ final class Dictation {
     /** Finish the existing audio/upload even after its owning UI or input service goes away. */
     /** Retain a frozen destination when an owning UI leaves the screen. */
     void finishDetached(Listener detached){if(closed)return;listener=detached;stop();}
-    void finishDetached(long duration){
+    void finishDetached(long duration){finishDetached(duration,false);}
+    void finishDetached(long duration,boolean inputLost){
         if(closed)return;
         final Context app=context.getApplicationContext();
         listener=new Listener(){
             public void state(String value){}public void partial(String value){}public void level(float value){}
             public void result(String raw,String text,String warning){
-                if(thought){if(saveThought(app,raw,duration))acknowledgeSaved();}else if(Recovery.keep(app,raw,text,duration,false,sensitive))acknowledgeSaved();
+                if(thought){if(saveThought(app,raw,duration))acknowledgeSaved();}else if(Recovery.keep(app,raw,text,duration,false,sensitive,inputLost))acknowledgeSaved();
                 close();
             }
             public void error(String message){
                 String raw=join(committed,partial);
-                if(!raw.trim().isEmpty()){if(thought)saveThought(app,raw,duration);else Recovery.keep(app,raw,sensitive?raw:Store.clean(app,raw),duration,false,sensitive);}
+                if(!raw.trim().isEmpty()){if(thought)saveThought(app,raw,duration);else Recovery.keep(app,raw,sensitive?raw:Store.clean(app,raw),duration,false,sensitive,inputLost);}
                 else android.widget.Toast.makeText(app,message,android.widget.Toast.LENGTH_LONG).show();
                 close();
             }

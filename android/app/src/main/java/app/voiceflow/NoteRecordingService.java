@@ -132,7 +132,7 @@ public final class NoteRecordingService extends Service {
         channel.setSound(null,null);channel.enableVibration(false);notifications.createNotificationChannel(channel);
         PendingIntent open=PendingIntent.getActivity(this,73,new Intent(this,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
         Notification.Builder notice=new Notification.Builder(this,CHANNEL)
-            .setSmallIcon(android.R.drawable.ic_btn_speak_now)
+            .setSmallIcon(AppProduct.isNotes()?android.R.drawable.ic_btn_speak_now:R.drawable.ic_thought_notice)
             .setContentTitle(saving?"Saving voice note":VoiceTake.notePaused()?"Voice note paused":"Recording voice note")
             .setContentText(saving?"Keeping your source audio on this phone.":VoiceTake.notePaused()?"Choose Resume to continue, or Finish to save.":"Choose Pause, Finish or Cancel.")
             .setCategory(Notification.CATEGORY_SERVICE).setOngoing(true).setOnlyAlertOnce(true).setContentIntent(open);

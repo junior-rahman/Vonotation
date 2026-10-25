@@ -41,7 +41,7 @@ final class RecordingNotice {
             NotificationManager notifications = (NotificationManager) service.getSystemService(Service.NOTIFICATION_SERVICE);
             notifications.createNotificationChannel(new NotificationChannel("dictation", "Active dictation", NotificationManager.IMPORTANCE_LOW));
             PendingIntent stop = PendingIntent.getService(service, id, stopIntent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-            Notification notice = new Notification.Builder(service, "dictation").setSmallIcon(android.R.drawable.ic_btn_speak_now)
+            Notification notice = new Notification.Builder(service, "dictation").setSmallIcon(R.drawable.ic_voitation_notice)
                     .setContentTitle("Voitation is listening").setContentText(text).setOngoing(true)
                     .addAction(new Notification.Action.Builder(android.R.drawable.ic_media_pause, "Finish", stop).build()).build();
             if (Build.VERSION.SDK_INT >= 30) service.startForeground(id, notice, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE);

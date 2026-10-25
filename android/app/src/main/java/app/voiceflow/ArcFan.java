@@ -39,13 +39,23 @@ final class ArcFan {
     private TextView clipPill;private RectF clipPillBounds;private String clipboardValue,pressedClipboardValue;
     float cx,cy;int edge;int[] angles;int rotation;
     private int hover=-1;private boolean touchable,closing,wordDone,deleting,deleteCanceled;private long lastAct;
+    private boolean recovered;
     private final Runnable dwell=new Runnable(){public void run(){if(hover==1&&root!=null){wordDone=true;if(!actions.deleteWord()){endDelete();return;}if(!actions.deletePending())Haptics.fire(ctx,Haptics.POP);if(ring!=null)ring.set(0);mark();h.postDelayed(this,REPEAT_MS);}}};
 
     ArcFan(Context ctx,WindowManager wm,Actions actions){this.ctx=ctx;this.wm=wm;this.actions=actions;density=ctx.getResources().getDisplayMetrics().density;R=R_DP*density;M=MARGIN_DP*density;T=TILE_DP*density;}
     boolean isOpen(){return root!=null&&!closing;}
     void clipboardPreview(String value){
         clipboardValue=ClipboardText.usable(value)?value:null;
-        if(clipPill!=null&&!clipPill.isPressed()){clipPill.setText(clipboardValue==null?"":ClipboardText.preview(clipboardValue));clipPill.setContentDescription("Paste latest copy: "+clipPill.getText());clipPill.setVisibility(clipboardValue!=null&&clipPillBounds!=null?View.VISIBLE:View.GONE);}
+        if(clipPill!=null&&!clipPill.isPressed()){clipPill.setText(clipboardValue==null?"":ClipboardText.preview(clipboardValue));clipPill.setContentDescription((recovered?"Open copied dictation: ":"Paste latest copy: ")+clipPill.getText());clipPill.setVisibility(clipboardValue!=null&&clipPillBounds!=null?View.VISIBLE:View.GONE);}
+    }
+    boolean isRecovery(){return recovered;}
+    void openRecovered(float x,float y,String text){
+        recovered=true;clipboardPreview(text);open(x,y,null,0);
+        if(root==null)return;
+        tiles[1].setVisibility(View.GONE);tiles[3].setVisibility(View.GONE);ring.setVisibility(View.GONE);
+        labels[1].setVisibility(View.GONE);labels[3].setVisibility(View.GONE);
+        tiles[2].setContentDescription("Open copied dictation");labels[2].setText("Copied");makeTouchable();
+        h.postDelayed(this::close,12000);
     }
     Rect clipboardBounds(){
         if(!isOpen())return null;float[] p=pos(cx,cy,angles[1],R);

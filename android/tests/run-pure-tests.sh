@@ -7,7 +7,7 @@ out="${1:-$root/app/build/pure-tests}"
 rm -rf "$out"; mkdir -p "$out"
 src="$root/app/src/main/java/app/voiceflow"
 prod=(Cleaner TextInsertion TranscriptGuard LanguagePolicy EditorInsertion LiveInsertion BubblePlacement HistoryDays DictationProblem RecordingMode KeyMask OwnWindow GoogleAuthError AccessibilityList)
-for extra in NotebookPolicy RecordingClock ClipboardRetention ThoughtTouch InputCapturePolicy RecordingAwakePolicy PunctuationCommands ClipboardText QuickThoughtPolicy ThoughtTimeline UpdatePolicy CursorDeletion LineConnectionState ThoughtDaySource ThoughtLengthText NodeRewrite ClipboardPaste CaptureGate BackupJsonBounds NoteWorkPolicy CaptureSegments CallAudioSegments CallSessionPolicy CallSessionState LineNoticePolicy PlaybackPosition ProductProfile RecordingTransferPolicy NoteRecordingPolicy NoteCaptureSession; do [[ -f "$src/$extra.java" ]] && prod+=("$extra"); done
+for extra in ClipboardFallback NotebookPolicy RecordingClock ClipboardRetention ThoughtTouch InputCapturePolicy RecordingAwakePolicy PunctuationCommands ClipboardText QuickThoughtPolicy ThoughtTimeline UpdatePolicy CursorDeletion LineConnectionState ThoughtDaySource ThoughtLengthText NodeRewrite ClipboardPaste CaptureGate BackupJsonBounds NoteWorkPolicy CaptureSegments CallAudioSegments CallSessionPolicy CallSessionState LineNoticePolicy PlaybackPosition ProductProfile RecordingTransferPolicy NoteRecordingPolicy NoteCaptureSession; do [[ -f "$src/$extra.java" ]] && prod+=("$extra"); done
 files=(); for p in "${prod[@]}"; do files+=("$src/$p.java"); done
 suites=(); for t in "$root"/tests/*Test.java; do suites+=("$t"); done
 compiler=(javac)

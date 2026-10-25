@@ -30,12 +30,23 @@ public final class SavedContentActivity extends Activity {
     static final class Hit {final String kind,title,text;final long id;Hit(String k,long i,String t,String x){kind=k;id=i;title=t;text=x;}}
     @Override public void onCreate(Bundle state){super.onCreate(state);if(AppProduct.isNotes()){finish();return;}
         deleted=getIntent().getBooleanExtra("deleted",false);
-        LinearLayout root=Ui.column(this);root.setBackgroundColor(Daybook.paper(this));root.setPadding(Ui.dp(this,20),Ui.dp(this,12),Ui.dp(this,20),Ui.dp(this,12));
-        root.setOnApplyWindowInsetsListener((v,insets)->{if(android.os.Build.VERSION.SDK_INT>=30){android.graphics.Insets bars=insets.getInsets(android.view.WindowInsets.Type.systemBars()|android.view.WindowInsets.Type.displayCutout());v.setPadding(Ui.dp(this,20)+bars.left,Ui.dp(this,12)+bars.top,Ui.dp(this,20)+bars.right,Ui.dp(this,12)+bars.bottom);}return insets;});
-        root.addView(Daybook.button(this,"Back",false,v->finish()));root.addView(Daybook.text(this,deleted?"Recently deleted":"Search saved text",24,Daybook.ink(this),true));
-        query=Daybook.field(this,state==null?"":state.getString("query",""),deleted?"Filter deleted items":"Search dictations, thoughts and clipboard",false);query.setSingleLine(true);root.addView(query);
-        if(deleted)root.addView(Daybook.text(this,"Undo is available for 24 hours. Clipboard expiry dates do not change.",12,Daybook.muted(this),false));
-        ScrollView scroll=new ScrollView(this);results=Ui.column(this);scroll.addView(results);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));setContentView(root);
+        LinearLayout shell=Ui.column(this);shell.setBackground(new Daybook.Backdrop(this));
+        getWindow().setStatusBarColor(Daybook.paper(this));getWindow().setNavigationBarColor(Daybook.paper(this));
+        boolean light=(getResources().getConfiguration().uiMode&android.content.res.Configuration.UI_MODE_NIGHT_MASK)!=android.content.res.Configuration.UI_MODE_NIGHT_YES;
+        getWindow().getDecorView().setSystemUiVisibility(light?android.view.View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|android.view.View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR:0);
+        shell.setOnApplyWindowInsetsListener((v,insets)->{if(android.os.Build.VERSION.SDK_INT>=30){android.graphics.Insets bars=insets.getInsets(android.view.WindowInsets.Type.systemBars()|android.view.WindowInsets.Type.displayCutout());v.setPadding(bars.left,bars.top,bars.right,bars.bottom);}return insets;});
+        FrameLayout frame=new FrameLayout(this);shell.addView(frame,new LinearLayout.LayoutParams(-1,-1));
+        LinearLayout root=Ui.column(this);root.setPadding(Ui.dp(this,20),Ui.dp(this,12),Ui.dp(this,20),Ui.dp(this,12));
+        frame.addView(root,new FrameLayout.LayoutParams(Math.min(getResources().getDisplayMetrics().widthPixels,Ui.dp(this,560)),-1,android.view.Gravity.CENTER_HORIZONTAL));
+        LinearLayout toolbar=Ui.row(this);toolbar.addView(Daybook.iconButton(this,"back","Back",v->finish()),new LinearLayout.LayoutParams(Ui.dp(this,44),Ui.dp(this,48)));
+        TextView heading=Daybook.text(this,deleted?"Recently deleted":"Search",24,Daybook.ink(this),true);toolbar.addView(heading,new LinearLayout.LayoutParams(0,-2,1));root.addView(toolbar);Ui.space(root,12);
+        root.addView(Daybook.text(this,deleted?"Restore something you removed":"Find your saved words",16,Daybook.ink(this),true));Ui.space(root,5);
+        root.addView(Daybook.text(this,deleted?"Undo is available for 24 hours. Clipboard expiry dates stay the same.":"Dictations, thoughts and clipboard — together.",13,Daybook.muted(this),false));Ui.space(root,18);
+        LinearLayout searchRow=Ui.row(this);searchRow.setBackground(Daybook.fieldSurface(this));
+        Daybook.Symbol searchIcon=new Daybook.Symbol(this,"search");searchRow.addView(searchIcon,new LinearLayout.LayoutParams(Ui.dp(this,42),Ui.dp(this,48)));
+        query=Daybook.field(this,state==null?"":state.getString("query",""),deleted?"Filter deleted items":"Search saved text",false);query.setSingleLine(true);query.setBackgroundColor(android.graphics.Color.TRANSPARENT);query.setPadding(0,Ui.dp(this,11),0,Ui.dp(this,11));searchRow.addView(query,new LinearLayout.LayoutParams(0,-2,1));
+        android.view.View clear=Daybook.iconButton(this,"close","Clear search",v->query.setText(""));searchRow.addView(clear,new LinearLayout.LayoutParams(Ui.dp(this,44),Ui.dp(this,48)));root.addView(searchRow);Ui.space(root,18);
+        ScrollView scroll=new ScrollView(this);scroll.setClipToPadding(false);scroll.setVerticalScrollBarEnabled(false);results=Ui.column(this);results.setPadding(0,0,0,Ui.dp(this,12));scroll.addView(results);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));setContentView(shell);root.setFocusableInTouchMode(true);root.requestFocus();
         query.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int a,int c,int f){}public void onTextChanged(CharSequence s,int a,int b,int c){generation++;main.removeCallbacks(search);main.postDelayed(search,250);}public void afterTextChanged(Editable e){}});
         load();
     }
@@ -60,15 +71,27 @@ public final class SavedContentActivity extends Activity {
             }catch(Exception unavailable){failure="Search could not read saved data. Your items were not changed.";}
             final String error=failure;final long nextExpiry=expires;main.post(()->{if(owner!=generation||isDestroyed())return;results.removeAllViews();main.removeCallbacks(expiry);if(nextExpiry>0)main.postDelayed(expiry,Math.max(1,nextExpiry-System.currentTimeMillis()));if(error!=null){results.addView(Daybook.text(this,error,13,Daybook.coral(this),false));return;}
                 results.addView(Daybook.text(this,hits.isEmpty()?"No matching items.":hits.size()>=100?"First 100 matches. Refine your search for more.":hits.size()+" matching items",12,Daybook.muted(this),false));
-                for(Hit hit:hits){String label=hit.title.trim();if(label.isEmpty())label="Untitled";int end=label.offsetByCodePoints(0,Math.min(100,label.codePointCount(0,label.length())));label=label.substring(0,end);Button row=Daybook.button(this,hit.kind+" · "+label,false,v->{if(deleted){boolean ok=DeletionUndo.restore(this,hit.kind,hit.id);Toast.makeText(this,ok?"Restored.":"Could not restore; it may have expired.",Toast.LENGTH_SHORT).show();load();}else open(hit);});row.setContentDescription((deleted?"Undo delete: ":"Open ")+hit.kind+" "+label);results.addView(row,new LinearLayout.LayoutParams(-1,-2));}
+                if(hits.isEmpty()){Ui.space(results,24);LinearLayout empty=Daybook.card(this);empty.setPadding(Ui.dp(this,20),Ui.dp(this,24),Ui.dp(this,20),Ui.dp(this,24));empty.addView(Daybook.text(this,deleted?"Nothing to restore":"No saved text found",18,Daybook.ink(this),true));Ui.space(empty,8);empty.addView(Daybook.text(this,term.isEmpty()?(deleted?"Deleted items appear here for 24 hours.":"Your saved words will appear here."):"Try a different word or clear your search.",14,Daybook.muted(this),false));results.addView(empty);}
+                for(Hit hit:hits)addHit(hit);
+
             });
         });
+    }
+    private String kindLabel(String kind){return kind.equals("dictation")?"Dictation":kind.equals("thought")?"Quick thought":"Clipboard";}
+    private void addHit(Hit hit){
+        Ui.space(results,12);LinearLayout card=Daybook.card(this);card.setPadding(Ui.dp(this,16),Ui.dp(this,16),Ui.dp(this,16),Ui.dp(this,16));
+        LinearLayout top=Ui.row(this);FloatingIcon icon=new FloatingIcon(this,hit.kind.equals("thought")?"thought":hit.kind.equals("clipboard")?"clipboard":"micKeyboardHidden",Daybook.accent(this));LinearLayout.LayoutParams ip=new LinearLayout.LayoutParams(Ui.dp(this,24),Ui.dp(this,24));ip.rightMargin=Ui.dp(this,8);top.addView(icon,ip);top.addView(Daybook.text(this,kindLabel(hit.kind),12,Daybook.accent(this),true),new LinearLayout.LayoutParams(0,-2,1));card.addView(top);Ui.space(card,10);
+        String label=hit.title.trim();if(label.isEmpty())label=hit.text.trim();if(label.isEmpty())label="Untitled";
+        TextView preview=Daybook.text(this,label,16,Daybook.ink(this),false);preview.setMaxLines(3);preview.setEllipsize(android.text.TextUtils.TruncateAt.END);card.addView(preview);
+        if(deleted){Ui.space(card,12);Button restore=Daybook.button(this,"Restore",false,v->{boolean ok=DeletionUndo.restore(this,hit.kind,hit.id);Toast.makeText(this,ok?"Restored.":"Could not restore; it may have expired.",Toast.LENGTH_SHORT).show();load();});restore.setContentDescription("Restore "+kindLabel(hit.kind)+": "+label);card.addView(restore,new LinearLayout.LayoutParams(-1,-2));}
+        else{card.setBackground(Daybook.ripple(this,Daybook.surface(this),20));card.setFocusable(true);card.setContentDescription("Open "+kindLabel(hit.kind)+": "+label);card.setOnClickListener(v->{Daybook.feedback(v);open(hit);});}
+        results.addView(card,new LinearLayout.LayoutParams(-1,-2));
     }
     private String currentText(Hit hit){
         if(hit.kind.equals("clipboard"))return ClipList.text(this,hit.id);
         try{JSONArray entries=new JSONArray(Store.get(this,hit.kind.equals("dictation")?"history":"notes","[]"));for(int i=0;i<entries.length();i++){JSONObject item=entries.getJSONObject(i);if(item.optLong("id")==hit.id)return item.optString("text").isEmpty()?item.optString("raw"):item.optString("text");}}catch(Exception ignored){}return null;
     }
     private void open(Hit hit){String text=currentText(hit);if(text==null){Toast.makeText(this,"This item was deleted or expired.",Toast.LENGTH_SHORT).show();load();return;}
-        opened=new AlertDialog.Builder(this).setTitle(hit.kind).setMessage(text).setNegativeButton("Close",null).setPositiveButton("Copy",(d,w)->{String current=currentText(hit);if(current!=null)Ui.copy(this,current);else Toast.makeText(this,"This item expired or was deleted.",Toast.LENGTH_SHORT).show();}).show();
+        opened=new AlertDialog.Builder(this).setTitle(kindLabel(hit.kind)).setMessage(text).setNegativeButton("Close",null).setPositiveButton("Copy",(d,w)->{String current=currentText(hit);if(current!=null)Ui.copy(this,current);else Toast.makeText(this,"This item expired or was deleted.",Toast.LENGTH_SHORT).show();}).show();
     }
 }
