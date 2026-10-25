@@ -14,6 +14,7 @@ import android.widget.LinearLayout;
 
 /** External disposable editor: runs in the fixture APK, not the Voitation process. */
 public final class ClipboardInputActivity extends Activity {
+    private Button leave;
     @Override public void onCreate(Bundle state){
         super.onCreate(state);
         LinearLayout column=new LinearLayout(this);column.setOrientation(1);column.setPadding(30,100,30,30);
@@ -39,9 +40,13 @@ public final class ClipboardInputActivity extends Activity {
             }
         });
         column.addView(rejecting,new LinearLayout.LayoutParams(-1,140));
-        Button leave=new Button(this);leave.setText("Leave input");leave.setContentDescription("Recovery leave input");
+        leave=new Button(this);leave.setText("Leave input");leave.setContentDescription("Recovery leave input");
         leave.setOnClickListener(v->{column.requestFocus();((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(column.getWindowToken(),0);});
         column.addView(leave,new LinearLayout.LayoutParams(-1,100));
         setContentView(column);normal.requestFocus();normal.setSelection(7);
+    }
+    @Override protected void onNewIntent(android.content.Intent intent){
+        super.onNewIntent(intent);
+        if(intent.getBooleanExtra("emit_auxiliary_focus",false))leave.sendAccessibilityEvent(android.view.accessibility.AccessibilityEvent.TYPE_VIEW_FOCUSED);
     }
 }

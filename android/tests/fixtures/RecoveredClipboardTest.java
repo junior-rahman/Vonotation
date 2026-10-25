@@ -40,12 +40,9 @@ public final class RecoveredClipboardTest extends Instrumentation {
             runOnMainSync(()->FlowAccessibility.instance.queueCopiedDictation(COPY));
             SystemClock.sleep(300);require(find(PREVIEW)==null,"Copy popped up before another input activation");
             focus(REJECT);waitNode(PREVIEW);
-            // Previously a non-editor/keyboard focus event closed the entire fan.
-            runOnMainSync(()->{
-                AccessibilityEvent event=AccessibilityEvent.obtain(AccessibilityEvent.TYPE_VIEW_FOCUSED);
-                event.setPackageName("com.android.inputmethod.latin");event.setClassName("android.widget.Button");
-                FlowAccessibility.instance.onAccessibilityEvent(event);event.recycle();
-            });
+            // Deliver an auxiliary non-editor focus event through Android's real accessibility dispatch.
+            // Calling the service directly with an unsealed event is not a valid framework event.
+            getTargetContext().startActivity(new Intent().setClassName("app.voiceflow.visual.fixture","app.voiceflow.fixture.ClipboardInputActivity").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_SINGLE_TOP).putExtra("emit_auxiliary_focus",true));
             SystemClock.sleep(13000);waitNode(PREVIEW);capture("persistent-after-timeout.png");
             touch(PREVIEW);SystemClock.sleep(EditorInsertion.ACK_MS+700);
             require("Keep".equals(text(REJECT)),"Refused paste changed the rejecting field");waitNode(PREVIEW);
