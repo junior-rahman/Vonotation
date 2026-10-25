@@ -1,0 +1,15 @@
+{
+  "file": "Vocading-0.1.0-preview.apk",
+  "size_bytes": 6240969,
+  "sha256": "a5d87eaff11931186137b5618a2840393829ab3f3af861dd91e3cadd8fdf1eb8",
+  "package": "app.vonotation.notes",
+  "display_name": "Vocading",
+  "version_name": "0.1.0-preview",
+  "version_code": 1,
+  "minimum_android_sdk": 26,
+  "signer_sha256": "b92734798f7d2642f336290beada2497ccc65c1f253511d9893499091777d317",
+  "source_commit": "7d2c26aa8ce8d72b370138f5b1632093754e29c9",
+  "verified_source_tree": "dd7d297bc4f7c9c3dc03b63d61f5b13cb05598c3",
+  "payload_matches_native_verified_unsigned_apk": true,
+  "android_workflow_run": 40154153363
+}

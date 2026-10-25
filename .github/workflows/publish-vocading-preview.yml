@@ -1,0 +1,30 @@
+name: Publish verified Vocading preview
+
+on:
+  push:
+    branches: [release/vocading-0.1.0-preview]
+    paths:
+      - 'release-assets/**'
+      - '.github/workflows/publish-vocading-preview.yml'
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: vocading-0.1.0-preview-publication
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.repository_id == '1416658953' && github.repository == 'junior-rahman/Vonotation' && github.ref == 'refs/heads/release/vocading-0.1.0-preview'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Verify exact tested payload and publish Vocading only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 release-assets/publish_vocading.py
