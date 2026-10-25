@@ -1,9 +1,9 @@
 {
-  "versionCode": 91,
-  "versionName": "0.1.19-preview",
-  "apk": "https://github.com/junior-rahman/Vonotation/releases/download/v0.1.19-preview/Voitation-0.1.19-preview.apk",
-  "sha256": "ab92034fdcce27c9f62a98c083ff9ae534705cf6ef15f9e4cc6232b05f3b8267",
-  "size": 6245065,
+  "versionCode": 92,
+  "versionName": "0.1.20-preview",
+  "apk": "https://github.com/junior-rahman/Vonotation/releases/download/v0.1.20-preview/Voitation-0.1.20-preview.apk",
+  "sha256": "a726fda185909d26ed105bde1b13030a21b2e8e9749611ed4c5930be1bec560e",
+  "size": 6275081,
   "package": "app.voiceflow",
-  "notes": "Fixes recording recovery so audio stays until text is safely saved. Adds individual retry/export/discard controls, full-text search, 24-hour Undo, supplied Voitation artwork and clearer Settings. Long cloud dictations finish below the upload limit. Android builds, lint, recovery/storage tests and light/dark, large-text and unfolded layouts passed. Original signing identity retained: install over the existing app without uninstalling. Physical microphone, live providers and cross-app insertion still need phone testing. iOS and backup/OAuth remain paused."
+  "notes": "Polished Sand & Cocoa design, approved V-wave and Thought Loop artwork, clearer Settings, search, recovery and Restore cards. Clipboard pops out of the floating fan only when dictation loses its input and successfully copies the transcript. Regular copies do not open it. Android builds, lint, 43 Java suites and native light/dark, large-text and unfolded checks passed. Original signing identity retained; install over the existing app. Physical cross-app input-loss behavior remains for phone testing. iOS and backup/OAuth remain paused."
 }

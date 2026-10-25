@@ -1,4 +1,18 @@
-# Current Android release: Voitation 0.1.19-preview
+# Current Android release: Voitation 0.1.20-preview
+
+[Published APK and release notes](https://github.com/junior-rahman/Vonotation/releases/tag/v0.1.20-preview). Settings → Update selects version 92. Android 8.0+, package `app.voiceflow`; install over the existing app without uninstalling.
+
+- Polished Sand & Cocoa Settings, search, recovery and Recently deleted. Approved V-wave and selected Thought Loop across native controls, states and notifications.
+- Clipboard pops out of the floating fan only after dictation loses its input and successfully copies the transcript. Ordinary copies, successful insertion, private dictation and failed copies do not trigger it. Tapping opens saved Clipboard; the fan never automatically pastes.
+- Release source `8fdf788617a8c67ba6b1ec9bb6828ed2aec62601`, tree `9ccf7a6a1f318bb3bbd887a58733d94dd1800eab`. [PR #4](https://github.com/junior-rahman/Vonotation/pull/4) also preserves subsequent Vocading changes.
+- [Native run 40165099233](https://github.com/junior-rahman/Vonotation/actions/runs/40165099233) passed both builds/lints, 43 Java suites, durable recovery and detached input-origin regressions, native Clipboard/privacy/Restore checks, light/dark, 160% text and unfolded layouts. Its test merge `fbd73f12e70c851e8176f2075815a809a75c1f2e` has the identical release tree. The 54 captures include four native artwork-state fixtures. A parallel run was blocked by a Quickstep system-launcher ANR before app-screen verification.
+- APK: 6,275,081 bytes; SHA-256 `a726fda185909d26ed105bde1b13030a21b2e8e9749611ed4c5930be1bec560e`. Original certificate SHA-256 `5dca2219fbe89fb885b24c904fd4c57d3b58930922d21d455fc10d7a35f7568a`. Signed payload matches the tested unsigned build exactly, apart from signature metadata.
+- [Publication run 40166608805](https://github.com/junior-rahman/Vonotation/actions/runs/40166608805) verified all asset digests. The public APK was downloaded and its checksum verified again.
+- Physical-device microphone, provider calls and real cross-app input-loss behavior remain unverified. No iOS testing or release; backup/OAuth remains paused.
+
+---
+
+# Historical Android release: Voitation 0.1.19-preview
 
 Published on GitHub: [download and release notes](https://github.com/junior-rahman/Vonotation/releases/tag/v0.1.19-preview). The main update feed now selects version 91. Android 8.0+, package `app.voiceflow`; install over the existing app without uninstalling. The original certificate matches 0.1.18 and 0.1.17.
 
