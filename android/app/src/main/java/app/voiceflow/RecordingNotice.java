@@ -11,7 +11,7 @@ import android.os.Build;
 import android.util.Log;
 
 /**
- * The optional "VonoTation is listening" foreground notice for bubble and keyboard dictation.
+ * The optional "Voitation is listening" foreground notice for bubble and keyboard dictation.
  *
  * The recorder always runs inside the bound accessibility or input-method service, and the bubble overlay
  * shows the recording and processing status, so the notice is never required for a session to keep going.
@@ -29,7 +29,7 @@ final class RecordingNotice {
 
     /** Starts the notice if Android allows it; never throws. Returns the resulting mode. */
     // Generic Service hides the concrete component from lint. Both permitted bound services declare
-    // microphone in VonoTation; Notes removes those accessibility and keyboard components entirely.
+    // microphone in Voitation; Notes removes those accessibility and keyboard components entirely.
     @android.annotation.SuppressLint("ForegroundServiceType")
     static String start(Service service, int id, String text, Intent stopIntent) {
         if(AppProduct.isNotes())return NONE;
@@ -42,7 +42,7 @@ final class RecordingNotice {
             notifications.createNotificationChannel(new NotificationChannel("dictation", "Active dictation", NotificationManager.IMPORTANCE_LOW));
             PendingIntent stop = PendingIntent.getService(service, id, stopIntent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
             Notification notice = new Notification.Builder(service, "dictation").setSmallIcon(android.R.drawable.ic_btn_speak_now)
-                    .setContentTitle("VonoTation is listening").setContentText(text).setOngoing(true)
+                    .setContentTitle("Voitation is listening").setContentText(text).setOngoing(true)
                     .addAction(new Notification.Action.Builder(android.R.drawable.ic_media_pause, "Finish", stop).build()).build();
             if (Build.VERSION.SDK_INT >= 30) service.startForeground(id, notice, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE);
             else service.startForeground(id, notice);

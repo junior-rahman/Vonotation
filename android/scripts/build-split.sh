@@ -63,7 +63,7 @@ import re,sys
 text=Path(sys.argv[1]).read_text()
 found=re.search(r'Signer #1 certificate SHA-256 digest: ([0-9a-f]+)',text)
 if not found or found.group(1)!='5dca2219fbe89fb885b24c904fd4c57d3b58930922d21d455fc10d7a35f7568a':
-    raise SystemExit('Refusing to label VonoTation as an update: original signing certificate does not match')
+    raise SystemExit('Refusing to label Voitation as an update: original signing certificate does not match')
 PY
     fi
   fi
@@ -83,7 +83,7 @@ print(json.dumps(receipt,indent=2))
 PY
 done
 if [[ "$task_mode" == unsigned ]]; then
-  printf '%s\n' 'UNSIGNED: these files cannot be installed until signed with the appropriate product key. VonoTation updates require its existing signer. Never uninstall the old app to work around a signature mismatch.' > "$task_output/README.txt"
+  printf '%s\n' 'UNSIGNED: these files cannot be installed until signed with the appropriate product key. Voitation updates require its existing signer. Never uninstall the old app to work around a signature mismatch.' > "$task_output/README.txt"
 elif [[ "$task_mode" == qa ]]; then
   printf '%s\n' 'DISPOSABLE QA ONLY: not update-compatible and not a production release. Use only fresh disposable emulator installations. Do not uninstall or replace an app with user data.' > "$task_output/README.txt"
 else

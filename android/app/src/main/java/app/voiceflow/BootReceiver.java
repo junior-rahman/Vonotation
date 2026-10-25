@@ -9,7 +9,7 @@ import android.os.Looper;
 /**
  * After a restart or app update, checks that the bubble's Accessibility service came back. Android binds an
  * enabled service by itself after the first unlock; this only detects when it was turned off or didn't start
- * and posts "Tap to turn VonoTation back on". Not directBootAware: credential-protected prefs are read after unlock.
+ * and posts "Tap to turn Voitation back on". Not directBootAware: credential-protected prefs are read after unlock.
  */
 public final class BootReceiver extends BroadcastReceiver {
     @Override public void onReceive(Context context, Intent intent) {

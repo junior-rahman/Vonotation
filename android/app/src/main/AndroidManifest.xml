@@ -39,14 +39,14 @@
             <intent-filter><action android:name="android.intent.action.PHONE_STATE" /></intent-filter>
         </receiver>
         <activity android:name=".ClipPeek" android:exported="false" android:theme="@android:style/Theme.Translucent.NoTitleBar" android:excludeFromRecents="true" android:noHistory="true" android:taskAffinity="app.voiceflow.clip" android:launchMode="singleInstance" />
-        <service android:name=".FlowAccessibility" android:label="VonoTation bubble" android:exported="true" android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE" android:foregroundServiceType="microphone">
+        <service android:name=".FlowAccessibility" android:label="Voitation bubble" android:exported="true" android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE" android:foregroundServiceType="microphone">
             <intent-filter><action android:name="android.accessibilityservice.AccessibilityService" /></intent-filter>
             <meta-data android:name="android.accessibilityservice" android:resource="@xml/accessibility" />
         </service>
         <receiver android:name=".BootReceiver" android:exported="false">
             <intent-filter><action android:name="android.intent.action.BOOT_COMPLETED" /><action android:name="android.intent.action.MY_PACKAGE_REPLACED" /></intent-filter>
         </receiver>
-        <service android:name=".FlowKeyboard" android:label="VonoTation keyboard" android:exported="true" android:permission="android.permission.BIND_INPUT_METHOD" android:foregroundServiceType="microphone">
+        <service android:name=".FlowKeyboard" android:label="Voitation keyboard" android:exported="true" android:permission="android.permission.BIND_INPUT_METHOD" android:foregroundServiceType="microphone">
             <intent-filter><action android:name="android.view.InputMethod" /></intent-filter>
             <meta-data android:name="android.view.im" android:resource="@xml/keyboard" />
         </service>

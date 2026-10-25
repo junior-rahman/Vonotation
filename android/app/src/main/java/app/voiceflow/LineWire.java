@@ -108,7 +108,7 @@ final class LineWire {
     }
 
     static void pair(Context context,String code) throws Exception {
-        if(!AppProduct.isNotes())throw new IllegalStateException("Call recording is available in Vono Notes.");
+        if(!AppProduct.isNotes())throw new IllegalStateException("Call recording is available in Vocading.");
         LineWatch.hold();
         try{
             End end=find(context,"_adb-tls-pairing._tcp.");

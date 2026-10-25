@@ -1,26 +1,26 @@
 import AppIntents
 
 #if VONO_NOTES
-/// Opens Vono Notes before starting a microphone recording.
+/// Opens Vocading before starting a microphone recording.
 struct RecordVoiceNoteIntent: AppIntent {
     static var title: LocalizedStringResource = "Record Voice Note"
-    static var description = IntentDescription("Open Vono Notes and record a voice note until you finish or cancel it.")
+    static var description = IntentDescription("Open Vocading and record a voice note until you finish or cancel it.")
     static var openAppWhenRun = true
     func perform() async throws -> some IntentResult & ProvidesDialog {
         try await VonoRuntime.begin(kind: .voiceNote)
-        return .result(dialog: "Voice note recording started. Finish it in Vono Notes.")
+        return .result(dialog: "Voice note recording started. Finish it in Vocading.")
     }
 }
 #else
 /// Opens the containing app: a keyboard extension cannot start microphone capture.
 struct RecordQuickThoughtIntent: AppIntent {
     static var title: LocalizedStringResource = "Record Quick Thought"
-    static var description = IntentDescription("Open VonoTation and start a Quick Thought. Recording continues until you finish or cancel it.")
+    static var description = IntentDescription("Open Voitation and start a Quick Thought. Recording continues until you finish or cancel it.")
     static var openAppWhenRun = true
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
         try await VonoRuntime.beginThought()
-        return .result(dialog: "Quick Thought recording started. Finish it in VonoTation or use Finish VonoTation Recording.")
+        return .result(dialog: "Quick Thought recording started. Finish it in Voitation or use Finish Voitation Recording.")
     }
 }
 
@@ -28,9 +28,9 @@ struct RecordQuickThoughtIntent: AppIntent {
 
 struct FinishVonoRecordingIntent: AppIntent {
     #if VONO_NOTES
-    static var title: LocalizedStringResource = "Finish Vono Notes Recording"
+    static var title: LocalizedStringResource = "Finish Vocading Recording"
     #else
-    static var title: LocalizedStringResource = "Finish VonoTation Recording"
+    static var title: LocalizedStringResource = "Finish Voitation Recording"
     #endif
     static var description = IntentDescription("Finish the active recording and save its source before transcription.")
     static var openAppWhenRun = true

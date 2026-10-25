@@ -38,7 +38,7 @@ public final class NoteRecordingService extends Service {
     /** Called from the visible recording button. Recording begins only after startForeground. */
     static void begin(Activity activity,long id,Runnable ready,java.util.function.Consumer<String> failed){
         if(!AppProduct.isNotes() || activity.isFinishing() || activity.isDestroyed() || !activity.hasWindowFocus()){
-            failed.accept("Return to Vono Notes and tap Record to begin.");return;
+            failed.accept("Return to Vocading and tap Record to begin.");return;
         }
         if(!session.begin(id)){failed.accept("The previous recording is still being saved.");return;}
         Context app=activity.getApplicationContext();
@@ -48,7 +48,7 @@ public final class NoteRecordingService extends Service {
             main.postDelayed(()->{
                 if(pending==request && session.owns(id))failPending(app,id,"The recording service did not start. Tap Record to try again.");
             },10000);
-        }catch(RuntimeException unavailable){failPending(app,id,"Could not start background microphone recording. Keep Vono Notes open and try again.");}
+        }catch(RuntimeException unavailable){failPending(app,id,"Could not start background microphone recording. Keep Vocading open and try again.");}
     }
 
     static void finalizing(Context context,long id){
@@ -101,7 +101,7 @@ public final class NoteRecordingService extends Service {
             if(Build.VERSION.SDK_INT>=30)startForeground(NOTICE,notice,ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE);
             else startForeground(NOTICE,notice);
         }catch(RuntimeException unavailable){
-            failPending(this,id,"Android could not allow background microphone recording. Keep Vono Notes open and check microphone permission.");
+            failPending(this,id,"Android could not allow background microphone recording. Keep Vocading open and check microphone permission.");
             stopSelf(startId);return START_NOT_STICKY;
         }
         pending=null;

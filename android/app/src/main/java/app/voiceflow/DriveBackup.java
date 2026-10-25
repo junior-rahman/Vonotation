@@ -820,7 +820,7 @@ final class DriveBackup {
     }
     private static void validateUri(Uri uri) throws IOException {
         if (uri == null || !"content".equals(uri.getScheme()) || uri.getAuthority() == null || uri.getAuthority().isEmpty()
-                || uri.toString().length() > 4096) throw new ConfigurationException("Choose an encrypted VonoTation backup file.");
+                || uri.toString().length() > 4096) throw new ConfigurationException("Choose an encrypted Voitation backup file.");
     }
     private static byte[] readLegacyBytes(Context context, Uri uri) throws IOException {
         try (InputStream in = context.getContentResolver().openInputStream(uri)) {

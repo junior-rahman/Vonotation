@@ -44,7 +44,7 @@ final class BubbleHealth {
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP).putExtra(MainActivity.EXTRA_FIX, FIX_ACCESSIBILITY),
                     PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
             notifications.notify(NOTICE_ID, new Notification.Builder(c, "bubble_status").setSmallIcon(android.R.drawable.ic_btn_speak_now)
-                    .setContentTitle("Tap to turn VonoTation back on").setContentText(problem).setStyle(new Notification.BigTextStyle().bigText(problem + " Tap to turn the bubble back on."))
+                    .setContentTitle("Tap to turn Voitation back on").setContentText(problem).setStyle(new Notification.BigTextStyle().bigText(problem + " Tap to turn the bubble back on."))
                     .setContentIntent(open).setAutoCancel(true).build());
         } catch (RuntimeException e) { Log.w("VonoTation", "Bubble prompt could not be posted (notifications off?); Home shows it instead: " + e); }
     }
@@ -53,7 +53,7 @@ final class BubbleHealth {
         try { return ((PowerManager) c.getSystemService(Context.POWER_SERVICE)).isIgnoringBatteryOptimizations(c.getPackageName()); }
         catch (RuntimeException e) { return false; }
     }
-    /** System dialog asking to exempt VonoTation; falls back to the battery optimization list. */
+    /** System dialog asking to exempt Voitation; falls back to the battery optimization list. */
     static void requestBatteryExemption(android.app.Activity a) {
         try { a.startActivity(new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:" + a.getPackageName()))); }
         catch (RuntimeException e) {

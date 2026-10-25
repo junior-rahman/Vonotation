@@ -80,7 +80,7 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
     private int homeMisses;
     /** Visible dictation problem shown beside the mic (toasts are suppressed on Android 13+). */
     private DictationProblem problem;
-    /** VonoTation's own activity is in front: skip node queries into our own (same-process) window. */
+    /** Voitation's own activity is in front: skip node queries into our own (same-process) window. */
     private boolean ownAppActive;
     private final Runnable clearProblem=()->{problem=null;updateBubble();};
 
@@ -180,9 +180,9 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
             if(busy && !thoughtSession && target!=null && target.packageName!=null && pkg!=null && !target.packageName.contentEquals(pkg) && !getPackageName().contentEquals(pkg) && !isImePackage(pkg.toString()))loseInsertion();
         }
         if(busy && (thoughtSession || ownAppActive)){handler.removeCallbacks(refresh);handler.post(refresh);return;}
-        // This service shares a process with VonoTation's own screens. Querying our own window from here waits on
+        // This service shares a process with Voitation's own screens. Querying our own window from here waits on
         // the main thread it is running on (5 s per query, which caused input ANRs while typing in Settings), and
-        // the bubble never serves VonoTation's own fields unless the VonoTation keyboard is active.
+        // the bubble never serves Voitation's own fields unless the Voitation keyboard is active.
         if(ownAppActive && !keyboardMode() && !busy){handler.removeCallbacks(refresh);handler.post(()->{removeBubble();hideThought();});return;}
         if(type==AccessibilityEvent.TYPE_VIEW_FOCUSED && isHomePackage(event.getPackageName())){handler.removeCallbacks(detectHomeInput);handler.postDelayed(detectHomeInput,200);}
         if(type==AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED){if(!recording()){handler.removeCallbacks(refresh);handler.postDelayed(refresh,180);}return;}
@@ -415,7 +415,7 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
     private void openThoughts(){
         if(!thoughtCaptureAllowed()){updateBubble();return;}
         try{startActivity(new Intent(this,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP).putExtra(MainActivity.EXTRA_OPEN_THOUGHTS,true));}
-        catch(RuntimeException unavailable){showProblem(DictationProblem.of("Could not open Quick thoughts. Open VonoTation and select Thoughts."));}
+        catch(RuntimeException unavailable){showProblem(DictationProblem.of("Could not open Quick thoughts. Open Voitation and select Thoughts."));}
     }
     private void removeBubble() {
         if(fan!=null){fan.dismissNow();fan=null;}
@@ -436,7 +436,7 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
                 if(controller.switchToInputMethod(voiceId))return;
             }
         }
-        // The VonoTation IME has no input view; only other keyboards need suppression.
+        // The Voitation IME has no input view; only other keyboards need suppression.
         if(hasField && !typingRequested && !voiceKeyboard){
             if(!keyboardSuppressed){if(!keyboardOverride)previousKeyboardMode=controller.getShowMode();keyboardSuppressed=controller.setShowMode(SHOW_MODE_HIDDEN);keyboardOverride=keyboardSuppressed;}
         }else if((!hasField && android.os.SystemClock.elapsedRealtime()>keyboardTransitionUntil) || (!typingRequested && voiceKeyboard))releaseTypingKeyboard();
@@ -461,7 +461,7 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
     private boolean typingKeyboardVisible(){
         for(AccessibilityWindowInfo window:getWindows())if(window.getType()==AccessibilityWindowInfo.TYPE_INPUT_METHOD){
             Rect bounds=new Rect();window.getBoundsInScreen(bounds);
-            // The VonoTation IME reserves no input view; ignore its empty window.
+            // The Voitation IME reserves no input view; ignore its empty window.
             if(bounds.height()>Ui.dp(this,40) && bounds.width()>0)return true;
         }
         return false;
@@ -521,7 +521,7 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
         glyph=null;timer=null;dragging=false;displayedState=state;
         boolean active=recording();int d=diameter(),inset=Ui.dp(this,4),gap=Ui.dp(this,8),problemWidth=Ui.dp(this,176),statusWidth=active?Ui.dp(this,80)+gap:(problem!=null?problemWidth+gap:0);
         bubble.setGravity(Gravity.TOP);bubble.setClipChildren(false);bubble.setClipToPadding(false);bubble.setPadding(inset,inset,inset,inset);bubble.setBackground(null);bubble.setElevation(0);
-        bubble.setContentDescription(keyboardMode?"VonoTation floating keyboard":active?(working()?"VonoTation: transcribing":thoughtSession?"VonoTation: recording a quick thought":"VonoTation: recording dictation"):"VonoTation floating controls");
+        bubble.setContentDescription(keyboardMode?"Voitation floating keyboard":active?(working()?"Voitation: transcribing":thoughtSession?"Voitation: recording a quick thought":"Voitation: recording dictation"):"Voitation floating controls");
         if(active){
             LinearLayout status=Ui.column(this);status.setGravity(Gravity.CENTER);status.setBackground(Ui.glass(this,18,Glass.DAYBOOK));status.setPadding(Ui.dp(this,8),0,Ui.dp(this,8),0);status.setElevation(Ui.dp(this,2));
             glyph=new Glyph();glyph.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);glyph.setContentDescription(keyboardMode?"Keyboard recording waveform":"Recording waveform");status.addView(glyph,new LinearLayout.LayoutParams(-1,Math.max(Ui.dp(this,24),bdp(30))));
@@ -538,15 +538,15 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
                 final DictationProblem shown=problem;
                 LinearLayout pill=Ui.row(this);pill.setGravity(Gravity.CENTER_VERTICAL);pill.setBackground(Ui.glass(this,18,Glass.DAYBOOK));pill.setPadding(Ui.dp(this,10),0,Ui.dp(this,6),0);pill.setElevation(Ui.dp(this,2));
                 TextView message=Ui.text(this,shown.title,11,Daybook.coral(this),true);message.setMaxLines(2);message.setEllipsize(android.text.TextUtils.TruncateAt.END);pill.addView(message,new LinearLayout.LayoutParams(0,-2,1));
-                pill.setContentDescription("VonoTation: "+shown.detail);pill.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
+                pill.setContentDescription("Voitation: "+shown.detail);pill.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
                 if(shown.fix!=null){TextView fixAction=Ui.text(this,"Fix",12,Daybook.accent(this),true);fixAction.setGravity(Gravity.CENTER);fixAction.setPadding(Ui.dp(this,8),0,Ui.dp(this,8),0);fixAction.setBackground(Daybook.ripple(this,android.graphics.Color.TRANSPARENT,12));fixAction.setContentDescription("Fix: "+shown.title);fixAction.setOnClickListener(v->{Daybook.feedback(v);openFix(shown.fix);});pill.addView(fixAction,new LinearLayout.LayoutParams(-2,-1));}
                 pill.setOnClickListener(v->{handler.removeCallbacks(clearProblem);problem=null;updateBubble();});
                 LinearLayout.LayoutParams pillParams=new LinearLayout.LayoutParams(problemWidth,d);pillParams.rightMargin=gap;bubble.addView(pill,0,pillParams);
             }
             final String keyboardState=typingVisible?"Keyboard visible":"Keyboard hidden";
-            View mic=iconControl(typingVisible?"micKeyboardVisible":"micKeyboardHidden",keyboardMode?"Floating keyboard microphone":"VonoTation: start dictation");mic.setTooltipText(keyboardState+". Tap to record. Hold to toggle keyboard.");
+            View mic=iconControl(typingVisible?"micKeyboardVisible":"micKeyboardHidden",keyboardMode?"Floating keyboard microphone":"Voitation: start dictation");mic.setTooltipText(keyboardState+". Tap to record. Hold to toggle keyboard.");
             if(Build.VERSION.SDK_INT>=30)mic.setStateDescription(keyboardState);
-            mic.setAccessibilityDelegate(new View.AccessibilityDelegate(){@Override public void onInitializeAccessibilityNodeInfo(View host,AccessibilityNodeInfo info){super.onInitializeAccessibilityNodeInfo(host,info);if(Build.VERSION.SDK_INT<30)info.setContentDescription((keyboardMode?"Start dictation. ":"VonoTation: start dictation. ")+keyboardState);info.addAction(new AccessibilityNodeInfo.AccessibilityAction(AccessibilityNodeInfo.ACTION_LONG_CLICK,"Hold to toggle keyboard"));}});
+            mic.setAccessibilityDelegate(new View.AccessibilityDelegate(){@Override public void onInitializeAccessibilityNodeInfo(View host,AccessibilityNodeInfo info){super.onInitializeAccessibilityNodeInfo(host,info);if(Build.VERSION.SDK_INT<30)info.setContentDescription((keyboardMode?"Start dictation. ":"Voitation: start dictation. ")+keyboardState);info.addAction(new AccessibilityNodeInfo.AccessibilityAction(AccessibilityNodeInfo.ACTION_LONG_CLICK,"Hold to toggle keyboard"));}});
             mic.setOnClickListener(v->{Daybook.feedback(v);if(keyboardMode())FlowKeyboard.instance.floatingMic();else if(thoughtCaptureAllowed())beginThought();else begin();updateBubble();});
             // performLongClick emits the framework LONG_PRESS once; never add tap feedback here.
             mic.setHapticFeedbackEnabled(Store.bool(this,"haptic_feedback",true));
@@ -792,7 +792,7 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
         String name=pkg==null?"":pkg.toString(),className=kind==null?"":kind.toString();
         if(getPackageName().equals(name)&&className.equals(ClipPeek.class.getName())&&(ClipPeek.pending(clipPeekRequest)||clipPeekReturning)){clipPeekWindow=event.getWindowId();return;}
         if(clipOriginPackage.equals(name)||isImePackage(name))return;
-        // A different app or another VonoTation screen is a real user-window change, never a peek handoff.
+        // A different app or another Voitation screen is a real user-window change, never a peek handoff.
         hideClipTray();
     }
     private boolean clipboardPeekGrace(){

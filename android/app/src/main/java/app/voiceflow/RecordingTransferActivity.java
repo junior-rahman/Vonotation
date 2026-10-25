@@ -85,11 +85,11 @@ public final class RecordingTransferActivity extends Activity {
     private void showList() {
         stopPlayback(); body.removeAllViews();
         if (receiving()) {
-            body.addView(Daybook.text(this,"Choose a recording transfer saved from VonoTation. Voice notes and calls are added to this app. Existing recordings are kept.",15,Daybook.ink(this),false)); Ui.space(body,10);
+            body.addView(Daybook.text(this,"Choose a recording transfer saved from Voitation. Voice notes and calls are added to this app. Existing recordings are kept.",15,Daybook.ink(this),false)); Ui.space(body,10);
             body.addView(Daybook.text(this,"This imports recording audio and text only. It does not transfer Quick Thoughts, dictations, Clipboard, API keys or settings.",13,Daybook.muted(this),false)); Ui.space(body,16);
             body.addView(Daybook.button(this,"Choose recording transfer",true,v -> chooseImport())); return;
         }
-        body.addView(Daybook.text(this,"Your earlier voice notes and calls remain on this phone. You can read and play them here, or save a copy to import into Vono Notes. This screen cannot delete or edit them.",14,Daybook.muted(this),false)); Ui.space(body,14);
+        body.addView(Daybook.text(this,"Your earlier voice notes and calls remain on this phone. You can read and play them here, or save a copy to import into Vocading. This screen cannot delete or edit them.",14,Daybook.muted(this),false)); Ui.space(body,14);
         Button export=Daybook.button(this,"Save recording transfer",true,v -> confirmExport()); export.setEnabled(hasLegacy(this)); body.addView(export); Ui.space(body,18);
         JSONArray records=local(this); int shown=0,total=0;
         for (int i=0; i<records.length(); i++) {
@@ -145,7 +145,7 @@ public final class RecordingTransferActivity extends Activity {
                 runOnUiThread(() -> {
                     if(destroyed){output.delete();return;}
                     exportFile=output; setBusy(false,"");
-                    try { startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("application/zip").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE,"VonoTation-recordings.zip"),SAVE); }
+                    try { startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("application/zip").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE,"Voitation-recordings.zip"),SAVE); }
                     catch(RuntimeException unavailable){exportFile.delete();exportFile=null;feedback.setText("No file picker is available to save the transfer.");}
                 });
             } catch(Exception error) { problem("Could not prepare the recording transfer",error); }
@@ -179,7 +179,7 @@ public final class RecordingTransferActivity extends Activity {
                     runOnUiThread(() -> {
                         if(destroyed){resultFile.close();return;} prepared=resultFile;setBusy(false,"");
                         new AlertDialog.Builder(this).setTitle("Add "+resultFile.entries.length()+" recordings?")
-                            .setMessage("Voice notes and calls will be added to Vono Notes. Existing recordings are not replaced. Original files in VonoTation are not changed. Imported audio remains local until you choose Transcribe or Again.")
+                            .setMessage("Voice notes and calls will be added to Vocading. Existing recordings are not replaced. Original files in Voitation are not changed. Imported audio remains local until you choose Transcribe or Again.")
                             .setNegativeButton("Cancel",(d,w) -> discardPrepared()).setOnCancelListener(d -> discardPrepared())
                             .setPositiveButton("Import recordings",(d,w) -> commitImport()).show();
                     });
@@ -283,7 +283,7 @@ public final class RecordingTransferActivity extends Activity {
                 else {String fileName=name.substring(6);File file=new File(folder,fileName);try(OutputStream out=new FileOutputStream(file)){copy(zip,out,budget);}if(file.length()==0)throw new IOException("A recording source is empty.");audio.put(fileName,file);}
                 zip.closeEntry();
             }
-            if(manifest==null)throw new IOException("This file is not a VonoTation recording transfer.");
+            if(manifest==null)throw new IOException("This file is not a Voitation recording transfer.");
             String text=StandardCharsets.UTF_8.newDecoder().onMalformedInput(java.nio.charset.CodingErrorAction.REPORT).onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT).decode(java.nio.ByteBuffer.wrap(manifest)).toString();BackupJsonBounds.check(text);JSONObject root=new JSONObject(text);
             if(!FORMAT.equals(root.optString("format"))||root.optInt("schema")!=1||root.optLong("created_at")<=0)throw new IOException("This recording-transfer version is not supported.");
             Set<String> rootKeys=new HashSet<>();java.util.Collections.addAll(rootKeys,"format","schema","created_at","entries");for(Iterator<String> keys=root.keys();keys.hasNext();)if(!rootKeys.contains(keys.next()))throw new IOException("The transfer contains unsupported data.");
@@ -304,7 +304,7 @@ public final class RecordingTransferActivity extends Activity {
         }finally{if(!ready)remove(folder);}
     }
     private static int importPrepared(Context context,Prepared prepared)throws Exception {
-        if(!"app.vonotation.notes".equals(context.getPackageName()))throw new IOException("Recordings can only be imported into Vono Notes.");
+        if(!"app.vonotation.notes".equals(context.getPackageName()))throw new IOException("Recordings can only be imported into Vocading.");
         List<File> copied=new ArrayList<>();JSONArray added=new JSONArray();boolean committed=false,keepFiles=false;
         RecordingTransferPolicy.Budget copyBudget=new RecordingTransferPolicy.Budget();
         try {

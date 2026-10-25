@@ -30,7 +30,7 @@ final class ClipboardCard {
         stop();List<ClipboardArchive.Day> days=ClipList.days(context);
         host.addView(Daybook.text(context,"Copies stay on this phone for 30 days.",12,Daybook.muted(context),false));Ui.space(host,12);
         if(!ClipList.error().isEmpty()){host.addView(Daybook.text(context,ClipList.error(),13,Daybook.coral(context),false));Ui.space(host,10);}
-        if(days.isEmpty()){host.addView(Daybook.text(context,"Android shares copies while VonoTation is open or selected as your keyboard.",13,Daybook.muted(context),false));return;}
+        if(days.isEmpty()){host.addView(Daybook.text(context,"Android shares copies while Voitation is open or selected as your keyboard.",13,Daybook.muted(context),false));return;}
         String today=ClipboardRetention.key(System.currentTimeMillis(),TimeZone.getDefault());java.util.Calendar yesterday=java.util.Calendar.getInstance();yesterday.add(java.util.Calendar.DAY_OF_YEAR,-1);String prior=ClipboardRetention.key(yesterday.getTimeInMillis(),yesterday.getTimeZone());
         int index=0;
         for(ClipboardArchive.Day day:days){

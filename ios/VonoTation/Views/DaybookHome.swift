@@ -223,7 +223,7 @@ struct DaybookHome: View {
     @ViewBuilder private var pageIntroduction: some View {
         switch page {
         case .calls:
-            Text("Import a recording to keep its summary and full transcript together. iOS does not let Vono Notes record other apps’ calls.")
+            Text("Import a recording to keep its summary and full transcript together. iOS does not let Vocading record other apps’ calls.")
                 .font(.caption).foregroundStyle(Daybook.muted)
         case .translate:
             VStack(alignment: .leading, spacing: 8) {
@@ -245,7 +245,7 @@ struct DaybookHome: View {
                 .font(.caption).foregroundStyle(Daybook.muted)
         case .clipboard:
             VStack(alignment: .leading, spacing: 10) {
-                Text("Paste text here to keep it for 30 days. iOS requires an explicit paste; VonoTation does not monitor other apps’ clipboard.")
+                Text("Paste text here to keep it for 30 days. iOS requires an explicit paste; Voitation does not monitor other apps’ clipboard.")
                     .font(.caption).foregroundStyle(Daybook.muted)
                 ClipboardPasteControl { model.captureClipboard($0) }
                     .frame(minHeight: 44)

@@ -16,9 +16,9 @@ final class Recovery {
         if(inserted)return;
         if(sensitive){
             // Never copy a private dictation automatically. Keep it in memory briefly and
-            // let the user choose "Copy privately" in VonoTation.
+            // let the user choose "Copy privately" in Voitation.
             PrivatePending.offer(text);
-            Toast.makeText(context,"Private dictation was not inserted or copied. Open VonoTation within 2 minutes to copy it privately.",Toast.LENGTH_LONG).show();
+            Toast.makeText(context,"Private dictation was not inserted or copied. Open Voitation within 2 minutes to copy it privately.",Toast.LENGTH_LONG).show();
             return;
         }
         ClipboardManager clipboard=(ClipboardManager)context.getSystemService(Context.CLIPBOARD_SERVICE);
@@ -27,6 +27,6 @@ final class Recovery {
         // The system clip stays hidden from other apps, so the tray has to keep the words itself.
         ClipList.remember(context,text);
         boolean copied=false;try{clipboard.setPrimaryClip(clip);copied=true;}catch(RuntimeException ignored){}
-        Toast.makeText(context,copied?"Dictation copied. Your words were kept.":"Your dictation was kept in VonoTation.",Toast.LENGTH_SHORT).show();
+        Toast.makeText(context,copied?"Dictation copied. Your words were kept.":"Your dictation was kept in Voitation.",Toast.LENGTH_SHORT).show();
     }
 }

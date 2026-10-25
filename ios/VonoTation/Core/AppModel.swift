@@ -120,7 +120,7 @@ final class AppModel: ObservableObject {
     }
 
     func startRecording(kind: NoteKind) async {
-        guard product.supports(kind) else { errorMessage = "This recording belongs in the other Vono app."; return }
+        guard product.supports(kind) else { errorMessage = "This recording belongs in the other app."; return }
         guard isLoaded else { errorMessage = "Wait for your saved notes to load."; return }
         guard !isRecording, !isStarting, !isFinalizing, !isBackingUp else { errorMessage = "Finish the current action first."; return }
         guard kind != .call else { errorMessage = "Import a call recording to create call notes. iOS does not share system-call audio with this app."; return }
@@ -200,7 +200,7 @@ final class AppModel: ObservableObject {
     }
 
     func importAudio(from url: URL, kind: NoteKind) async {
-        guard product.supports(kind) else { errorMessage = "This recording belongs in the other Vono app."; return }
+        guard product.supports(kind) else { errorMessage = "This recording belongs in the other app."; return }
         guard isLoaded, !isBackingUp, !isStarting else { return }
         let allowed = url.startAccessingSecurityScopedResource()
         defer { if allowed { url.stopAccessingSecurityScopedResource() } }

@@ -23,10 +23,10 @@ enum BackupArchive {
     }
     static func decrypt(archive: Data, password: String) throws -> Data {
         guard archive.count >= headerSize + 16, archive.count <= maximumBytes + headerSize + 16 else {
-            throw VonoError.message("Choose a complete VonoTation iOS backup under 8 MB.")
+            throw VonoError.message("Choose a complete \(AppProduct.current.displayName) iOS backup under 8 MB.")
         }
         let bytes = [UInt8](archive)
-        guard Data(bytes[0..<8]) == magic else { throw VonoError.message("Choose a VonoTation iOS backup. Android backups use a different format.") }
+        guard Data(bytes[0..<8]) == magic else { throw VonoError.message("Choose a \(AppProduct.current.displayName) iOS backup. Android backups use a different format.") }
         guard integer(bytes, at: 8) == 1, integer(bytes, at: 12) == iterations,
               integer(bytes, at: 44) == UInt32(archive.count - headerSize) else {
             throw VonoError.message("This backup header is invalid or unsupported.")
@@ -108,7 +108,7 @@ struct BackupPayload: Codable {
     func validated(for receivingProduct: AppProduct) throws -> BackupPayload {
         let payload = try validated()
         guard product == receivingProduct || (product == nil && receivingProduct == .vonotation) else {
-            throw VonoError.message("This backup belongs to a different Vono app. Your local data was not changed.")
+            throw VonoError.message("This backup belongs to a different app. Your local data was not changed.")
         }
         if product != nil && notes.contains(where: { !receivingProduct.supports($0.kind) }) {
             throw VonoError.message("This backup contains another app’s note types. Your local data was not changed.")

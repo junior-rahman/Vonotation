@@ -77,7 +77,7 @@ def render():
             if config == "Debug":
                 settings.update({"SWIFT_ACTIVE_COMPILATION_CONDITIONS": "DEBUG $(inherited)", "ENABLE_TESTABILITY": "YES"})
             if is_app:
-                settings["VONO_DISPLAY_NAME"] = "Vono Notes" if host == "VonoNotes" else "VonoTation"
+                settings["VONO_DISPLAY_NAME"] = "Vocading" if host == "VonoNotes" else "Voitation"
                 settings["VONO_URL_SCHEME"] = "vononotes" if host == "VonoNotes" else "vonotation"
                 settings["VONO_BACKUP_IDENTIFIER"] = "app.vonotation.notes.backup" if host == "VonoNotes" else "app.vonotation.backup"
                 settings["VONO_MICROPHONE_REASON"] = "Record voice notes when you choose Record. Call audio is imported from Files." if host == "VonoNotes" else "Record dictations and Quick Thoughts when you choose Record."

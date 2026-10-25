@@ -77,7 +77,7 @@ public final class FlowKeyboard extends InputMethodService implements Dictation.
         session++;
         selectionStart=info.initialSelStart;selectionEnd=info.initialSelEnd;inputActive=true;refreshBubble();
         if(requiresTyping(info) && FlowAccessibility.instance==null)handler.post(()->{if(hasInputSession() && requiresTyping(getCurrentInputEditorInfo()))showTypingKeyboard();});
-        if(!requiresTyping(info) && FlowAccessibility.instance==null && !setupNoticeShown){setupNoticeShown=true;Toast.makeText(this,"Enable Floating microphone in VonoTation Settings to show the keyboard controls.",Toast.LENGTH_LONG).show();}
+        if(!requiresTyping(info) && FlowAccessibility.instance==null && !setupNoticeShown){setupNoticeShown=true;Toast.makeText(this,"Enable Floating microphone in Voitation Settings to show the keyboard controls.",Toast.LENGTH_LONG).show();}
         if(FlowAccessibility.instance!=null)setupNoticeShown=false;
     }
     @Override public void onStartInputView(EditorInfo info,boolean restarting){super.onStartInputView(info,restarting);refreshControls();refreshBubble();}

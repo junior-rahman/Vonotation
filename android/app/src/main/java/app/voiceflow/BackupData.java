@@ -48,7 +48,7 @@ final class BackupData {
     static JSONObject validate(JSONObject data) throws Exception {
         if(data==null || data.toString().getBytes(StandardCharsets.UTF_8).length>BackupArchive.MAX_BYTES-64)throw invalid("The backup data is missing or too large.");
         BackupJsonBounds.check(data.toString());
-        if(!FORMAT.equals(string(data,"format",64,false)))throw invalid("This file does not contain VonoTation data.");
+        if(!FORMAT.equals(string(data,"format",64,false)))throw invalid("This file does not contain Voitation data.");
         if(integer(data,"schema",1,Integer.MAX_VALUE)!=SCHEMA)throw invalid("This backup version is not supported by this app.");
         long created=integer(data,"created_at",1,Long.MAX_VALUE);
         Object settingsValue=data.opt("settings"),historyValue=data.opt("history");
@@ -189,7 +189,7 @@ final class BackupData {
     }
 
     static String describe(JSONObject payload) {
-        if(payload==null)return "VonoTation backup";
+        if(payload==null)return "Voitation backup";
         JSONArray history=payload.optJSONArray("history");int count=history==null?0:history.length();
         String date=DateFormat.getDateTimeInstance(DateFormat.MEDIUM,DateFormat.SHORT).format(new Date(payload.optLong("created_at")));
         JSONArray thoughts=payload.optJSONArray("thoughts");int thoughtCount=thoughts==null?0:thoughts.length();

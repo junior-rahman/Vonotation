@@ -26,5 +26,5 @@
         <item name="android:windowCloseOnTouchOutside">false</item>
         <item name="android:windowAnimationStyle">@android:style/Animation.Dialog</item>
     </style>
-    <string name="accessibility_description">Detects focused editable fields to show floating dictation controls. When you start dictation, VonoTation reads that field’s text and cursor position to insert your words. Live speech appears while you speak; cloud speech appears after Finish. Field text is never uploaded. Closing a recording keeps captured words. If the original field is unavailable, the transcript is copied to your clipboard and saved when History is enabled.</string>
+    <string name="accessibility_description">Detects focused editable fields to show floating dictation controls. When you start dictation, Voitation reads that field’s text and cursor position to insert your words. Live speech appears while you speak; cloud speech appears after Finish. Field text is never uploaded. Closing a recording keeps captured words. If the original field is unavailable, the transcript is copied to your clipboard and saved when History is enabled.</string>
 </resources>

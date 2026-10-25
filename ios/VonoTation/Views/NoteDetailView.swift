@@ -25,7 +25,7 @@ struct NoteDetailView: View {
                                 .font(.caption).foregroundStyle(Daybook.muted)
                         }
                         if archived {
-                            Text("Previous recording · Read only. Your original text and source stay on this device. Share a copy to move it to Vono Notes.")
+                            Text("Previous recording · Read only. Your original text and source stay on this device. Share a copy to move it to Vocading.")
                                 .font(.caption).foregroundStyle(Daybook.muted).accessibilityIdentifier("note.legacy.notice")
                         } else if note.state != .ready { processingCard(note) }
                         if note.kind == .translation && !note.translation.isEmpty {

@@ -165,7 +165,7 @@ final class Dictation {
                     // copy for Retry; private credential audio is never retained.
                     if(finalized && !closed && !sensitive && file!=null){
                         File kept=RetryBuffer.keep(context,file,thought);
-                        if(kept!=null){file=null;message=message+" Your recording was kept for 24 hours. Open VonoTation and tap Retry.";}
+                        if(kept!=null){file=null;message=message+" Your recording was kept for 24 hours. Open Voitation and tap Retry.";}
                     }
                 }
                 finally{cleanRecorder();}

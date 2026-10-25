@@ -10,7 +10,7 @@ enum AppProduct: String, Codable, CaseIterable {
         return .vonotation
         #endif
     }
-    var displayName: String { self == .vonotation ? "VonoTation" : "Vono Notes" }
+    var displayName: String { self == .vonotation ? "Voitation" : "Vocading" }
     var bundleIdentifier: String { self == .vonotation ? "app.vonotation.ios" : "app.vonotation.notes.ios" }
     var storageDirectory: String { self == .vonotation ? "VonoTation" : "VonoNotes" }
     // Preserve the original service so its app update retains the saved key.

@@ -38,7 +38,7 @@ sdkmanager --version > "$task_output/sdkmanager-version.txt"
 # Hosted runner supplies the SDK licenses. Only official Google SDK components are installed.
 sdkmanager 'platforms;android-35' 'build-tools;35.0.0' 'emulator' 'system-images;android-35;default;x86_64' 2>&1 | tee "$task_output/logs/sdk-install.log"
 keytool -genkeypair -keystore "$VOICEFLOW_KEYSTORE" -storepass android -keypass android -alias voiceflow -keyalg RSA -keysize 2048 -validity 2 -dname 'CN=Disposable native palette QA' > "$task_output/logs/disposable-signing.log" 2>&1
-keytool -genkeypair -keystore "$VONO_NOTES_KEYSTORE" -storepass android -keypass android -alias voiceflow -keyalg RSA -keysize 2048 -validity 2 -dname 'CN=Disposable Vono Notes native QA' >> "$task_output/logs/disposable-signing.log" 2>&1
+keytool -genkeypair -keystore "$VONO_NOTES_KEYSTORE" -storepass android -keypass android -alias voiceflow -keyalg RSA -keysize 2048 -validity 2 -dname 'CN=Disposable Vocading native QA' >> "$task_output/logs/disposable-signing.log" 2>&1
 bash gradlew --no-daemon assembleVonotationPreview lintVonotationPreview assembleNotesPreview lintNotesPreview 2>&1 | tee "$task_output/logs/build-lint.log"
 bash tests/run-pure-tests.sh 2>&1 | tee "$task_output/logs/pure-tests.log"
 for task_product in vonotation notes; do
@@ -158,4 +158,4 @@ PY
 for task_product in vonotation notes; do
   python3 scripts/prepare-unsigned.py "app/build/outputs/apk/$task_product/preview/app-$task_product-preview.apk" "$task_output/unsigned/$task_product-UNSIGNED.apk" --zipalign "$ANDROID_SDK_ROOT/build-tools/35.0.0/zipalign"
 done
-printf '%s\n' 'These APKs are UNSIGNED and cannot be installed. They contain the exact verified DEX/resource payload but require each app owner’s production signing key. Disposable QA signatures are never promoted as updates. VonoTation must retain its old signer to update the installed app. Do not uninstall an existing app.' > "$task_output/unsigned/README.txt"
+printf '%s\n' 'These APKs are UNSIGNED and cannot be installed. They contain the exact verified DEX/resource payload but require each app owner’s production signing key. Disposable QA signatures are never promoted as updates. Voitation must retain its old signer to update the installed app. Do not uninstall an existing app.' > "$task_output/unsigned/README.txt"

@@ -73,7 +73,7 @@ struct SettingsView: View {
                         if !model.previousNotes.isEmpty {
                             DaybookCard {
                                 Text("Previous recordings").font(.headline)
-                                Text("Voice notes, calls and translations saved in the combined app stay here. Open them read only or share a copy. Installing Vono Notes does not move or delete them.").font(.caption).foregroundStyle(Daybook.muted)
+                                Text("Voice notes, calls and translations saved in the combined app stay here. Open them read only or share a copy. Installing Vocading does not move or delete them.").font(.caption).foregroundStyle(Daybook.muted)
                                 Button("Open previous recordings") { showPrevious = true }.buttonStyle(DaybookButtonStyle()).accessibilityIdentifier("settings.previous")
                             }
                         }
@@ -93,7 +93,7 @@ struct SettingsView: View {
                             Text(versionText).font(.caption).foregroundStyle(Daybook.muted)
                             Text(model.product == .notes ? "Record voice notes or import call recordings from Files. iOS does not provide access to other apps’ call audio." : "This preview uses native iOS dictation, Quick Thoughts and explicit clipboard paste. iOS does not provide Android’s floating control, background clipboard history, or microphone access from a custom keyboard.")
                                 .font(.caption).foregroundStyle(Daybook.muted)
-                            Text("A GitHub download cannot be installed simply by signing in with an Apple ID. A device build must be signed through Xcode or a compatible signing tool using the owner’s Apple developer identity. No Apple account sign-in is needed inside VonoTation.")
+                            Text("A GitHub download cannot be installed simply by signing in with an Apple ID. A device build must be signed through Xcode or a compatible signing tool using the owner’s Apple developer identity. No Apple account sign-in is needed inside \(AppProduct.current.displayName).")
                                 .font(.caption).foregroundStyle(Daybook.muted)
                             Link(destination: URL(string: "https://github.com/junior-rahman/Vonotation")!) {
                                 Label("Source & release instructions", systemImage: "arrow.up.right.square")
