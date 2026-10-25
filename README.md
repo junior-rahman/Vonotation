@@ -1,4 +1,15 @@
-# VonoTation
+# Voitation and Vocading
+
+| Current product | Features |
+| --- | --- |
+| **Voitation** (formerly VonoTation) | Dictation, Quick Thoughts, 30-day Clipboard |
+| **Vocading** (formerly Vono Notes) | Voice Notes, Call Recordings |
+
+The split remains in development. See [the current implementation and release plan](APP-SPLIT.md#remaining-work-plan). The public names are updated in this source; existing application identities and data locations are retained. Sand & Cocoa is implemented for Voitation in this candidate; native verification and compatible signed delivery are pending.
+
+## Published combined-app preview (before the split and renaming)
+
+The downloads and validation below describe the earlier VonoTation release.
 
 | Platform | Version | Download |
 | --- | --- | --- |

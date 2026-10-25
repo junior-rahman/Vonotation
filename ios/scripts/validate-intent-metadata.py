@@ -38,10 +38,12 @@ for path in sorted(metadata.rglob("*")):
             except UnicodeError:
                 documents[relative]["format"] = "binary"
 text = "\n".join(readable)
+is_notes = application.name == "VonoNotes.app"
 checks = {
-    "record_intent": "RecordQuickThoughtIntent" in text,
+    "record_intent": ("RecordVoiceNoteIntent" if is_notes else "RecordQuickThoughtIntent") in text,
     "finish_intent": "FinishVonoRecordingIntent" in text,
-    "record_shortcut_phrase": "Record a thought with" in text,
+    "record_shortcut_phrase": ("Record a voice note with" if is_notes else "Record a thought with") in text,
+    "other_product_record_intent_absent": ("RecordQuickThoughtIntent" if is_notes else "RecordVoiceNoteIntent") not in text,
     "finish_shortcut_phrase": "Finish recording in" in text,
 }
 report = {"bundle": application.name, "checks": checks, "files": documents,

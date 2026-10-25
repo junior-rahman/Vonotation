@@ -34,7 +34,7 @@ final class DriveAuth {
     }
 
     static final class ReconnectException extends IOException {
-        ReconnectException() { super("Reconnect Google to allow VonoTation backup access."); }
+        ReconnectException() { super("Reconnect Google to allow Voitation backup access."); }
         ReconnectException(String message) { super(message); }
     }
 
@@ -66,7 +66,7 @@ final class DriveAuth {
                             if (result.hasResolution()) {
                                 // A dialog over the screen takes window focus; only a stopped screen can't show consent.
                                 if (activity.getWindow().getDecorView().getWindowVisibility() != android.view.View.VISIBLE) {
-                                    callback.failed(new AuthException("Return to VonoTation and tap Connect Google again.", false));
+                                    callback.failed(new AuthException("Return to Voitation and tap Connect Google again.", false));
                                     return;
                                 }
                                 PendingIntent resolution = result.getPendingIntent();
@@ -154,7 +154,7 @@ final class DriveAuth {
 
     private static boolean alive(Activity activity) { return !activity.isFinishing() && !activity.isDestroyed(); }
 
-    private static final String TAG = "VonoTationDrive";
+    private static final String TAG = "VoitationDrive";
 
     /** Logs the exact Google outcome and returns a specific, fixed-format message (no internal details). */
     static AuthException describe(Context context, int status, int resultCode) {

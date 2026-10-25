@@ -52,7 +52,7 @@ object LineLink {
     @Synchronized fun saved(): Boolean = identitySaved
 
     fun pair(host: String, port: Int, code: String) {
-        runBlocking { Kadb.pair(host, port, code, "VonoTation") }
+        runBlocking { Kadb.pair(host, port, code, "Vocading") }
         keep()
     }
 
@@ -73,7 +73,7 @@ object LineLink {
         val shell = try {
             val listed = kadb.shell("pm path app.voiceflow").allOutput
             val apk = listed.lineSequence().map { it.removePrefix("package:").trim() }.firstOrNull { it.endsWith(".apk") }
-                ?: throw IllegalStateException("Could not find VonoTation on this phone.")
+                ?: throw IllegalStateException("Could not find Vocading on this phone.")
             kadb.openShell("CLASSPATH='$apk' exec app_process /system/bin app.voiceflow.CallShell")
         } catch (error: Exception) {
             try { kadb.close() } catch (_: Exception) {}
@@ -126,7 +126,7 @@ object LineLink {
     }
 
     @Synchronized private fun keep() {
-        val dir = folder ?: throw IllegalStateException("Pairing storage is not ready. Open VonoTation and try again.")
+        val dir = folder ?: throw IllegalStateException("Pairing storage is not ready. Open Vocading and try again.")
         val identity = AtomicFile(File(dir, "identity"))
         var output: java.io.FileOutputStream? = null
         try {

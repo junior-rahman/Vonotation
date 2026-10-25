@@ -61,7 +61,7 @@ final class BackupArchive {
         checkPassword(password);
         if(bytes==null || bytes.length<HEADER_BYTES+TAG_BYTES || bytes.length>MAX_BYTES) throw new IOException("The backup file is incomplete or too large.");
         ByteBuffer input=ByteBuffer.wrap(bytes);byte[] magic=new byte[8];input.get(magic);
-        if(!Arrays.equals(magic,MAGIC)) throw new IOException("Choose an encrypted VonoTation backup file.");
+        if(!Arrays.equals(magic,MAGIC)) throw new IOException("Choose an encrypted Voitation backup file.");
         if(input.getInt()!=VERSION) throw new IOException("This backup version is not supported by this app.");
         if(input.getInt()!=ITERATIONS) throw new IOException("The backup header is not valid.");
         byte[] salt=new byte[16],iv=new byte[12];input.get(salt);input.get(iv);

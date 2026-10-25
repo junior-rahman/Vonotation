@@ -14,6 +14,7 @@ final class Calls {
     private Calls() {}
 
     static void show(Activity activity,LinearLayout body,android.widget.FrameLayout dock,Runnable refresh) {
+        if(!AppProduct.isNotes())return;
         Notes.callsMode(true);
         if(arming){arming=false;if(ready(activity)){Store.prefs(activity).edit().putBoolean("record_calls",true).apply();battery(activity);CallWatch.wake(activity);}}
         if(Notes.opened()){Notes.show(activity,body,refresh);return;}
@@ -24,7 +25,7 @@ final class Calls {
         if(down || stale){
             LinearLayout downCard=Daybook.card(activity);
             downCard.setPadding(Ui.dp(activity,16),Ui.dp(activity,14),Ui.dp(activity,16),Ui.dp(activity,14));
-            downCard.addView(Daybook.text(activity,down?"Call connection unavailable.":"VonoTation is disconnected.",16,Daybook.ink(activity),true));
+            downCard.addView(Daybook.text(activity,down?"Call connection unavailable.":AppProduct.name()+" is disconnected.",16,Daybook.ink(activity),true));
             Ui.space(downCard,6);
             downCard.addView(Daybook.text(activity,down?"Turn on wireless debugging. Your saved pairing will reconnect automatically when it becomes available. Until then calls use speakerphone.":"This phone rejected the saved pairing. Pair again to record through the earpiece; until then calls use speakerphone.",13,Daybook.muted(activity),false));
             Ui.space(downCard,10);
@@ -45,9 +46,9 @@ final class Calls {
         }
         LinearLayout card=Daybook.card(activity);
         card.setPadding(Ui.dp(activity,16),Ui.dp(activity,16),Ui.dp(activity,16),Ui.dp(activity,16));
-        card.addView(Daybook.text(activity,on?"A call writes itself down here, after you hang up.":"Turn it on, and the call is kept without opening VonoTation.",14,Daybook.muted(activity),false));
+        card.addView(Daybook.text(activity,on?"A call writes itself down here, after you hang up.":"Turn it on, and the call is kept without opening "+AppProduct.name()+".",14,Daybook.muted(activity),false));
         Ui.space(card,8);
-        String quiet=down?"Wireless debugging is unavailable; calls use speakerphone.":stale?"Pairing needs attention; calls use speakerphone.":"Both sides, with the phone at your ear. VonoTation sleeps between calls.";
+        String quiet=down?"Wireless debugging is unavailable; calls use speakerphone.":stale?"Pairing needs attention; calls use speakerphone.":"Both sides, with the phone at your ear. "+AppProduct.name()+" sleeps between calls.";
         card.addView(Daybook.text(activity,paired?quiet:"Until earpiece access is paired, a call plays out loud so both sides are saved.",13,Daybook.muted(activity),false));
         if(dock!=null){
             dock.removeAllViews();

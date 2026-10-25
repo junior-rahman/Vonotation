@@ -22,7 +22,7 @@ final class DictationProblem {
 
     /** Preflight: checked before the microphone or recording notification is started. */
     static DictationProblem before(boolean microphoneAllowed, boolean apiKeySaved) {
-        if (!microphoneAllowed) return new DictationProblem(MICROPHONE_REQUIRED, FIX_MICROPHONE, "Allow microphone access for VonoTation.");
+        if (!microphoneAllowed) return new DictationProblem(MICROPHONE_REQUIRED, FIX_MICROPHONE, "Allow microphone access for Voitation.");
         if (!apiKeySaved) return new DictationProblem(API_KEY_REQUIRED, FIX_API_KEY, "Add your API key in Settings → API key & models.");
         return null;
     }

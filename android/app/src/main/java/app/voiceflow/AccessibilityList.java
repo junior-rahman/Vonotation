@@ -18,8 +18,8 @@ final class AccessibilityList {
     /** What to tell the user after a restart; null when nothing is wrong. */
     static String afterRestart(boolean enabledInSettings, boolean connected, boolean wasSetUp) {
         if (!wasSetUp) return null;
-        if (!enabledInSettings) return "Android turned VonoTation’s bubble off after the restart.";
-        if (!connected) return "VonoTation’s bubble didn’t start after the restart.";
+        if (!enabledInSettings) return "Android turned Voitation’s bubble off after the restart.";
+        if (!connected) return "Voitation’s bubble didn’t start after the restart.";
         return null;
     }
 }

@@ -7,7 +7,7 @@ actor LocalStore {
     init(rootURL: URL) { self.rootURL = rootURL }
     static var defaultRoot: URL {
         (FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first ?? FileManager.default.temporaryDirectory)
-            .appendingPathComponent("VonoTation", isDirectory: true)
+            .appendingPathComponent(AppProduct.current.storageDirectory, isDirectory: true)
     }
     func prepare() throws {
         try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true)
@@ -27,7 +27,7 @@ actor LocalStore {
         // A corrupt store must not be silently replaced by an empty one.
         let data = try Data(contentsOf: url)
         var value = try Self.decoder().decode(AppSnapshot.self, from: data)
-        guard value.formatVersion == 1 else { throw VonoError.message("This saved data needs a newer version of VonoTation.") }
+        guard value.formatVersion == 1 else { throw VonoError.message("This saved data needs a newer version of \(AppProduct.current.displayName).") }
         value.clips = ClipboardPolicy.retained(value.clips)
         for index in value.notes.indices where value.notes[index].state == .processing {
             value.notes[index].state = .pending

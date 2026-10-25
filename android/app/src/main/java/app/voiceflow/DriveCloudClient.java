@@ -91,7 +91,7 @@ final class DriveCloudClient {
         String warning() {
             if (!hasRejected()) return "";
             String count = rejected.size() == 1 ? "1 Google Drive backup cannot" : rejected.size() + " Google Drive backups cannot";
-            return count + " be read by this version of VonoTation. "
+            return count + " be read by this version of Voitation. "
                     + (files.isEmpty() ? "" : "You can restore an older valid backup. ")
                     + "New backups are paused to protect existing data.";
         }
@@ -192,7 +192,7 @@ final class DriveCloudClient {
                 if (values.length() > 1000) throw invalid("Google Drive returned too many backup details.");
                 for (int i = 0; i < values.length(); i++) {
                     checkInterrupted();
-                    if (++inspected > FILE_LIMIT) throw invalid("There are too many VonoTation backups. Please try again.");
+                    if (++inspected > FILE_LIMIT) throw invalid("There are too many Voitation backups. Please try again.");
                     JSONObject value = values.optJSONObject(i);
                     if (value == null) throw invalid("Google Drive returned invalid backup details.");
                     requireCommittedCandidate(value);
@@ -294,7 +294,7 @@ final class DriveCloudClient {
         if (properties == null || !"voiceflow".equals(properties.optString("app", ""))
                 || !"vfb".equals(properties.optString("encrypted", "")) || !MIME.equals(value.optString("mimeType", ""))
                 || value.optBoolean("trashed", false))
-            throw invalid("This is not an encrypted VonoTation Google Drive backup.");
+            throw invalid("This is not an encrypted Voitation Google Drive backup.");
         if (!"1".equals(properties.optString("schema", "")))
             throw invalid("This Google Drive backup version is not supported by this app.");
         String state = properties.optString("state", "");
@@ -341,7 +341,7 @@ final class DriveCloudClient {
 
     private static void validateFile(BackupFile file) throws IOException {
         if (file == null || !validId(file.id) || !validName(file.name))
-            throw invalid("Google Drive returned invalid VonoTation backup details.");
+            throw invalid("Google Drive returned invalid Voitation backup details.");
         if (file.size < MIN_ARCHIVE_BYTES || file.size > BackupArchive.MAX_BYTES)
             throw invalid("The Google Drive backup is incomplete or too large (maximum 8 MB).");
         if (!validDate(file.modifiedTime)) throw invalid("Google Drive returned an invalid backup date.");
@@ -365,7 +365,7 @@ final class DriveCloudClient {
         if (bytes == null || bytes.length < MIN_ARCHIVE_BYTES || bytes.length > BackupArchive.MAX_BYTES)
             throw invalid("The encrypted backup is incomplete or too large (maximum 8 MB).");
         for (int i = 0; i < ARCHIVE_MAGIC.length; i++)
-            if (bytes[i] != ARCHIVE_MAGIC[i]) throw invalid("Only encrypted VonoTation archives can be sent to Google Drive.");
+            if (bytes[i] != ARCHIVE_MAGIC[i]) throw invalid("Only encrypted Voitation archives can be sent to Google Drive.");
     }
 
     private byte[] request(String method, String path, String contentType, byte[][] parts, int limit) throws IOException {
@@ -466,7 +466,7 @@ final class DriveCloudClient {
             if (kind == FailureKind.STORAGE) return "Your Google Drive storage is full. Free up space and try again.";
             if (kind == FailureKind.SETUP) return "Google Drive API is not available for this app. Check its Google Cloud setup.";
             if (kind == FailureKind.DAILY_LIMIT) return "Google Drive's daily request limit was reached. Please try again tomorrow.";
-            if (kind == FailureKind.ACCOUNT_POLICY) return "This Google account's organization does not allow VonoTation backups. Try another account.";
+            if (kind == FailureKind.ACCOUNT_POLICY) return "This Google account's organization does not allow Voitation backups. Try another account.";
             return "Google Drive denied this backup request (HTTP 403). Check its connection and try again.";
         }
         if (status == 404) return "This Google Drive backup is no longer available.";

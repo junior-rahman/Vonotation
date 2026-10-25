@@ -43,12 +43,13 @@ struct DaybookHome: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var page: DaybookPage = .voiceNotes
+    @State private var page: DaybookPage = AppProduct.current == .notes ? .voiceNotes : .dictations
     @State private var showSettings = false
     @State private var importAudio = false
 
     private var pages: [DaybookPage] {
-        DaybookPage.allCases.filter { $0 != .thoughts || model.settings.quickThoughts }
+        let supported: [DaybookPage] = model.product == .notes ? [.voiceNotes, .calls] : [.dictations, .thoughts, .clipboard]
+        return supported.filter { $0 != .thoughts || model.settings.quickThoughts }
     }
 
     var body: some View {
@@ -59,12 +60,12 @@ struct DaybookHome: View {
                     cardNavigation
                     ZStack(alignment: .top) {
                         RoundedRectangle(cornerRadius: 28)
-                            .fill(Daybook.soft)
+                            .fill(Daybook.underlayMiddle)
                             .rotationEffect(.degrees(reduceMotion ? 0 : -3))
                             .padding(.horizontal, 18).padding(.top, 8).padding(.bottom, 12)
                             .accessibilityHidden(true).allowsHitTesting(false)
                         RoundedRectangle(cornerRadius: 28)
-                            .fill(Daybook.surface.opacity(0.75))
+                            .fill(Daybook.underlayNear)
                             .rotationEffect(.degrees(reduceMotion ? 0 : 2))
                             .padding(.horizontal, 12).padding(.top, 4).padding(.bottom, 6)
                             .accessibilityHidden(true).allowsHitTesting(false)
@@ -89,11 +90,11 @@ struct DaybookHome: View {
                 let kind: NoteKind = page == .calls ? .call : page.kind ?? .voiceNote
                 Task { await model.importAudio(from: url, kind: kind) }
             }
-            .alert("VonoTation", isPresented: Binding(get: { model.errorMessage != nil && !showSettings }, set: { if !$0 && !showSettings { model.acknowledgeError() } })) {
+            .alert(AppProduct.current.displayName, isPresented: Binding(get: { model.errorMessage != nil && !showSettings }, set: { if !$0 && !showSettings { model.acknowledgeError() } })) {
                 Button("OK") { model.acknowledgeError() }
             } message: { Text(model.errorMessage ?? "") }
             .onChange(of: model.settings.quickThoughts) { _, enabled in
-                if !enabled && page == .thoughts { page = .voiceNotes }
+                if !enabled && page == .thoughts { page = .dictations }
             }
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active { model.refreshExpiry() }
@@ -104,14 +105,19 @@ struct DaybookHome: View {
                 if arguments.contains("--ui-testing"), let marker = arguments.firstIndex(of: "--ui-screen"), arguments.indices.contains(marker + 1) {
                     let screen = arguments[marker + 1]
                     if screen == "settings" { showSettings = true }
-                    else if let target = DaybookPage(rawValue: screen) { page = target }
+                    else if let target = DaybookPage(rawValue: screen), pages.contains(target) { page = target }
                 }
                 #endif
             }
             .onOpenURL { url in
-                guard url.scheme == "vonotation" else { return }
+                guard url.scheme == model.product.urlScheme else { return }
                 let action = url.host ?? ""
-                if action == "thought" || action == "record-thought" {
+                if model.product == .notes && action == "record" {
+                    Task {
+                        do { try await VonoRuntime.begin(kind: .voiceNote); page = .voiceNotes }
+                        catch { model.errorMessage = error.localizedDescription }
+                    }
+                } else if model.product == .vonotation && (action == "thought" || action == "record-thought") {
                     Task {
                         do {
                             try await VonoRuntime.begin(kind: .thought)
@@ -119,7 +125,7 @@ struct DaybookHome: View {
                         }
                         catch { model.errorMessage = error.localizedDescription }
                     }
-                } else if action == "dictate" {
+                } else if model.product == .vonotation && action == "dictate" {
                     Task {
                         do {
                             try await VonoRuntime.begin(kind: .dictation)
@@ -210,14 +216,14 @@ struct DaybookHome: View {
             else if page == .voiceNotes || page == .dictations || page == .translate { recordButton }
         }
         .background(Daybook.surface, in: RoundedRectangle(cornerRadius: 28))
-        .overlay(RoundedRectangle(cornerRadius: 28).stroke(Daybook.line.opacity(0.6), lineWidth: 0.5))
-        .shadow(color: .black.opacity(0.06), radius: 14, x: 0, y: 7)
+        .overlay(RoundedRectangle(cornerRadius: 28).stroke(Daybook.line.opacity(0.85), lineWidth: 0.5))
+        .shadow(color: Daybook.shadow.opacity(0.055), radius: 14, x: 0, y: 7)
     }
 
     @ViewBuilder private var pageIntroduction: some View {
         switch page {
         case .calls:
-            Text("Import a recording to keep its summary and full transcript together. iOS does not let VonoTation record other apps’ calls.")
+            Text("Import a recording to keep its summary and full transcript together. iOS does not let Vocading record other apps’ calls.")
                 .font(.caption).foregroundStyle(Daybook.muted)
         case .translate:
             VStack(alignment: .leading, spacing: 8) {
@@ -239,7 +245,7 @@ struct DaybookHome: View {
                 .font(.caption).foregroundStyle(Daybook.muted)
         case .clipboard:
             VStack(alignment: .leading, spacing: 10) {
-                Text("Paste text here to keep it for 30 days. iOS requires an explicit paste; VonoTation does not monitor other apps’ clipboard.")
+                Text("Paste text here to keep it for 30 days. iOS requires an explicit paste; Voitation does not monitor other apps’ clipboard.")
                     .font(.caption).foregroundStyle(Daybook.muted)
                 ClipboardPasteControl { model.captureClipboard($0) }
                     .frame(minHeight: 44)
@@ -270,7 +276,7 @@ struct DaybookHome: View {
     private var footer: some View {
         HStack(spacing: 9) {
             DaybookMark()
-            Text("VonoTation").font(.headline)
+            Text(model.product.displayName).font(.headline)
             Spacer()
             Button { Daybook.feedback(model.settings.haptics); showSettings = true } label: {
                 Image(systemName: "slider.horizontal.3").font(.title3).frame(width: 44, height: 44)

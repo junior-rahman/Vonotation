@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-  <key>CFBundleDisplayName</key><string>VonoTation</string>
+  <key>CFBundleDisplayName</key><string>$(VONO_DISPLAY_NAME)</string>
   <key>CFBundleDevelopmentRegion</key><string>$(DEVELOPMENT_LANGUAGE)</string>
   <key>CFBundleExecutable</key><string>$(EXECUTABLE_NAME)</string>
   <key>CFBundleIdentifier</key><string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
@@ -11,15 +11,15 @@
   <key>CFBundleShortVersionString</key><string>$(MARKETING_VERSION)</string>
   <key>CFBundleVersion</key><string>$(CURRENT_PROJECT_VERSION)</string>
   <key>LSRequiresIPhoneOS</key><true/>
-  <key>NSMicrophoneUsageDescription</key><string>Record your dictations, voice notes and Quick Thoughts when you choose Record.</string>
+  <key>NSMicrophoneUsageDescription</key><string>$(VONO_MICROPHONE_REASON)</string>
   <key>UIBackgroundModes</key><array><string>audio</string></array>
-  <key>UILaunchScreen</key><dict/>
+  <key>UILaunchScreen</key><dict><key>UIColorName</key><string>LaunchBackground</string></dict>
   <key>UIApplicationSceneManifest</key><dict><key>UIApplicationSupportsMultipleScenes</key><true/><key>UISceneConfigurations</key><dict/></dict>
   <key>UISupportedInterfaceOrientations</key><array><string>UIInterfaceOrientationPortrait</string><string>UIInterfaceOrientationLandscapeLeft</string><string>UIInterfaceOrientationLandscapeRight</string></array>
   <key>UISupportedInterfaceOrientations~ipad</key><array><string>UIInterfaceOrientationPortrait</string><string>UIInterfaceOrientationPortraitUpsideDown</string><string>UIInterfaceOrientationLandscapeLeft</string><string>UIInterfaceOrientationLandscapeRight</string></array>
-  <key>CFBundleURLTypes</key><array><dict><key>CFBundleURLName</key><string>app.vonotation.ios</string><key>CFBundleURLSchemes</key><array><string>vonotation</string></array></dict></array>
+  <key>CFBundleURLTypes</key><array><dict><key>CFBundleURLName</key><string>$(PRODUCT_BUNDLE_IDENTIFIER)</string><key>CFBundleURLSchemes</key><array><string>$(VONO_URL_SCHEME)</string></array></dict></array>
   <key>LSSupportsOpeningDocumentsInPlace</key><true/>
   <key>UIFileSharingEnabled</key><false/>
-  <key>CFBundleDocumentTypes</key><array><dict><key>CFBundleTypeName</key><string>VonoTation encrypted backup</string><key>LSHandlerRank</key><string>Owner</string><key>LSItemContentTypes</key><array><string>app.vonotation.backup</string></array></dict></array>
-  <key>UTExportedTypeDeclarations</key><array><dict><key>UTTypeIdentifier</key><string>app.vonotation.backup</string><key>UTTypeDescription</key><string>VonoTation encrypted backup</string><key>UTTypeConformsTo</key><array><string>public.data</string></array><key>UTTypeTagSpecification</key><dict><key>public.filename-extension</key><array><string>vonobackup</string></array><key>public.mime-type</key><string>application/vnd.vonotation.backup</string></dict></dict></array>
+  <key>CFBundleDocumentTypes</key><array><dict><key>CFBundleTypeName</key><string>$(VONO_DISPLAY_NAME) encrypted backup</string><key>LSHandlerRank</key><string>Owner</string><key>LSItemContentTypes</key><array><string>$(VONO_BACKUP_IDENTIFIER)</string></array></dict></array>
+  <key>UTExportedTypeDeclarations</key><array><dict><key>UTTypeIdentifier</key><string>$(VONO_BACKUP_IDENTIFIER)</string><key>UTTypeDescription</key><string>$(VONO_DISPLAY_NAME) encrypted backup</string><key>UTTypeConformsTo</key><array><string>public.data</string></array><key>UTTypeTagSpecification</key><dict><key>public.filename-extension</key><array><string>vonobackup</string></array><key>public.mime-type</key><string>application/vnd.vonotation.backup</string></dict></dict></array>
 </dict></plist>

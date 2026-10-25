@@ -19,13 +19,12 @@
     <uses-permission android:name="android.permission.READ_CALL_LOG" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <queries><intent><action android:name="android.speech.RecognitionService" /></intent><intent><action android:name="android.view.InputMethod" /></intent><intent><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.HOME" /></intent></queries>
-    <application android:label="VonoTation" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round" android:theme="@style/AppTheme" android:allowBackup="false" android:usesCleartextTraffic="false" android:supportsRtl="true">
+    <application android:label="@string/app_name" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round" android:theme="@style/AppTheme" android:allowBackup="false" android:usesCleartextTraffic="false" android:supportsRtl="true">
         <activity android:name=".MainActivity" android:exported="true" android:windowSoftInputMode="adjustResize">
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
         </activity>
+        <activity android:name=".RecordingTransferActivity" android:exported="false" android:configChanges="orientation|screenSize|keyboardHidden" />
         <activity android:name=".CaptureActivity" android:exported="false" android:theme="@style/CaptureTheme" android:configChanges="orientation|screenSize|keyboardHidden" android:excludeFromRecents="true" />
-        <activity android:name=".BackupActivity" android:exported="false" android:configChanges="orientation|screenSize|keyboardHidden" />
-        <service android:name=".BackupJob" android:exported="true" android:permission="android.permission.BIND_JOB_SERVICE" />
         <service android:name=".ThoughtJob" android:exported="true" android:permission="android.permission.BIND_JOB_SERVICE" />
         <service android:name=".ClipboardExpiryJob" android:exported="true" android:permission="android.permission.BIND_JOB_SERVICE" />
         <service android:name=".PlayWatch" android:exported="false" android:foregroundServiceType="mediaPlayback" />
@@ -40,14 +39,14 @@
             <intent-filter><action android:name="android.intent.action.PHONE_STATE" /></intent-filter>
         </receiver>
         <activity android:name=".ClipPeek" android:exported="false" android:theme="@android:style/Theme.Translucent.NoTitleBar" android:excludeFromRecents="true" android:noHistory="true" android:taskAffinity="app.voiceflow.clip" android:launchMode="singleInstance" />
-        <service android:name=".FlowAccessibility" android:label="VonoTation bubble" android:exported="true" android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE" android:foregroundServiceType="microphone">
+        <service android:name=".FlowAccessibility" android:label="Voitation bubble" android:exported="true" android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE" android:foregroundServiceType="microphone">
             <intent-filter><action android:name="android.accessibilityservice.AccessibilityService" /></intent-filter>
             <meta-data android:name="android.accessibilityservice" android:resource="@xml/accessibility" />
         </service>
         <receiver android:name=".BootReceiver" android:exported="false">
             <intent-filter><action android:name="android.intent.action.BOOT_COMPLETED" /><action android:name="android.intent.action.MY_PACKAGE_REPLACED" /></intent-filter>
         </receiver>
-        <service android:name=".FlowKeyboard" android:label="VonoTation keyboard" android:exported="true" android:permission="android.permission.BIND_INPUT_METHOD" android:foregroundServiceType="microphone">
+        <service android:name=".FlowKeyboard" android:label="Voitation keyboard" android:exported="true" android:permission="android.permission.BIND_INPUT_METHOD" android:foregroundServiceType="microphone">
             <intent-filter><action android:name="android.view.InputMethod" /></intent-filter>
             <meta-data android:name="android.view.im" android:resource="@xml/keyboard" />
         </service>

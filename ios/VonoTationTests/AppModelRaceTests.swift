@@ -34,7 +34,7 @@ final class AppModelRaceTests: XCTestCase {
         try await store.save(AppSnapshot(notes: [note], settings: settings), generation: 1)
         let value = AppModel(rootURL: directory, cloud: CloudAPI(session: transport), credentialProvider: { endpoint in
             endpoint == "https://model-test.invalid/openai/v1" ? "dummy-test-only-key" : nil
-        })
+        }, product: .vonotation)
         model = value
         for _ in 0..<200 {
             if value.isLoaded { return value }

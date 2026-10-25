@@ -54,7 +54,7 @@ final class GoogleAuthError {
             return new GoogleAuthError("Reconnect Google", "Google needs you to sign in again (" + code + ").", true, false, false);
         if (status == NO_STATUS && resultCode == RESULT_CANCELED)
             return new GoogleAuthError("Google sign-in closed without a result",
-                    "Google returned no result (" + code + "). VonoTation did not complete a connection. Tap Connect Google again. If it keeps closing, check your account’s access and the Android OAuth registration for " + cert + ".", true, false, false);
+                    "Google returned no result (" + code + "). Voitation did not complete a connection. Tap Connect Google again. If it keeps closing, check your account’s access and the Android OAuth registration for " + cert + ".", true, false, false);
         return new GoogleAuthError("Google connection needs attention", "Could not connect Google Drive (" + code + ").", true, false, false);
     }
 }

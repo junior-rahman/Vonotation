@@ -61,6 +61,7 @@ final class AppUpdate {
         button=new WeakReference<>(action);line=new WeakReference<>(status);render(context);
     }
     static void resume(Activity activity){
+        if(AppProduct.isNotes())return;
         foreground=new WeakReference<>(activity);
         if(busy){render(activity);return;}
         Release release=saved(activity);String phase=prefs(activity).getString("phase",IDLE);
@@ -83,6 +84,7 @@ final class AppUpdate {
     }
     static void pause(Activity activity){Activity current=foreground==null?null:foreground.get();if(current==activity)foreground=null;}
     static void start(Activity activity){
+        if(AppProduct.isNotes())return;
         if(busy)return;foreground=new WeakReference<>(activity);
         String phase=prefs(activity).getString("phase",IDLE);
         if(activeSession(activity)||(phase.equals(INSTALLING)&&installerInFlight(activity))){state(activity,INSTALLING,"Installing…","Android is preparing the installation. Please wait a moment.");return;}
@@ -112,8 +114,8 @@ final class AppUpdate {
         if(release==null||!apk(activity).isFile()){state(activity,ERROR,"Update","The saved update is unavailable. Tap Update to download again.");return;}
         if(audioBusy()){deferred(activity);return;}
         if(!canInstall(activity)){
-            state(activity,PERMISSION,"Allow installation","Update verified. Allow VonoTation to install it; the update resumes when you return.");
-            if(requestPermission)try{activity.startActivity(new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,Uri.parse("package:"+activity.getPackageName())));}catch(RuntimeException unavailable){state(activity,PERMISSION,"Allow installation","Open Android settings to allow VonoTation to install updates, then return.");}
+            state(activity,PERMISSION,"Allow installation","Update verified. Allow Voitation to install it; the update resumes when you return.");
+            if(requestPermission)try{activity.startActivity(new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,Uri.parse("package:"+activity.getPackageName())));}catch(RuntimeException unavailable){state(activity,PERMISSION,"Allow installation","Open Android settings to allow Voitation to install updates, then return.");}
             return;
         }
         busy=true;Context app=activity.getApplicationContext();state(app,VERIFYING,"Verifying…","Rechecking the saved update…");
@@ -164,7 +166,7 @@ final class AppUpdate {
         if(audioBusy()){CaptureBarrier.releaseInstall();state(activity,CONFIRM,"Continue installation","Finish recording or processing your audio before installing the update.");return;}
         state(activity,CONFIRM,"Continue installation","Complete Android's installation screen. You can return here to continue.");
         try{activity.startActivity(new Intent(confirmation));confirmationLaunched=true;}
-        catch(RuntimeException blocked){confirmationLaunched=false;state(activity,CONFIRM,"Continue installation","Tap Continue installation while VonoTation is open to confirm the update.");}
+        catch(RuntimeException blocked){confirmationLaunched=false;state(activity,CONFIRM,"Continue installation","Tap Continue installation while Voitation is open to confirm the update.");}
         // Keep the pending Intent and session until a terminal callback; background launch blocks may be silent.
     }
 
@@ -207,7 +209,7 @@ final class AppUpdate {
         if(!UpdatePolicy.integrity(size,release.size,UpdatePolicy.hex(digest.digest()),release.hash))throw new Problem("The update integrity check failed. Download it again.");
         PackageManager pm=context.getPackageManager();int flags=Build.VERSION.SDK_INT>=28?PackageManager.GET_SIGNING_CERTIFICATES:PackageManager.GET_SIGNATURES;
         PackageInfo downloaded=pm.getPackageArchiveInfo(file.getAbsolutePath(),flags),installed=pm.getPackageInfo(context.getPackageName(),flags);
-        if(downloaded==null||!context.getPackageName().equals(downloaded.packageName))throw new Problem("The downloaded file isn't a VonoTation update.");
+        if(downloaded==null||!context.getPackageName().equals(downloaded.packageName))throw new Problem("The downloaded file isn't a Voitation update.");
         long code=Build.VERSION.SDK_INT>=28?downloaded.getLongVersionCode():downloaded.versionCode;
         if(code!=release.code||!release.name.equals(downloaded.versionName)||code<=mine(context))throw new Problem("The update version doesn't match its release information.");
         if(!UpdatePolicy.sameSigners(signers(installed),signers(downloaded)))throw new Problem("This release uses a different signing key and cannot update the installed app.");
@@ -276,7 +278,7 @@ final class AppUpdate {
     private static final class Deferred extends Exception{}
     private static final class Problem extends Exception{Problem(String message){super(message);}}
     private static long mine(Context context){try{PackageInfo info=context.getPackageManager().getPackageInfo(context.getPackageName(),0);return Build.VERSION.SDK_INT>=28?info.getLongVersionCode():info.versionCode;}catch(PackageManager.NameNotFoundException missing){return 0;}}
-    private static String here(Context context){try{return "VonoTation "+context.getPackageManager().getPackageInfo(context.getPackageName(),0).versionName;}catch(PackageManager.NameNotFoundException missing){return "VonoTation";}}
+    private static String here(Context context){try{return "Voitation "+context.getPackageManager().getPackageInfo(context.getPackageName(),0).versionName;}catch(PackageManager.NameNotFoundException missing){return "Voitation";}}
     private static void state(Context context,String phase,String title,String detail){prefs(context).edit().putString("phase",phase).putString("title",title).putString("detail",detail).apply();render(context);}
     private static void render(Context context){main(context).post(()->{SharedPreferences p=prefs(context);Button action=button==null?null:button.get();TextView status=line==null?null:line.get();if(action!=null&&action.isAttachedToWindow()){action.setText(p.getString("title","Update"));action.setEnabled(!busy);}if(status!=null&&status.isAttachedToWindow())status.setText(p.getString("detail",here(context)));});}
 }

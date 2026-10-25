@@ -273,12 +273,13 @@ final class DriveBackup {
     }
 
     /** Identical pending jobs keep their original schedule; connection alone never opts in. */
+    static void pauseScheduling(Context context) { if(context!=null)schedule(context); }
     static void schedule(Context context) {
         Context app = context.getApplicationContext();
         try {
             JobScheduler scheduler = (JobScheduler) app.getSystemService(Context.JOB_SCHEDULER_SERVICE);
             if (scheduler == null) return;
-            if (!automaticEnabled(app)) { scheduler.cancel(JOB_ID); return; }
+            if (!AppProduct.backupEnabled() || !automaticEnabled(app)) { scheduler.cancel(JOB_ID); return; }
             long interval = "weekly".equals(frequency(app)) ? DAY * 7 : DAY;
             int network = flag(app, "backup_wifi", true) ? JobInfo.NETWORK_TYPE_UNMETERED : JobInfo.NETWORK_TYPE_ANY;
             ComponentName component = new ComponentName(app, BackupJob.class);
@@ -819,7 +820,7 @@ final class DriveBackup {
     }
     private static void validateUri(Uri uri) throws IOException {
         if (uri == null || !"content".equals(uri.getScheme()) || uri.getAuthority() == null || uri.getAuthority().isEmpty()
-                || uri.toString().length() > 4096) throw new ConfigurationException("Choose an encrypted VonoTation backup file.");
+                || uri.toString().length() > 4096) throw new ConfigurationException("Choose an encrypted Voitation backup file.");
     }
     private static byte[] readLegacyBytes(Context context, Uri uri) throws IOException {
         try (InputStream in = context.getContentResolver().openInputStream(uri)) {

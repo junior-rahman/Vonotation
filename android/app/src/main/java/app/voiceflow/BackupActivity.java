@@ -239,7 +239,7 @@ public final class BackupActivity extends Activity {
             if (recovery) action(account,"Check Drive backups",false,true,v -> discover(DriveBackup.accountEmail(this),Purpose.SETUP));
             action(account,"Change Google account",false,true,v -> discover(null,Purpose.SETUP));
         }
-        account.addView(Daybook.text(this,"Backups are private to VonoTation in your Google Drive. Disconnecting keeps your saved backups.",12,Daybook.ink(this),false));
+        account.addView(Daybook.text(this,"Backups are private to Voitation in your Google Drive. Disconnecting keeps your saved backups.",12,Daybook.ink(this),false));
         addCard(account);
 
         LinearLayout automatic = backupCard();
@@ -305,7 +305,7 @@ public final class BackupActivity extends Activity {
         Ui.space(data,16);
         action(data,"Back up now",true,ready && !reconnect && !recovery,v -> backupNow());
         action(data,"Restore from Google Drive",false,true,v -> discover(connected ? DriveBackup.accountEmail(this) : null,Purpose.RESTORE));
-        data.addView(Daybook.text(this,"Keep your backup password. You need it to restore on another phone; VonoTation cannot recover it.",12,Daybook.muted(this),false));
+        data.addView(Daybook.text(this,"Keep your backup password. You need it to restore on another phone; Voitation cannot recover it.",12,Daybook.muted(this),false));
         addCard(data);
 
         if (!Store.get(this,"backup_uri","").isEmpty()) {
@@ -480,7 +480,7 @@ public final class BackupActivity extends Activity {
     /** These are real dispatcher boundaries, never timed stages or invented percentages. */
     private String progressDetail(String value) {
         if (value.equals("Connecting Google…")) return "Choose an account and review Google’s permission screen if asked.";
-        if (value.equals("Checking Google Drive…")) return "Looking for VonoTation backups in this Google account.";
+        if (value.equals("Checking Google Drive…")) return "Looking for Voitation backups in this Google account.";
         if (value.equals("Saving backup…")) return "Encrypting, uploading and verifying your backup. Keep this screen open.";
         if (value.equals("Checking backup…") || value.equals("Checking previous backup…")) return "Opening and validating the encrypted backup before asking you to replace any data.";
         if (value.equals("Protecting your backup…")) return "Checking the backup password and saving this phone’s connection.";
@@ -718,7 +718,7 @@ public final class BackupActivity extends Activity {
 
     private void selectBackup(DriveBackup.Connection connection,Done<DriveCloudClient.BackupFile> selected) {
         List<DriveCloudClient.BackupFile> files = connection.files;
-        if (files.isEmpty()) { feedback(connection.hasRejected ? "Backups need attention" : "No backup found",connection.hasRejected ? connection.warning : "No VonoTation backup was found in this Google account.",connection.hasRejected ? NoticeKind.ERROR : NoticeKind.INFO); render(); return; }
+        if (files.isEmpty()) { feedback(connection.hasRejected ? "Backups need attention" : "No backup found",connection.hasRejected ? connection.warning : "No Voitation backup was found in this Google account.",connection.hasRejected ? NoticeKind.ERROR : NoticeKind.INFO); render(); return; }
         if (files.size() == 1) { selected.accept(files.get(0)); return; }
         int count = files.size();
         String[] labels = new String[count];
@@ -867,7 +867,7 @@ public final class BackupActivity extends Activity {
         field.setTextColor(Daybook.ink(this));
         field.setHintTextColor(Daybook.muted(this));
         android.graphics.drawable.GradientDrawable outline = Ui.shape(Daybook.surface(this),12,this);
-        outline.setStroke(Ui.dp(this,1),Daybook.line(this));
+        outline.setStroke(Ui.dp(this,1),Daybook.controlOutline(this));
         field.setBackground(outline);
         field.setPadding(Ui.dp(this,12),Ui.dp(this,11),Ui.dp(this,12),Ui.dp(this,11));
         field.setMinimumHeight(Ui.dp(this,48));
@@ -999,7 +999,7 @@ public final class BackupActivity extends Activity {
                 android.util.Log.w("VonoTationDrive","consent result arrived without a pending request: resultCode=" + result);
                 busy = false;
                 authProblemTitle = "Google connection was interrupted";
-                authProblem = "VonoTation restarted while Google was open (resultCode " + result + "). Tap Connect Google again.";
+                authProblem = "Voitation restarted while Google was open (resultCode " + result + "). Tap Connect Google again.";
                 feedback(authProblemTitle,authProblem,NoticeKind.WARNING);
                 render();
             }

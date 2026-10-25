@@ -45,7 +45,7 @@ public final class CloudPersistenceTest extends Instrumentation {
             android.accessibilityservice.AccessibilityServiceInfo info=ui.getServiceInfo();info.flags|=android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS;ui.setServiceInfo(info);
             URL.setURLStreamHandlerFactory(protocol->protocol.equals("https")?new URLStreamHandler(){protected URLConnection openConnection(URL url){return new Mock(url);}}:null);
             require(!Dictation.isWorking()&&!VoiceTake.running()&&!Notes.updateBusy(),"Another capture or note worker is active");
-            require(FlowAccessibility.instance!=null,"Enable VonoTation Floating microphone before this fixture");
+            require(FlowAccessibility.instance!=null,"Enable Voitation Floating microphone before this fixture");
             // Exact unique text plus an ID boundary prevents cleanup touching an
             // existing user copy, even if a previous fixture run was interrupted.
             try(android.database.Cursor row=ClipboardArchive.get(app).getReadableDatabase().rawQuery("SELECT MAX(_id) FROM copies",null)){archiveFloor=row.moveToFirst()&&!row.isNull(0)?row.getLong(0):0;archiveTracked=true;}
@@ -67,7 +67,7 @@ public final class CloudPersistenceTest extends Instrumentation {
     }
     private void ordinaryRoundTrip()throws Exception{
         launchEditor();action("Primary input",AccessibilityNodeInfo.ACTION_FOCUS,null);setText("Primary input","Before after");
-        waitFor(()->FlowKeyboard.instance!=null&&FlowKeyboard.instance.hasActiveEditor(),"Enable and select the VonoTation keyboard");
+        waitFor(()->FlowKeyboard.instance!=null&&FlowKeyboard.instance.hasActiveEditor(),"Enable and select the Voitation keyboard");
         setClipboard(beforeOrdinary);String notes=Store.get(app,"notes","[]");
         click("Floating keyboard microphone");waitFor(this::capturing,"Cloud microphone did not start");Thread.sleep(1700);
         runOnMainSync(()->FlowKeyboard.instance.requestHideSelf(0));assertCapturing("Keyboard hide");
@@ -87,7 +87,7 @@ public final class CloudPersistenceTest extends Instrumentation {
         launchEditor();action("Password input",AccessibilityNodeInfo.ACTION_FOCUS,null);Thread.sleep(500);
         setClipboard(beforePrivate);String history=Store.history(app).toString(),notes=Store.get(app,"notes","[]");int before=uploads;
         answer="  um "+sentinel+" private raw words  ";ownedClips.add(answer);privateCapture=true;
-        String start=waitAny("Floating keyboard microphone","VonoTation: start dictation");click(start);waitFor(this::capturing,"Private cloud microphone did not start");Thread.sleep(1700);
+        String start=waitAny("Floating keyboard microphone","Voitation: start dictation");click(start);waitFor(this::capturing,"Private cloud microphone did not start");Thread.sleep(1700);
         // The app itself is another destination. The active Finish control must
         // remain available while its original private editor is unavailable.
         app.startActivity(new Intent().setClassName("app.voiceflow","app.voiceflow.MainActivity").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TOP));
