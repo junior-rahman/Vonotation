@@ -19,6 +19,7 @@ import android.os.Looper;
 public final class NoteRecordingService extends Service {
     private static final String START="app.vonotation.notes.RECORD_NOTE";
     private static final String FINISH="app.vonotation.notes.FINISH_NOTE";
+    private static final String PAUSE="app.vonotation.notes.PAUSE_NOTE";
     private static final String CANCEL="app.vonotation.notes.CANCEL_NOTE";
     private static final String CHANNEL="voice_notes_capture";
     private static final int NOTICE=72;
@@ -49,6 +50,11 @@ public final class NoteRecordingService extends Service {
                 if(pending==request && session.owns(id))failPending(app,id,"The recording service did not start. Tap Record to try again.");
             },10000);
         }catch(RuntimeException unavailable){failPending(app,id,"Could not start background microphone recording. Keep Vocading open and try again.");}
+    }
+
+    static boolean togglePause(Context context,long id,Runnable changed){
+        if(!session.owns(id))return false;
+        return VoiceTake.toggleNotePause(id,()->{NoteRecordingService active=instance;if(active!=null&&active.owner==id)active.showNotice(id,false);changed.run();});
     }
 
     static void finalizing(Context context,long id){
@@ -84,6 +90,7 @@ public final class NoteRecordingService extends Service {
         long id=intent==null?-1:intent.getLongExtra("note_id",-1);
         if(!session.owns(id)){if(!session.busy())stopSelf(startId);return START_NOT_STICKY;}
         String action=intent.getAction();
+        if(PAUSE.equals(action)){togglePause(this,id,Notes::recordingChanged);return START_NOT_STICKY;}
         if(FINISH.equals(action)){
             if(Notes.finishRecording(id))finalizing(this,id);
             return START_NOT_STICKY;
@@ -126,10 +133,11 @@ public final class NoteRecordingService extends Service {
         PendingIntent open=PendingIntent.getActivity(this,73,new Intent(this,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
         Notification.Builder notice=new Notification.Builder(this,CHANNEL)
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
-            .setContentTitle(saving?"Saving voice note":"Recording voice note")
-            .setContentText(saving?"Keeping your source audio on this phone.":"Keeps recording until you choose Finish or Cancel.")
+            .setContentTitle(saving?"Saving voice note":VoiceTake.notePaused()?"Voice note paused":"Recording voice note")
+            .setContentText(saving?"Keeping your source audio on this phone.":VoiceTake.notePaused()?"Choose Resume to continue, or Finish to save.":"Choose Pause, Finish or Cancel.")
             .setCategory(Notification.CATEGORY_SERVICE).setOngoing(true).setOnlyAlertOnce(true).setContentIntent(open);
         if(!saving){
+            notice.addAction(new Notification.Action.Builder(VoiceTake.notePaused()?android.R.drawable.ic_media_play:android.R.drawable.ic_media_pause,VoiceTake.notePaused()?"Resume":"Pause",action(id,PAUSE,"pause")).build());
             notice.addAction(new Notification.Action.Builder(android.R.drawable.ic_media_pause,"Finish",action(id,FINISH,"finish")).build());
             notice.addAction(new Notification.Action.Builder(android.R.drawable.ic_menu_close_clear_cancel,"Cancel",action(id,CANCEL,"cancel")).build());
         }

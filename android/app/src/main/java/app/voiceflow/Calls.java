@@ -46,15 +46,15 @@ final class Calls {
         }
         LinearLayout card=Daybook.card(activity);
         card.setPadding(Ui.dp(activity,16),Ui.dp(activity,16),Ui.dp(activity,16),Ui.dp(activity,16));
-        card.addView(Daybook.text(activity,on?"A call writes itself down here, after you hang up.":"Turn it on, and the call is kept without opening "+AppProduct.name()+".",14,Daybook.muted(activity),false));
+        card.addView(Daybook.text(activity,on?"Call capture enabled. Check saved audio after a call.":"Enable call capture, then test a short call on this phone.",14,Daybook.muted(activity),false));
         Ui.space(card,8);
-        String quiet=down?"Wireless debugging is unavailable; calls use speakerphone.":stale?"Pairing needs attention; calls use speakerphone.":"Both sides, with the phone at your ear. "+AppProduct.name()+" sleeps between calls.";
-        card.addView(Daybook.text(activity,paired?quiet:"Until earpiece access is paired, a call plays out loud so both sides are saved.",13,Daybook.muted(activity),false));
+        String quiet=down?"Wireless debugging is unavailable; calls use speakerphone.":stale?"Pairing needs attention; calls use speakerphone.":"Earpiece connection paired. Both voices still need a playback check on this phone.";
+        card.addView(Daybook.text(activity,paired?quiet:"Without earpiece pairing, capture uses speakerphone. Other people nearby may hear the call; recording quality depends on the phone.",13,Daybook.muted(activity),false));
         if(dock!=null){
             dock.removeAllViews();
             android.widget.Button toggle=Daybook.button(activity,on?"Turn off":"Record calls",!on,v->{
                 if(on){Store.prefs(activity).edit().putBoolean("record_calls",false).apply();CallWatch.quit(activity);LineWatch.start(activity,null);arming=false;refresh.run();}
-                else enable(activity,refresh);
+                else new android.app.AlertDialog.Builder(activity).setTitle("Enable call capture?").setMessage("Calls may switch to speakerphone if earpiece capture is unavailable. Test a short call and listen for both voices before relying on recording.").setNegativeButton("Cancel",null).setPositiveButton("Enable",(d,w)->enable(activity,refresh)).show();
             });
             Daybook.pill(toggle,!on);
             dock.addView(toggle,new android.widget.FrameLayout.LayoutParams(-2,Ui.dp(activity,52)));
@@ -96,7 +96,7 @@ final class Calls {
         pairing=true;refresh.run();
         pairWork.execute(()->{
             String message;
-            try{LineWire.pair(activity.getApplicationContext(),code);codeDraft="";message="Both sides are on. Nothing runs until a call.";}
+            try{LineWire.pair(activity.getApplicationContext(),code);codeDraft="";message="Pairing saved. Test a short call and listen for both voices.";}
             catch(Exception error){message=error.getMessage()==null?"Pairing didn't work. Leave the pairing code on screen and try again.":error.getMessage();}
             String say=message;
             activity.runOnUiThread(()->{pairing=false;android.widget.Toast.makeText(activity,say,android.widget.Toast.LENGTH_LONG).show();if(!activity.isDestroyed())refresh.run();});

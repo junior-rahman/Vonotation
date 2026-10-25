@@ -45,6 +45,8 @@ final class VoiceTake {
     private volatile boolean discardedNote;
     private int source=-1;
     private long startedAt;
+    private final RecordingClock clock=new RecordingClock();
+    private volatile boolean paused, pauseChanging;
     private int index;
     private File folder;
     private long noteId;
@@ -63,7 +65,23 @@ final class VoiceTake {
     static long callId(){VoiceTake take=current;return take!=null && take.call?take.noteId:-1;}
     /** True only when the phone actually gave us the call audio, not just the microphone. */
     static boolean bothSides(){VoiceTake take=current;return take!=null && take.source==MediaRecorder.AudioSource.VOICE_CALL;}
-    static long elapsed(){VoiceTake take=current;return take==null?0:android.os.SystemClock.elapsedRealtime()-take.startedAt;}
+    static long elapsed(){VoiceTake take=current;return take==null?0:take.clock.elapsed(android.os.SystemClock.elapsedRealtime());}
+    static boolean notePaused(){VoiceTake take=current;return take!=null && take.note && !take.call && !take.thought && take.paused;}
+    static boolean pauseChanging(){VoiceTake take=current;return take!=null && take.pauseChanging;}
+    static boolean toggleNotePause(long id,Runnable changed){
+        VoiceTake take=current;
+        if(take==null || !take.active || !take.note || take.call || take.thought || take.noteId!=id || take.pauseChanging || (!take.paused && take.recorder==null))return false;
+        take.pauseChanging=true;
+        take.executor.execute(()->{
+            try {
+                if(!take.active)return;
+                if(take.paused){take.arm(take.nextFile());take.started=true;take.clock.resume(android.os.SystemClock.elapsedRealtime());take.paused=false;}
+                else{take.clock.pause(android.os.SystemClock.elapsedRealtime());take.paused=true;if(!take.seal())throw new IllegalStateException("Could not finalize paused audio");java.util.List<File> sealed=take.segments.files();take.handler.post(()->{if(!take.discardedNote)take.listener.partReady(sealed);});}
+            }catch(Exception error){take.handler.post(()->take.stop(false,"Pause or resume failed. Surviving source audio was kept."));}
+            finally{take.pauseChanging=false;take.handler.post(()->{if(current==take && take.active){take.handler.removeCallbacks(take.rotate);take.handler.removeCallbacks(take.meter);if(!take.paused){take.handler.postDelayed(take.rotate,SEGMENT);take.handler.post(take.meter);}changed.run();}});}
+        });
+        return true;
+    }
     /** Bars for the whole take, 0 to 9. Safe to call from the finish callback. */
     static int[] bars(){return lastBars;}
     /** The latest bars while a note is still recording. */
@@ -131,7 +149,7 @@ final class VoiceTake {
                 if(note && folder!=null && !folder.isDirectory() && !folder.mkdirs())throw new IllegalStateException("Could not create the recording folder.");
                 file=nextFile();
                 arm(file);
-                started=true;startedAt=android.os.SystemClock.elapsedRealtime();
+                started=true;startedAt=android.os.SystemClock.elapsedRealtime();clock.start(startedAt);
                 handler.post(()->{if(active)listener.listening();if(active && untilQuiet)handler.postDelayed(quietPoll,200);if(active && note){handler.postDelayed(rotate,SEGMENT);handler.postDelayed(meter,200);}});
             } catch(Exception error) {
                 failure=error.getMessage()==null?"Could not start the microphone.":error.getMessage();
@@ -180,9 +198,9 @@ final class VoiceTake {
     /** A finished segment is a real file. The next one starts immediately so a meeting is not one fragile recording. */
     private final Runnable rotate=new Runnable(){
         public void run(){
-            if(!active || !note)return;
+            if(!active || !note || paused || pauseChanging)return;
             executor.execute(()->{
-                if(!active)return;
+                if(!active || paused || pauseChanging)return;
                 if(!seal()){segments.interrupted();handler.post(()->stop(false,"The recording was interrupted. Your source audio was kept."));return;}
                 if(!active)return;
                 try {
@@ -201,7 +219,7 @@ final class VoiceTake {
 
     private final Runnable meter=new Runnable(){
         public void run(){
-            if(!active || !note)return;
+            if(!active || !note || paused || pauseChanging)return;
             int amp=0;try{if(recorder!=null)amp=recorder.getMaxAmplitude();}catch(RuntimeException ignored){}
             levels.add(Math.min(9,amp/2800));
             handler.postDelayed(this,200);

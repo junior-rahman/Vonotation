@@ -100,6 +100,10 @@ for task_product in vonotation notes; do
   if [[ "$task_product" == notes ]]; then task_package=app.vonotation.notes; else task_package=app.voiceflow; fi
   adb install --no-incremental "app/build/outputs/apk/$task_product/preview/app-$task_product-preview.apk"
   adb install --no-incremental "build/tests/visual/$task_product/$task_product-visual-fixture.apk"
+  if [[ "$task_product" == notes ]]; then
+    adb shell pm grant "$task_package" android.permission.RECORD_AUDIO
+    adb shell pm grant "$task_package" android.permission.POST_NOTIFICATIONS
+  fi
   adb shell dumpsys package "$task_package" > "$task_output/$task_product/installed-package.txt"
 done
 adb logcat -c
@@ -109,6 +113,10 @@ for task_product in vonotation notes; do
   # A brand-new target app data directory each time; no user data or credentials exist.
   adb shell am force-stop "$task_package"
   adb shell pm clear "$task_package"
+  if [[ "$task_product" == notes ]]; then
+    adb shell pm grant "$task_package" android.permission.RECORD_AUDIO
+    adb shell pm grant "$task_package" android.permission.POST_NOTIFICATIONS
+  fi
   if [[ "$task_appearance" == dark ]]; then adb shell cmd uimode night yes; else adb shell cmd uimode night no; fi
   adb shell cmd uimode night > "$task_output/$task_product/uimode-$task_appearance.txt"
   timeout 120 "$ANDROID_SDK_ROOT/platform-tools/adb" -s "$task_serial" shell am instrument -w -e product "$task_product" -e appearance "$task_appearance" "$task_package.visual.fixture/app.voiceflow.VisualPaletteTest" > "$task_output/$task_product/logs/instrumentation-$task_appearance.txt" 2>&1
@@ -129,7 +137,7 @@ python3 - "$task_output" <<'PY'
 import hashlib, json, os, struct, sys, zlib
 from pathlib import Path
 root = Path(sys.argv[1]); screenshots = {}
-products = {'vonotation': ('dictations', 'thoughts', 'clipboard', 'settings', 'settings-size', 'settings-cleanup', 'settings-dictionary', 'settings-permissions'), 'notes': ('voice-notes', 'calls', 'settings')}
+products = {'vonotation': ('dictations', 'thoughts', 'clipboard', 'settings', 'settings-size', 'settings-cleanup', 'settings-dictionary', 'settings-permissions'), 'notes': ('voice-notes', 'calls', 'settings', 'recording-active', 'recording-paused')}
 for product, screens in products.items():
   for appearance in ('light', 'dark'):
     for screen in screens:
@@ -150,7 +158,7 @@ for product, screens in products.items():
         screenshots[str(path.relative_to(root))] = {'size': len(data), 'sha256': hashlib.sha256(data).hexdigest(), 'width': width, 'height': height}
 logs = (root / 'logs/logcat-verified-interval.txt').read_text(errors='replace')
 if 'FATAL EXCEPTION' in logs and any('Process: ' + package in logs for package in ('app.voiceflow', 'app.vonotation.notes')): raise SystemExit('Target process crash found; inspect logcat')
-receipt = {'commit': os.environ.get('GITHUB_SHA', 'local'), 'checks': {'both_preview_builds': 'passed', 'both_full_lints': 'passed', 'pure_java_suites': 'passed', 'both_products_native_light_dark': 'passed', 'manifest_and_card_isolation': 'passed', 'native_resource_and_rendered_capture_contrast': 'passed', 'legacy_recording_retention': 'passed', 'synthetic_recording_archive_roundtrips': 'passed'}, 'applications': {'vonotation': 'app.voiceflow', 'notes': 'app.vonotation.notes'}, 'screenshots': screenshots, 'qualification': 'Actual split-product native emulator screenshots with synthetic QA data. Cards selected through production saved-state restore. One physical Settings tap per product/theme. Synthetic native archive codec roundtrips do not establish real document-picker or playback behavior. Independent disposable QA certificates are unrelated to release signing. Exported application artifacts are UNSIGNED and are not installable updates.', 'not_tested': ['Physical Android hardware', 'Live provider calls', 'Google sign-in or backup restore', 'Full recording and cross-app dictation flows', 'Live telephony', 'User recording transfer through SAF picker and real-source playback']}
+receipt = {'commit': os.environ.get('GITHUB_SHA', 'local'), 'checks': {'both_preview_builds': 'passed', 'both_full_lints': 'passed', 'pure_java_suites': 'passed', 'both_products_native_light_dark': 'passed', 'manifest_and_card_isolation': 'passed', 'native_resource_and_rendered_capture_contrast': 'passed', 'legacy_recording_retention': 'passed', 'synthetic_recording_archive_roundtrips': 'passed', 'vocading_edit_pin_trash_restore_share': 'passed', 'vocading_native_audio_seek_speed_pause_resume': 'passed'}, 'applications': {'vonotation': 'app.voiceflow', 'notes': 'app.vonotation.notes'}, 'screenshots': screenshots, 'qualification': 'Actual split-product native emulator screenshots with synthetic QA data. Cards selected through production saved-state restore. One physical Settings tap per product/theme. Native synthetic PCM playback and emulator microphone pause/resume were exercised; these do not establish real document-picker behavior, microphone quality or call capture. Independent disposable QA certificates are unrelated to release signing. Exported application artifacts are UNSIGNED and are not installable updates.', 'not_tested': ['Physical Android hardware', 'Live provider calls', 'Google sign-in or backup restore', 'Full recording and cross-app dictation flows', 'Live telephony', 'User recording transfer through SAF picker and real-source playback']}
 (root / 'VERIFICATION.json').write_text(json.dumps(receipt, indent=2) + '\n')
 print(json.dumps({'native_screenshots': len(screenshots), 'checks': receipt['checks']}, indent=2))
 PY
