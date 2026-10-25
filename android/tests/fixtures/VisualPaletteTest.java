@@ -114,9 +114,10 @@ public final class VisualPaletteTest extends Instrumentation {
                 }
                 finishActivity();
             }
+            if(!AppProduct.isNotes())verifyPolishScreens();
             require(requests.get() == 0, "Unexpected external request attempted");
             result.putInt("executed_checks", checks);
-            int screenshotCount=pages.length+1+(AppProduct.isNotes()?0:4);
+            int screenshotCount=pages.length+1+(AppProduct.isNotes()?0:7);
             result.putInt("native_screenshots", screenshotCount);
             result.putString("product", requestedProduct);
             result.putString("appearance", appearance);
@@ -130,6 +131,37 @@ public final class VisualPaletteTest extends Instrumentation {
             catch (Throwable cleanup) { result.putString("failure", result.getString("failure", "") + "\nCleanup: " + cleanup); }
         }
         finish(result.containsKey("failure") ? Activity.RESULT_CANCELED : Activity.RESULT_OK, result);
+    }
+    private void verifyPolishScreens() throws Exception {
+        activity=startActivitySync(new Intent(context,SavedContentActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        waitForIdleSync();awaitFocusedWindow();SystemClock.sleep(800);waitForIdleSync();
+        require(findText("Find your saved words")!=null,"Missing search heading");require(findText(THOUGHT_TITLE)!=null,"Search did not show saved thought");capture("search");finishActivity();
+        long id=Store.history(context).getJSONObject(0).getLong("id");require(DeletionUndo.delete(context,"dictation",id),"Could not seed recently deleted screen");
+        activity=startActivitySync(new Intent(context,SavedContentActivity.class).putExtra("deleted",true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        waitForIdleSync();awaitFocusedWindow();SystemClock.sleep(600);waitForIdleSync();require(findText("Restore")!=null,"Deleted item has no explicit Restore action");capture("recently-deleted");
+        tap(findText("Restore"));waitForIdleSync();SystemClock.sleep(400);require(Store.history(context).length()>0,"Native Restore action did not restore dictation");finishActivity();
+        page=3;activity=startActivitySync(new Intent(context,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TASK));waitForIdleSync();awaitFocusedWindow();
+        final int[] revealed={0};FlowAccessibility previous=FlowAccessibility.instance;
+        try{
+            FlowAccessibility.instance=new FlowAccessibility(){@Override void revealCopiedDictation(String value){revealed[0]++;}};
+            runOnMainSync(()->{
+                Ui.copy(activity,"Ordinary copy");
+                Recovery.keep(activity,"Kept","Kept",1,false,false,false);
+                Recovery.keep(activity,"Inserted","Inserted",1,true,false,true);
+                Recovery.keep(activity,"Private","Private",1,false,true,true);
+            });require(revealed[0]==0,"Ordinary/private/inserted text opened recovery fan");
+            runOnMainSync(()->Recovery.keep(activity,"Lost input","Lost input transcript",1,false,false,true));
+            require(revealed[0]==1,"Successful lost-input copy did not notify fan exactly once");
+            require(Store.history(context).toString().contains("Lost input transcript"),"Fallback transcript was not kept");
+        }finally{FlowAccessibility.instance=previous;PrivatePending.discard();}
+        runOnMainSync(()->{
+            android.widget.ScrollView scroll=new android.widget.ScrollView(activity);android.widget.LinearLayout column=Ui.column(activity);column.setPadding(Ui.dp(activity,20),Ui.dp(activity,40),Ui.dp(activity,20),Ui.dp(activity,24));column.setBackgroundColor(Daybook.paper(activity));scroll.addView(column);
+            column.addView(Daybook.text(activity,"Voitation · artwork states",22,Daybook.ink(activity),true));
+            for(String stage:new String[]{"Ready","Pressed","Starting","Listening","Finishing","Uploading","Transcribing","Polishing","Done","Retry","Blocked","Disabled"}){
+                android.widget.LinearLayout row=Ui.row(activity);VoitationGlyph glyph=new VoitationGlyph(activity);glyph.setStage(stage);row.addView(glyph,new android.widget.LinearLayout.LayoutParams(Ui.dp(activity,42),Ui.dp(activity,42)));row.addView(Daybook.text(activity,stage,14,Daybook.ink(activity),false),new android.widget.LinearLayout.LayoutParams(0,-2,1));VoitationGlyph thought=new VoitationGlyph(activity);thought.setThought(true);thought.setStage(stage);row.addView(thought,new android.widget.LinearLayout.LayoutParams(Ui.dp(activity,42),Ui.dp(activity,42)));column.addView(row);
+            }
+            activity.setContentView(scroll);
+        });waitForIdleSync();capture("artwork-states");finishActivity();
     }
     private void verifyUndoStorage() throws Exception {
         String history=Store.get(context,"history","[]"),notes=Store.get(context,"notes","[]"),undo=Store.get(context,"recent_deletions","[]"),td=Store.get(context,"thought_deletions","[]"),nd=Store.get(context,"note_deletions","[]");

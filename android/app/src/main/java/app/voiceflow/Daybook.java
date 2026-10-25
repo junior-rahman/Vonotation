@@ -63,11 +63,33 @@ final class Daybook {
         return new RippleDrawable(ColorStateList.valueOf(opacity(accent(c),dark(c)?0x26:0x19)),shape(c,color,radius),Ui.shape(Color.WHITE,radius,c));
     }
     static LinearLayout card(Context c) {
-        LinearLayout card=Ui.column(c);card.setPadding(Ui.dp(c,13),0,Ui.dp(c,13),0);card.setBackground(shape(c,surface(c),17));return card;
+        int inset=AppProduct.isNotes()?13:16;
+        LinearLayout card=Ui.column(c);card.setPadding(Ui.dp(c,inset),0,Ui.dp(c,inset),0);card.setBackground(shape(c,surface(c),AppProduct.isNotes()?17:20));return card;
     }
     static Button button(Context c,String label,boolean primary,View.OnClickListener click) {
         Button b=new Button(c);b.setText(label);b.setAllCaps(false);b.setTextSize(14);b.setTextColor(primary?actionInk(c):accent(c));b.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));
         b.setBackground(ripple(c,primary?action(c):surface(c),12));b.setMinimumHeight(Ui.dp(c,44));b.setMinHeight(Ui.dp(c,44));b.setPadding(Ui.dp(c,12),Ui.dp(c,8),Ui.dp(c,12),Ui.dp(c,8));b.setFocusableInTouchMode(false);b.setOnClickListener(v->{feedback(v);click.onClick(v);});return b;
+    }
+    /** Quiet, accessible actions for the Voitation toolbar. */
+    static View iconButton(Context c,String symbol,String label,View.OnClickListener click) {
+        Symbol view=new Symbol(c,symbol);view.setContentDescription(label);view.setTooltipText(label);
+        view.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
+        view.setBackground(ripple(c,Color.TRANSPARENT,14));view.setFocusable(true);
+        view.setOnClickListener(v->{feedback(v);click.onClick(v);});return view;
+    }
+    static final class Symbol extends View {
+        private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);private final String symbol;
+        Symbol(Context c,String symbol){super(c);this.symbol=symbol;setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);}
+        @Override public CharSequence getAccessibilityClassName(){return android.widget.Button.class.getName();}
+        @Override protected void onDraw(Canvas canvas){
+            float size=Ui.dp(getContext(),22);canvas.save();canvas.translate((getWidth()-size)/2,(getHeight()-size)/2);canvas.scale(size/24,size/24);
+            paint.setColor(accent(getContext()));paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(1.7f);paint.setStrokeCap(Paint.Cap.ROUND);paint.setStrokeJoin(Paint.Join.ROUND);
+            if(symbol.equals("back")){canvas.drawLine(15,5,8,12,paint);canvas.drawLine(8,12,15,19,paint);}
+            else if(symbol.equals("close")){canvas.drawLine(7,7,17,17,paint);canvas.drawLine(17,7,7,17,paint);}
+            else if(symbol.equals("restore")){canvas.drawArc(5,5,21,21,-145,290,false,paint);canvas.drawLine(5,4,5,10,paint);canvas.drawLine(5,10,11,10,paint);canvas.drawLine(13,9,13,13,paint);canvas.drawLine(13,13,16,15,paint);}
+            else{canvas.drawCircle(10.5f,10.5f,6.5f,paint);canvas.drawLine(15.5f,15.5f,20,20,paint);}
+            canvas.restore();
+        }
     }
     /** One round action, meant to float over a scrolling card. */
     static void pill(Button b,boolean primary) {

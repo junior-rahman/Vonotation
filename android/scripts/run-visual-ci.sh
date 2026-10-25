@@ -156,7 +156,7 @@ python3 - "$task_output" <<'PY'
 import hashlib, json, os, struct, sys, zlib
 from pathlib import Path
 root = Path(sys.argv[1]); screenshots = {}
-products = {'vonotation': ('dictations', 'thoughts', 'clipboard', 'settings', 'settings-size', 'settings-cleanup', 'settings-dictionary', 'settings-permissions'), 'notes': ('voice-notes', 'calls', 'settings')}
+products = {'vonotation': ('dictations', 'thoughts', 'clipboard', 'settings', 'settings-size', 'settings-cleanup', 'settings-dictionary', 'settings-permissions', 'search', 'recently-deleted', 'artwork-states'), 'notes': ('voice-notes', 'calls', 'settings')}
 for product, screens in products.items():
   for appearance in ('light', 'dark'):
     for screen in screens:

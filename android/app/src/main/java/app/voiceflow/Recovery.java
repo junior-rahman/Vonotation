@@ -11,6 +11,9 @@ final class Recovery {
         return keep(context,raw,text,duration,inserted,false);
     }
     static boolean keep(Context context,String raw,String text,long duration,boolean inserted,boolean sensitive){
+        return keep(context,raw,text,duration,inserted,sensitive,false);
+    }
+    static boolean keep(Context context,String raw,String text,long duration,boolean inserted,boolean sensitive,boolean inputLost){
         if(text==null || text.trim().isEmpty())return false;
         boolean saved=false;
         if(!sensitive)synchronized(Store.class){saved=Store.save(context,raw,text,duration);if(!inserted)DraftState.set(text);}
@@ -28,6 +31,8 @@ final class Recovery {
         // The sensitive flag suppresses previews; the private journal retains a durable fallback.
         saved=ClipList.remember(context,text)||saved;
         boolean copied=false;try{clipboard.setPrimaryClip(clip);copied=true;}catch(RuntimeException ignored){}
+        if(ClipboardFallback.shouldReveal(inputLost,inserted,sensitive,copied)&&FlowAccessibility.instance!=null)
+            FlowAccessibility.instance.revealCopiedDictation(text);
         Toast.makeText(context,copied?"Dictation copied. Your words were kept.":"Your dictation was kept in Voitation.",Toast.LENGTH_SHORT).show();
         return saved;
     }

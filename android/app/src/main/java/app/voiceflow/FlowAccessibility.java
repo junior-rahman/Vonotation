@@ -365,6 +365,10 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
             positionBubble();handler.removeCallbacks(tick);handler.post(tick);return;
         }
         if(locked || !interactive){removeBubble();hideThought();return;}
+        if(fan!=null&&fan.isOpen()&&fan.isRecovery()){
+            if(ownAppActive||CaptureActivity.visible||focusedInputIsSensitive()){fan.dismissNow();fan=null;}
+            else return;
+        }
         // The explicit clipboard read briefly owns focus. Preserve the original fan only for this bounded handoff.
         if(clipboardPeekGrace())return;
         if(clipOpening)hideClipTray();
@@ -616,6 +620,26 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
         handler.postDelayed(()->{if(typingRequested&&!typingKeyboardVisible()){showTypingKeyboard();updateBubble();}},700);
     }
     private ArcFan fan;
+    /** Completion calls this before releasing the recording UI; display runs after that release. */
+    void revealCopiedDictation(String text){
+        final float x=layout==null?Ui.dp(this,48):layout.x+layout.width/2f;
+        final float y=layout==null?Ui.dp(this,200):layout.y+layout.height/2f;
+        handler.post(()->{
+            android.app.KeyguardManager lock=(android.app.KeyguardManager)getSystemService(KEYGUARD_SERVICE);
+            android.os.PowerManager power=(android.os.PowerManager)getSystemService(POWER_SERVICE);
+            if(manager==null||recording()||ownAppActive||CaptureActivity.visible||(lock!=null&&lock.isKeyguardLocked())||(power!=null&&!power.isInteractive())||focusedInputIsSensitive())return;
+            hideThought();removeBubble();
+            final ArcFan[] shown=new ArcFan[1];
+            Runnable open=()->{if(shown[0]!=null)shown[0].dismissNow();startActivity(new Intent(this,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP).putExtra("open_copied_dictation",true));};
+            fan=shown[0]=new ArcFan(this,manager,new ArcFan.Actions(){
+                public boolean deleteWord(){return false;}public void openClipboard(){open.run();}
+                public void prepareClipboardPaste(){}public void cancelClipboardPaste(){}
+                public void pasteClipboard(String ignored){open.run();}public void openKeyboard(){}
+                public void closed(){if(fan==shown[0]){fan=null;handler.post(FlowAccessibility.this::updateBubble);}}
+            });
+            fan.openRecovered(x,y,text);
+        });
+    }
     private String fanPackage="";
     private boolean isImePackage(String pkg){String ime=android.provider.Settings.Secure.getString(getContentResolver(),android.provider.Settings.Secure.DEFAULT_INPUT_METHOD);return ime!=null&&ime.startsWith(pkg+"/")||pkg.equals("com.android.systemui");}
     private void openFan(View mic){
@@ -818,6 +842,7 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
     }
 
     private void refreshClipboardField(){
+        if(fan!=null&&fan.isRecovery())return;
         if((fan==null||!fan.isOpen())&&clipTray==null&&!clipOpening)return;
         if(ownAppActive){if(fan!=null)fan.clipboardPreview(null);hideClipTray();clearPillPaste();return;}
         boolean sensitive=focusedInputIsSensitive();
@@ -1062,8 +1087,7 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
         return target.nativeText.write(target.port,words);
     }
     @Override public void state(String status) {
-        if(!busy || thoughtSession) return; finishing=dictation!=null && dictation.isFinishing(); updateBubble();
-        stageLabel=shortStage(status);
+        if(!busy || thoughtSession) return; finishing=dictation!=null && dictation.isFinishing();stageLabel=shortStage(status); updateBubble();
         if(finishing && timer!=null){timer.setText(stageLabel);timer.setContentDescription(status);}
     }
     @Override public void partial(String text) {
@@ -1091,11 +1115,11 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
         boolean inserted=insertLive(text);pendingWriteAccepted|=inserted;
         if(inserted && target!=null && target.port!=null)inserted=target.nativeText.matches(target.port.read());
         if(!inserted && !insertionLost && attempt<14){handler.postDelayed(()->finishResult(raw,text,warning,attempt+1,owner),150);return;}
-        if(Recovery.keep(this,raw,text,android.os.SystemClock.elapsedRealtime()-startedAt,inserted)&&dictation!=null)dictation.acknowledgeSaved();endRecording();
+        if(Recovery.keep(this,raw,text,android.os.SystemClock.elapsedRealtime()-startedAt,inserted,false,insertionLost)&&dictation!=null)dictation.acknowledgeSaved();endRecording();
         if(!warning.isEmpty())Toast.makeText(this,warning,Toast.LENGTH_LONG).show();
     }
     @Override public void error(String message) {
-        if(!busy || thoughtSession) return;if(!lastPartial.isEmpty()){boolean sensitive=target!=null && target.sensitive;Recovery.keep(this,lastPartial,sensitive?lastPartial:Store.clean(this,lastPartial),android.os.SystemClock.elapsedRealtime()-startedAt,false,sensitive);}
+        if(!busy || thoughtSession) return;if(!lastPartial.isEmpty()){boolean sensitive=target!=null && target.sensitive;Recovery.keep(this,lastPartial,sensitive?lastPartial:Store.clean(this,lastPartial),android.os.SystemClock.elapsedRealtime()-startedAt,false,sensitive,insertionLost);}
         endRecording(); showProblem(DictationProblem.of(message));
     }
     /** Shows a dictation problem beside the mic for a few seconds and logs it. */
@@ -1112,6 +1136,8 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
     }
     static String shortStage(String status){
         if(status==null)return "Working";
+        if(status.startsWith("Starting"))return "Starting";
+        if(status.startsWith("Listening"))return "Listening";
         if(status.startsWith("Saving"))return "Saving";
         if(status.startsWith("Uploading"))return "Uploading";
         if(status.startsWith("Transcribing"))return "Transcribing";
@@ -1152,9 +1178,9 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
     @Override public void onDestroy() {
         if(thoughtCapture!=null){long id=thoughtCapture.id;thoughtCapture.detach();thoughtCapture=null;VoiceTake.finishThought(id);thoughtSession=false;busy=false;}
         releaseTypingKeyboard();Store.prefs(this).unregisterOnSharedPreferenceChangeListener(this);if(dictation!=null){if(!pendingRaw.isEmpty()){
-            if(Recovery.keep(this,pendingRaw,pendingText,android.os.SystemClock.elapsedRealtime()-startedAt,pendingAcknowledged(),target!=null && target.sensitive))dictation.acknowledgeSaved();
+            if(Recovery.keep(this,pendingRaw,pendingText,android.os.SystemClock.elapsedRealtime()-startedAt,pendingAcknowledged(),target!=null && target.sensitive,insertionLost))dictation.acknowledgeSaved();
             if(!pendingWarning.isEmpty())Toast.makeText(this,pendingWarning,Toast.LENGTH_LONG).show();dictation.close();
-        }else if(busy)dictation.finishDetached(android.os.SystemClock.elapsedRealtime()-startedAt);else dictation.close();dictation=null;}
+        }else if(busy)dictation.finishDetached(android.os.SystemClock.elapsedRealtime()-startedAt,true);else dictation.close();dictation=null;}
         pendingRaw="";pendingText="";pendingWarning="";pendingWriteAccepted=false;lastPartial="";if(target!=null && target.sensitiveTarget!=null)target.sensitiveTarget.release();
         handler.removeCallbacksAndMessages(null);ClipList.onChanged=null;ClipPeek.after=null; removeBubble();clearDeleteGesture();hideThought();if(thoughtScreenReceiverRegistered){unregisterReceiver(thoughtScreenReceiver);thoughtScreenReceiverRegistered=false;} RecordingNotice.stop(this,foregroundNotice); instance=null; if(target!=null && target.identity!=null) target.identity.recycle(); target=null; super.onDestroy();
     }
@@ -1167,7 +1193,7 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
         @Override protected void onDraw(Canvas canvas) {
             boolean moving=ValueAnimator.areAnimatorsEnabled() && recording() && !working();
             float size=Math.min(getWidth(),getHeight());canvas.save();canvas.translate((getWidth()-size)/2,(getHeight()-size)/2);canvas.scale(size/48,size/48);
-            VoitationGlyph.draw(canvas,paint,Daybook.action(FlowAccessibility.this),working()?currentStage():"Listening",level);canvas.restore();
+            VoitationGlyph.draw(canvas,paint,Daybook.action(FlowAccessibility.this),busy?currentStage():FlowKeyboard.instance!=null?FlowKeyboard.instance.floatingStatus():"Listening",level,thoughtSession);canvas.restore();
             if(moving && isAttachedToWindow()) postInvalidateDelayed(70);
         }
     }

@@ -190,11 +190,11 @@ public final class FlowKeyboard extends InputMethodService implements Dictation.
         boolean inserted=insertion!=null && insertion.write(port,text);pendingWriteAccepted|=inserted;
         if(inserted)inserted=insertion.matches(port.read());
         if(!inserted && sameTarget() && attempt<14){handler.postDelayed(()->finishResult(raw,text,warning,attempt+1,owner),150);return;}
-        if(Recovery.keep(this,raw,text,android.os.SystemClock.elapsedRealtime()-startedAt,inserted)&&dictation!=null)dictation.acknowledgeSaved();endRecording();
+        if(Recovery.keep(this,raw,text,android.os.SystemClock.elapsedRealtime()-startedAt,inserted,false,!sameTarget())&&dictation!=null)dictation.acknowledgeSaved();endRecording();
         if(!inserted)setStatus("Copied and kept");
         else{setStatus("Inserted");if(!warning.isEmpty())Toast.makeText(this,warning,Toast.LENGTH_LONG).show();}
     }
-    @Override public void error(String message){if(!busy)return;if(!lastPartial.isEmpty())Recovery.keep(this,lastPartial,sensitive?lastPartial:Store.clean(this,lastPartial),android.os.SystemClock.elapsedRealtime()-startedAt,false,sensitive);endRecording();showProblem(DictationProblem.of(message));}
+    @Override public void error(String message){if(!busy)return;if(!lastPartial.isEmpty())Recovery.keep(this,lastPartial,sensitive?lastPartial:Store.clean(this,lastPartial),android.os.SystemClock.elapsedRealtime()-startedAt,false,sensitive,!sameTarget());endRecording();showProblem(DictationProblem.of(message));}
     /** Keyboard problems appear in the floating controls (with Fix) and the keyboard status, not as a toast. */
     private void showProblem(DictationProblem problem){
         android.util.Log.w("VonoTation","Keyboard dictation blocked: "+problem.title+" | "+problem.detail);
@@ -205,5 +205,5 @@ public final class FlowKeyboard extends InputMethodService implements Dictation.
     private void endRecording(){generation++;busy=false;finishing=false;if(dictation!=null){dictation.close();dictation=null;}insertion=null;lastPartial="";pendingRaw="";pendingText="";pendingWarning="";pendingWriteAccepted=false;sensitive=false;sensitiveAttempted=false;sensitiveSent=false;sensitiveEdited=false;RecordingNotice.stop(this,foregroundNotice);foregroundNotice=RecordingNotice.NONE;refreshControls();}
     private void refreshBubble(){handler.post(()->{if(FlowAccessibility.instance!=null)FlowAccessibility.instance.updateBubble();});}
     private boolean pendingAcknowledged(){try{return sameTarget() && (sensitive?sensitiveSent && selectionStart==sensitiveCursor && selectionEnd==sensitiveCursor:pendingWriteAccepted && insertion!=null && insertion.matches(port.read()));}catch(RuntimeException unavailable){return false;}}
-    @Override public void onDestroy(){if(dictation!=null && busy){if(!pendingRaw.isEmpty()){if(Recovery.keep(this,pendingRaw,pendingText,android.os.SystemClock.elapsedRealtime()-startedAt,pendingAcknowledged(),sensitive))dictation.acknowledgeSaved();if(!pendingWarning.isEmpty())Toast.makeText(this,pendingWarning,Toast.LENGTH_LONG).show();dictation.close();}else dictation.finishDetached(android.os.SystemClock.elapsedRealtime()-startedAt);dictation=null;}endRecording();handler.removeCallbacksAndMessages(null);instance=null;refreshBubble();super.onDestroy();}
+    @Override public void onDestroy(){if(dictation!=null && busy){if(!pendingRaw.isEmpty()){if(Recovery.keep(this,pendingRaw,pendingText,android.os.SystemClock.elapsedRealtime()-startedAt,pendingAcknowledged(),sensitive,!sameTarget()))dictation.acknowledgeSaved();if(!pendingWarning.isEmpty())Toast.makeText(this,pendingWarning,Toast.LENGTH_LONG).show();dictation.close();}else dictation.finishDetached(android.os.SystemClock.elapsedRealtime()-startedAt,true);dictation=null;}endRecording();handler.removeCallbacksAndMessages(null);instance=null;refreshBubble();super.onDestroy();}
 }
