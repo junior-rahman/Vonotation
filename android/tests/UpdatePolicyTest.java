@@ -4,6 +4,11 @@ public final class UpdatePolicyTest {
     private static final String URL="https://github.com/JuelHossain/Vonotation/releases/download/v0.1.9/VonoTation.apk";
     private static final String HASH="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
     public static void main(String[] args){
+        equal("https://raw.githubusercontent.com/junior-rahman/Vonotation/main/vocading-latest.json",UpdatePolicy.feed(true));
+        equal("https://raw.githubusercontent.com/junior-rahman/Vonotation/main/latest.json",UpdatePolicy.feed(false));
+        UpdatePolicy.validatePackage("app.vonotation.notes",true);UpdatePolicy.validatePackage("app.voiceflow",false);
+        reject(()->UpdatePolicy.validatePackage("app.voiceflow",true));reject(()->UpdatePolicy.validatePackage("app.vonotation.notes",false));
+        reject(()->UpdatePolicy.validatePackage("",true));reject(()->UpdatePolicy.validatePackage(null,true));
         UpdatePolicy.validate(81,"0.1.9-preview",URL,HASH,100);
         reject(()->UpdatePolicy.validate(0,"0.1.9",URL,HASH,100));reject(()->UpdatePolicy.validate(81,"",URL,HASH,100));reject(()->UpdatePolicy.validate(81,"bad\nname\n",URL,HASH,100));
         reject(()->UpdatePolicy.validate(81,"0.1.9",URL,"",100));reject(()->UpdatePolicy.validate(81,"0.1.9",URL,HASH,0));

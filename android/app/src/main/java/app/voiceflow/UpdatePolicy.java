@@ -9,6 +9,10 @@ import java.util.Locale;
 final class UpdatePolicy {
     static final int MAX_FEED=16*1024,MAX_APK=40*1024*1024,MAX_REDIRECTS=5;
     private UpdatePolicy(){}
+    static String feed(boolean notes){return "https://raw.githubusercontent.com/junior-rahman/Vonotation/main/"+(notes?"vocading-latest.json":"latest.json");}
+    static void validatePackage(String applicationId,boolean notes){
+        if(!(notes?"app.vonotation.notes":"app.voiceflow").equals(applicationId))throw new IllegalArgumentException("The update information belongs to a different app.");
+    }
     static void validate(long code,String name,String address,String hash,long size){
         if(code<=0||code>Integer.MAX_VALUE)throw new IllegalArgumentException("Invalid update version.");
         if(!validName(name))throw new IllegalArgumentException("Invalid update name.");

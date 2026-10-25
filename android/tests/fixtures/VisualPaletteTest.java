@@ -45,6 +45,9 @@ public final class VisualPaletteTest extends Instrumentation {
     private String legacyVoice, legacyCall;
     private File legacyAudio;
     private final AtomicInteger requests = new AtomicInteger();
+    private final AtomicInteger updateRequests = new AtomicInteger();
+    private volatile String updateBody = "";
+    private volatile int updateStatus = 200;
 
     @Override public void onCreate(Bundle arguments) {
         appearance = arguments == null ? "" : arguments.getString("appearance", "");
@@ -71,6 +74,15 @@ public final class VisualPaletteTest extends Instrumentation {
             require(Store.get(context, "history", "[]").equals("[]") && Store.get(context, "notes", "[]").equals("[]"), "Only a fresh disposable installation may run this fixture");
             URL.setURLStreamHandlerFactory(protocol -> protocol.equals("http") || protocol.equals("https") ? new URLStreamHandler() {
                 @Override protected URLConnection openConnection(URL url) throws IOException {
+                    if(AppProduct.isNotes()&&url.toString().equals("https://raw.githubusercontent.com/junior-rahman/Vonotation/main/vocading-latest.json")){
+                        updateRequests.incrementAndGet();
+                        final byte[] bytes=updateBody.getBytes(java.nio.charset.StandardCharsets.UTF_8);final int status=updateStatus;
+                        return new java.net.HttpURLConnection(url){
+                            public void connect(){} public void disconnect(){} public boolean usingProxy(){return false;}
+                            public int getResponseCode(){return status;} public long getContentLengthLong(){return bytes.length;}
+                            public java.io.InputStream getInputStream(){return new java.io.ByteArrayInputStream(bytes);}
+                        };
+                    }
                     requests.incrementAndGet(); throw new IOException("Palette fixture blocks network requests");
                 }
             } : null);
@@ -105,6 +117,7 @@ public final class VisualPaletteTest extends Instrumentation {
                     require(findDescription("Back to Home") != null, "One physical Settings tap did not open production Settings");
                     require(findText("Settings") != null, "Production Settings heading is absent");
                     capture("settings");
+                    if(AppProduct.isNotes())verifyUpdateControl();
                     if(!AppProduct.isNotes())for(String[] panel:new String[][]{{"size","Bubble size"},{"cleanup","Cleanup options"},{"dictionary","Personal dictionary"},{"permissions","Permissions"}}){
                         final String section=panel[0];
                         final java.lang.reflect.Method open=MainActivity.class.getDeclaredMethod("openPanel",String.class);open.setAccessible(true);
@@ -117,8 +130,9 @@ public final class VisualPaletteTest extends Instrumentation {
                 finishActivity();
             }
             require(requests.get() == 0, "Unexpected external request attempted");
+            require(updateRequests.get()==(AppProduct.isNotes()?3:0),"Unexpected update feed requests");
             result.putInt("executed_checks", checks);
-            int screenshotCount=pages.length+1+(AppProduct.isNotes()?2:4);
+            int screenshotCount=pages.length+1+(AppProduct.isNotes()?3:4);
             result.putInt("native_screenshots", screenshotCount);
             result.putString("product", requestedProduct);
             result.putString("appearance", appearance);
@@ -132,6 +146,32 @@ public final class VisualPaletteTest extends Instrumentation {
             catch (Throwable cleanup) { result.putString("failure", result.getString("failure", "") + "\nCleanup: " + cleanup); }
         }
         finish(result.containsKey("failure") ? Activity.RESULT_CANCELED : Activity.RESULT_OK, result);
+    }
+    private void verifyUpdateControl() throws Exception {
+        View update=findDescription("Update Vocading");
+        require(update instanceof android.widget.Button,"Vocading Update button is missing");
+        runOnMainSync(()->update.requestRectangleOnScreen(new Rect(0,0,update.getWidth(),update.getHeight()),true));
+        waitForIdleSync();SystemClock.sleep(250);
+        PackageInfo installed=context.getPackageManager().getPackageInfo(context.getPackageName(),0);
+        JSONObject feed=new JSONObject().put("versionCode",installed.versionCode).put("versionName",installed.versionName)
+            .put("package","app.voiceflow").put("apk","https://github.com/junior-rahman/Vonotation/releases/download/vocading-v0.1.2-preview/Vocading-0.1.2-preview.apk")
+            .put("size",100).put("sha256","0000000000000000000000000000000000000000000000000000000000000000");
+        updateBody=feed.toString();tap(update);awaitUpdate("error","different app");
+        updateStatus=503;tap(update);awaitUpdate("error","unavailable");
+        updateStatus=200;updateBody=feed.put("package",context.getPackageName()).toString();
+        tap(update);awaitUpdate("idle","That's the latest.");
+        require(findText("You're on Vocading "+installed.versionName+". That's the latest.")!=null,"Update result names the wrong product");
+        require(!new File(context.getCacheDir(),"verified-update.apk").exists(),"Current release unexpectedly downloaded an APK");
+        capture("settings-update");
+    }
+    private void awaitUpdate(String phase,String detail) throws Exception {
+        long until=SystemClock.elapsedRealtime()+8000;SharedPreferences updates=context.getSharedPreferences("app_updates",Context.MODE_PRIVATE);
+        while(SystemClock.elapsedRealtime()<until){
+            waitForIdleSync();
+            if(phase.equals(updates.getString("phase",""))&&updates.getString("detail","").contains(detail)){SystemClock.sleep(100);waitForIdleSync();return;}
+            SystemClock.sleep(25);
+        }
+        throw new Exception("Updater did not reach "+phase+": "+updates.getString("detail",""));
     }
     private void verifyUndoStorage() throws Exception {
         String history=Store.get(context,"history","[]"),notes=Store.get(context,"notes","[]"),undo=Store.get(context,"recent_deletions","[]"),td=Store.get(context,"thought_deletions","[]"),nd=Store.get(context,"note_deletions","[]");
@@ -257,6 +297,8 @@ public final class VisualPaletteTest extends Instrumentation {
         PackageInfo info=context.getPackageManager().getPackageInfo(expected,PackageManager.GET_PERMISSIONS);
         java.util.Set<String> permissions=new java.util.HashSet<>();
         if(info.requestedPermissions!=null)java.util.Collections.addAll(permissions,info.requestedPermissions);
+        require(permissions.contains("android.permission.REQUEST_INSTALL_PACKAGES"),"Product cannot request Android update installation");
+        require(!context.getPackageManager().getReceiverInfo(new ComponentName(context.getPackageName(),"app.voiceflow.UpdateResult"),0).exported,"Update callback must remain private");
         require(!hasService("CallService"),"Legacy unused call service became an application component");
         requireServiceType("PlayWatch",ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
         if(AppProduct.isNotes()){

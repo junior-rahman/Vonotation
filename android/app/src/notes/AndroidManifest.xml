@@ -1,5 +1,4 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
-    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" tools:node="remove" />
     <application>
         <provider android:name="app.voiceflow.RecordingShare" android:authorities="${applicationId}.recording-share" android:exported="false" android:grantUriPermissions="true" />
         <activity android:name="app.voiceflow.CaptureActivity" tools:node="remove" />
@@ -8,7 +7,6 @@
         <service android:name="app.voiceflow.FlowKeyboard" tools:node="remove" />
         <service android:name="app.voiceflow.ClipboardExpiryJob" tools:node="remove" />
         <service android:name="app.voiceflow.ThoughtJob" tools:node="remove" />
-        <receiver android:name="app.voiceflow.UpdateResult" tools:node="remove" />
         <service android:name="app.voiceflow.NoteRecordingService" android:exported="false" android:foregroundServiceType="microphone" />
     </application>
 </manifest>

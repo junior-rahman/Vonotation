@@ -1,4 +1,4 @@
-# Vocading Android 0.1.1 preview
+# Vocading Android improvements
 
 The Android update implements all six approved improvements and uses the supplied Vocading Forest & Copper logo and control icons. Package `app.vonotation.notes` advances to version code 2; existing storage and signing identities remain unchanged.
 
@@ -24,3 +24,13 @@ A single part shares as M4A. Long or paused recordings share as a ZIP containing
 The Android pipeline builds/lints both app variants, runs 42 Java suites and tests actual native behavior on a disposable emulator. It covers editing, stale-response protection, pin/trash/restore, read-only shares, cross-segment seeking, speed, late-prepare cancellation, microphone pause/resume and control visibility. Native captures cover light and dark themes. Final run links are recorded in the pull request.
 
 Real phone microphone quality, long/background recording, live provider responses, actual call audio and owner-device installation still require device checks. Backup/OAuth remains paused. iOS work is retained separately on `improve/vocading-recordings`; its testing does not block this Android handoff.
+
+## In-app updates (0.1.2)
+
+Settings includes an **Update** button and the installed Vocading version. It reads `vocading-latest.json`; Voitation continues to read `latest.json`. Both feeds declare their package identity and metadata for the signed APK. A feed for the other product is rejected before any download. SHA-256, exact byte count, APK package/version and the installed signing certificate are verified before Android asks for installation approval. Audio work blocks installation; interrupted downloads and denied/cancelled installation remain retryable.
+
+Native regression checks tap the real Vocading button, reject the wrong product, show a failed request, retry successfully, and verify the current-version result in light/dark mode. The network responses in these checks are synthetic; physical-phone installation still requires owner testing.
+
+## Delivery workflow
+
+Per the owner's instruction, finish Android update tasks only after publishing the signed installable APK on GitHub and verifying the public download. Advance the matching product feed only after its release assets are published and checked. Keep both product feeds separate, retain each signing key privately, and include source, checksums and verification evidence. iOS testing remains deferred unless requested.
