@@ -1149,7 +1149,7 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
     }
     private String currentStage(){
         if(!busy && FlowKeyboard.instance!=null)return shortStage(FlowKeyboard.instance.floatingStatus());
-        return stageLabel.isEmpty()?"Working":stageLabel;
+        return stageLabel.isEmpty()?(busy&&!finishing?"Listening":"Working"):stageLabel;
     }
     /** Cancel during processing: stop the request and never insert a late result. */
     private void cancelProcessing(){
