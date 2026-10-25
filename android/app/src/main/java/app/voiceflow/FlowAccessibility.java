@@ -643,12 +643,11 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
         AccessibilityNodeInfo field=focusedField();fanPackage=field==null?(Build.VERSION.SDK_INT>=33&&editor!=null?String.valueOf(editor.activePackage()):""):String.valueOf(field.getPackageName());if(field!=null)field.recycle();
         Rect caret=caretLine();int keyboardHeight=imeHeight();hideThought();removeBubble();
         final ArcFan[] shown=new ArcFan[1];
-        Runnable open=()->{if(shown[0]!=null)shown[0].dismissNow();startActivity(new Intent(this,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP).putExtra("open_copied_dictation",true));};
         fan=shown[0]=new ArcFan(this,manager,new ArcFan.Actions(){
-            public boolean deleteWord(){return false;}public void openClipboard(){open.run();}
-            public void prepareClipboardPaste(){}public void cancelClipboardPaste(){}
-            public void pasteClipboard(String ignored){open.run();}public void openKeyboard(){}
-            public void closed(){if(fan==shown[0]){fan=null;handler.post(FlowAccessibility.this::updateBubble);}}
+            public boolean deleteWord(){return false;}public void openClipboard(){showClipTray();}
+            public void prepareClipboardPaste(){preparePillPaste();}public void cancelClipboardPaste(){clearPillPaste();}
+            public void pasteClipboard(String value){pasteAtCaret(value);if(shown[0]!=null)shown[0].dismissNow();}public void openKeyboard(){}
+            public void closed(){if(fan==shown[0]){hideClipTray();clearPillPaste();fan=null;handler.post(FlowAccessibility.this::updateBubble);}}
         });
         fan.openRecovered(x,y,text,caret,keyboardHeight);
     }
