@@ -620,7 +620,7 @@ final class Notes {
             next.prepareAsync();
         }catch(Exception error){stopPlayback();toast(activity,"Couldn't play that recording.");poke();}
     }
-    private static void applySpeed(){if(player==null||loading)return;try{player.setPlaybackParams(new android.media.PlaybackParams().setSpeed(playbackSpeed).setPitch(1f));if(paused)player.pause();}catch(RuntimeException unavailable){Activity visible=screen.get();if(visible!=null)toast(visible,"This audio does not support that speed.");}}
+    private static void applySpeed(){if(player==null||loading||paused)return;try{player.setPlaybackParams(new android.media.PlaybackParams().setSpeed(playbackSpeed).setPitch(1f));}catch(RuntimeException unavailable){Activity visible=screen.get();if(visible!=null)toast(visible,"This audio does not support that speed.");}}
     private static void stopPlayback(){playbackGeneration++;playing=-1;paused=false;loading=false;seeking=false;playSeek=null;queueSpans=new long[0];queue=new ArrayList<>();totalDuration=0;playedBefore=0;if(player!=null){try{player.release();}catch(Exception ignored){}player=null;}PlayWatch.hide();}
     static void stopFromNotice(){stopPlayback();poke();}
 

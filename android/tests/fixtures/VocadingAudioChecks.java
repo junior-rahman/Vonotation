@@ -25,8 +25,9 @@ final class VocadingAudioChecks {
             main(runner,()->method(Notes.class,"seekTo",long.class).invoke(null,3500L));
             await(()->!bool("loading"),"Seek did not prepare");require((int)value(Notes.class,"queueAt")==1&&bool("paused"),"Cross-segment seek lost pause state");
             main(runner,()->{Field speed=Notes.class.getDeclaredField("playbackSpeed");speed.setAccessible(true);speed.setFloat(null,1.5f);method(Notes.class,"applySpeed").invoke(null);});
-            MediaPlayer player=(MediaPlayer)value(Notes.class,"player");require(Math.abs(player.getPlaybackParams().getSpeed()-1.5f)<.01f,"Playback speed not applied");
+            MediaPlayer player=(MediaPlayer)value(Notes.class,"player");require(!player.isPlaying(),"Changing speed resumed paused playback");
             main(runner,()->play.invoke(null,activity,source,(Runnable)()->{}));require(!bool("paused"),"Playback resume failed");
+            await(()->Math.abs(player.getPlaybackParams().getSpeed()-1.5f)<.01f,"Playback speed not applied after resume");
             main(runner,Notes::stop);require((long)value(Notes.class,"playing")==-1,"Playback stop failed");
             // A pending asynchronous prepare cannot resurrect an explicitly stopped player.
             main(runner,()->{play.invoke(null,activity,source,(Runnable)()->{});Notes.stop();});SystemClock.sleep(350);

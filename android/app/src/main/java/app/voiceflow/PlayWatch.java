@@ -65,7 +65,8 @@ public final class PlayWatch extends Service {
             if(Build.VERSION.SDK_INT>=34)startForeground(ID,notice,ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
             else startForeground(ID,notice);
         }catch(RuntimeException error){
-            wanted=false;stopSelf(startId);Notes.stopFromNotice();return START_NOT_STICKY;
+            synchronized(PlayWatch.class){if(intent!=null&&intent.getBooleanExtra("show",false))pendingStarts=Math.max(0,pendingStarts-1);wanted=false;}
+            stopSelf(startId);Notes.stopFromNotice();return START_NOT_STICKY;
         }
         synchronized(PlayWatch.class){
             if(intent!=null && intent.getBooleanExtra("show",false))pendingStarts=Math.max(0,pendingStarts-1);
