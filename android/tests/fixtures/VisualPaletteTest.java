@@ -117,7 +117,7 @@ public final class VisualPaletteTest extends Instrumentation {
             }
             require(requests.get() == 0, "Unexpected external request attempted");
             result.putInt("executed_checks", checks);
-            int screenshotCount=pages.length+1+(AppProduct.isNotes()?0:4);
+            int screenshotCount=pages.length+1+(AppProduct.isNotes()?2:4);
             result.putInt("native_screenshots", screenshotCount);
             result.putString("product", requestedProduct);
             result.putString("appearance", appearance);

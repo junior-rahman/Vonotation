@@ -1,4 +1,5 @@
 import XCTest
+import AVFoundation
 @testable import VonoNotes
 
 @MainActor final class NotesProductTests: XCTestCase {
@@ -91,6 +92,37 @@ import XCTest
         XCTAssertFalse(FileManager.default.fileExists(atPath: source.path))
         let final = try await store.load()
         XCTAssertTrue(final.notes.isEmpty)
+    }
+
+    func testNativePauseExcludesPausedTimeAndKeepsOnePlayableFile() async throws {
+        let source = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".m4a")
+        let capture = AudioCapture()
+        defer { capture.cancel(); try? FileManager.default.removeItem(at: source) }
+        let permission = await capture.permission()
+        XCTAssertTrue(permission, "The disposable Simulator must grant microphone access before tests")
+        try capture.start(at: source)
+        var duration: TimeInterval = 0
+        capture.onDuration = { duration = $0 }
+        try await Task.sleep(nanoseconds: 700_000_000)
+        try capture.togglePause()
+        XCTAssertTrue(capture.isPaused)
+        let paused = duration
+        try await Task.sleep(nanoseconds: 600_000_000)
+        XCTAssertEqual(duration, paused, accuracy: 0.001)
+        try capture.togglePause()
+        XCTAssertFalse(capture.isPaused)
+        try await Task.sleep(nanoseconds: 700_000_000)
+        XCTAssertEqual(capture.finish(), source)
+        let playback = try AVAudioPlayer(contentsOf: source)
+        XCTAssertGreaterThan(playback.duration, 1)
+        XCTAssertLessThan(playback.duration, 1.9, "Paused silence must not be inserted into the saved recording")
+        let player = SourceAudioPlayer()
+        defer { player.stop() }
+        player.setSpeed(1.5); player.toggle(url: source)
+        XCTAssertTrue(player.playing)
+        player.toggle(url: source); XCTAssertFalse(player.playing)
+        player.seek(0.5); XCTAssertEqual(player.current, 0.5, accuracy: 0.01)
+        player.toggle(url: source); XCTAssertTrue(player.playing)
     }
 
 }

@@ -182,17 +182,12 @@ struct ActiveRecordingStrip: View {
                 Spacer(minLength: 8)
                 Text(clock(model.recordingDuration)).font(.caption.monospacedDigit())
             }
-            HStack(spacing: 10) {
-                Button("Cancel", role: .destructive) { confirmCancel = true }.buttonStyle(DaybookButtonStyle()).accessibilityIdentifier("record.cancel")
-                if model.product == .notes {
-                    Button { model.toggleRecordingPause() } label: { HStack { VocadingSymbol(model.isRecordingPaused ? "play" : "pause", size: 18); Text(model.isRecordingPaused ? "Resume" : "Pause") } }
-                        .buttonStyle(DaybookButtonStyle()).accessibilityIdentifier("record.pause")
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 10) { cancelButton; pauseButton; finishButton }.fixedSize(horizontal: true, vertical: false)
+                VStack(spacing: 6) {
+                    HStack(spacing: 10) { pauseButton; finishButton }
+                    cancelButton
                 }
-                Button {
-                    Daybook.feedback(model.settings.haptics, strong: true)
-                    Task { await model.finishRecording() }
-                } label: { Label("Finish", systemImage: "stop.fill").frame(maxWidth: .infinity) }
-                    .buttonStyle(DaybookButtonStyle(primary: true)).accessibilityIdentifier("record.finish")
             }
         }
         .foregroundStyle(Daybook.ink).padding(14).background(Daybook.soft, in: RoundedRectangle(cornerRadius: 17))
@@ -203,6 +198,20 @@ struct ActiveRecordingStrip: View {
             Button("Discard recording", role: .destructive) { model.cancelRecording() }
             Button("Keep recording", role: .cancel) { }
         } message: { Text(model.isRecordingPaused ? "The recording is paused. Choose Finish to keep it or Discard recording to remove it." : "Your recording continues until you choose Finish or Discard recording.") }
+    }
+    private var cancelButton: some View {
+        Button("Cancel", role: .destructive) { confirmCancel = true }.buttonStyle(DaybookButtonStyle()).accessibilityIdentifier("record.cancel")
+    }
+    @ViewBuilder private var pauseButton: some View {
+        if model.product == .notes {
+            Button { model.toggleRecordingPause() } label: { HStack(spacing: 6) { VocadingSymbol(model.isRecordingPaused ? "play" : "pause", size: 18); Text(model.isRecordingPaused ? "Resume" : "Pause") } }
+                .buttonStyle(DaybookButtonStyle()).accessibilityIdentifier("record.pause")
+        }
+    }
+    private var finishButton: some View {
+        Button { Daybook.feedback(model.settings.haptics, strong: true); Task { await model.finishRecording() } } label: {
+            HStack(spacing: 6) { if model.product == .notes { VocadingSymbol("stop", size: 18) } else { Image(systemName: "stop.fill") }; Text("Finish") }.frame(maxWidth: .infinity)
+        }.buttonStyle(DaybookButtonStyle(primary: true)).accessibilityIdentifier("record.finish")
     }
     private func clock(_ seconds: TimeInterval) -> String { String(format: "%d:%02d", Int(seconds) / 60, Int(seconds) % 60) }
 }

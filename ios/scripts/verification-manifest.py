@@ -11,7 +11,7 @@ import zipfile
 root = Path(__file__).resolve().parents[1]
 out = Path(sys.argv[1]).resolve()
 scheme = os.environ.get("VONO_SCHEME", "VonoTation")
-version, build = ("0.1.0", 1) if scheme == "VonoNotes" else ("0.1.18", 90)
+version, build = ("0.1.1", 2) if scheme == "VonoNotes" else ("0.1.18", 90)
 simulator_zip = out / f"{scheme}-iOS-Simulator.zip"
 required = [out / "iPhone.xcresult", out / "iPad.xcresult", out / "logs/device-sdk-build.log", out / "logs/simulator-archive.log", simulator_zip]
 for path in required:

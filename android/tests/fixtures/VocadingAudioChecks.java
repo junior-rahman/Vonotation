@@ -34,9 +34,11 @@ final class VocadingAudioChecks {
             Method record=method(Notes.class,"record",Activity.class,Runnable.class);
             main(runner,()->record.invoke(null,activity,(Runnable)()->{}));
             await(()->VoiceTake.noteRunning()&&VoiceTake.elapsed()>650,"Recorder did not capture");recording=(long)value(Notes.class,"liveId");final long id=recording;
+            screenshot(runner,"recording-active");
             main(runner,()->require(NoteRecordingService.togglePause(context,id,Notes::recordingChanged),"Pause command refused"));
             await(()->VoiceTake.notePaused()&&!VoiceTake.pauseChanging(),"Capture did not pause");long stopped=VoiceTake.elapsed();SystemClock.sleep(500);
             require(VoiceTake.elapsed()==stopped,"Paused time counted as recorded audio");
+            screenshot(runner,"recording-paused");
             require(new File(Notes.sourceDirectory(context),id+"-0.m4a").length()>0,"Pause did not preserve source segment");
             main(runner,()->require(NoteRecordingService.togglePause(context,id,Notes::recordingChanged),"Resume command refused"));
             await(()->!VoiceTake.notePaused()&&!VoiceTake.pauseChanging()&&VoiceTake.elapsed()>stopped+650,"Capture did not resume");
@@ -53,6 +55,7 @@ final class VocadingAudioChecks {
             first.delete();second.delete();Store.prefs(context).edit().putString("notes",before).commit();
         }
     }
+    private static void screenshot(Instrumentation runner,String name)throws Exception{main(runner,Notes::recordingChanged);runner.waitForIdleSync();method(VisualPaletteTest.class,"capture",String.class).invoke(runner,name);}
     private interface Action{void run()throws Exception;}
     private interface Condition{boolean get()throws Exception;}
     private static void main(Instrumentation runner,Action action)throws Exception{Throwable[] error={null};runner.runOnMainSync(()->{try{action.run();}catch(Throwable e){error[0]=e;}});if(error[0]!=null)throw new Exception("Main-thread audio check failed",error[0]);}

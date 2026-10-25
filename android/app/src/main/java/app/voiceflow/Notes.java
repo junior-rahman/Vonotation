@@ -498,8 +498,8 @@ final class Notes {
         pill.addView(liveMeter,new LinearLayout.LayoutParams(Ui.dp(activity,148),Ui.dp(activity,28)));
         LinearLayout controls=Ui.row(activity);controls.setGravity(android.view.Gravity.CENTER);
         Button pause=Daybook.button(activity,VoiceTake.notePaused()?"Resume":"Pause",false,v->{Daybook.feedback(v);if(NoteRecordingService.togglePause(activity,liveId,Notes::recordingChanged))v.setEnabled(false);});
-        pause.setEnabled(!VoiceTake.pauseChanging());controls.addView(pause,new LinearLayout.LayoutParams(Ui.dp(activity,86),Ui.dp(activity,48)));
-        Button finish=Daybook.button(activity,"Finish",false,v->{Daybook.feedback(v);record(activity,refresh);});controls.addView(finish,new LinearLayout.LayoutParams(Ui.dp(activity,86),Ui.dp(activity,48)));pill.addView(controls);
+        pause.setEnabled(!VoiceTake.pauseChanging());controls.addView(pause,new LinearLayout.LayoutParams(Ui.dp(activity,112),Ui.dp(activity,48)));
+        Button finish=Daybook.button(activity,"Finish",false,v->{Daybook.feedback(v);record(activity,refresh);});controls.addView(finish,new LinearLayout.LayoutParams(Ui.dp(activity,112),Ui.dp(activity,48)));pill.addView(controls);
         pill.setContentDescription(VoiceTake.notePaused()?"Recording paused":"Recording in progress");
         armTick();
         return pill;

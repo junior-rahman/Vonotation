@@ -147,14 +147,14 @@ struct NoteDetailView: View {
         } label: { Label("Copy", systemImage: "doc.on.doc") }
             .buttonStyle(DaybookButtonStyle()).disabled(shareText(note).isEmpty)
             .accessibilityIdentifier("note.detail.copy")
-        ShareLink(item: shareText(note)) { Label("Share", systemImage: "square.and.arrow.up") }
+        ShareLink(item: shareText(note)) { if model.product == .notes { HStack(spacing: 6) { VocadingSymbol("share", size: 18); Text("Share") } } else { Label("Share", systemImage: "square.and.arrow.up") } }
             .buttonStyle(DaybookButtonStyle()).disabled(shareText(note).isEmpty)
             .accessibilityIdentifier("note.detail.share")
         if !archived {
             if model.product == .notes {
                 Button { model.togglePin(note) } label: { Label(note.pinned == true ? "Unpin" : "Pin", systemImage: note.pinned == true ? "pin.slash" : "pin") }.buttonStyle(DaybookButtonStyle()).disabled(model.libraryBusy).accessibilityIdentifier("note.detail.pin")
             }
-            Button(role: .destructive) { deleting = true } label: { Label("Delete", systemImage: "trash") }
+            Button(role: .destructive) { deleting = true } label: { if model.product == .notes { HStack(spacing: 6) { VocadingSymbol("delete", size: 18); Text("Delete") } } else { Label("Delete", systemImage: "trash") } }
                 .buttonStyle(DaybookButtonStyle()).disabled(model.isBackingUp).accessibilityIdentifier("note.detail.delete")
         }
     }

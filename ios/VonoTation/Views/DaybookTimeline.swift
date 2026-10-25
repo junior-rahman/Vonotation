@@ -35,7 +35,7 @@ struct NotesTimeline: View {
             ForEach(pinned) { note in NavigationLink(value: note.id) { NoteTimelineRow(note: note) }.buttonStyle(.plain).accessibilityIdentifier("note.\(note.id.uuidString)") }
         }
         ForEach(days, id: \.self) { day in
-            DayTimelineSection(day: day, count: entries(on: day).count, first: day == days.first) {
+            DayTimelineSection(day: day, count: entries(on: day).count, first: day == days.first, searchExpanded: !query.isEmpty) {
                 VStack(spacing: 0) {
                     ForEach(entries(on: day)) { note in
                         NavigationLink(value: note.id) {
@@ -72,14 +72,15 @@ struct DayTimelineSection<Content: View>: View {
     let day: Date
     let count: Int
     let first: Bool
+    let searchExpanded: Bool
     private let content: Content
     @State private var expanded: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var model: AppModel
 
-    init(day: Date, count: Int, first: Bool, @ViewBuilder content: () -> Content) {
-        self.day = day; self.count = count; self.first = first; self.content = content()
-        _expanded = State(initialValue: Calendar.current.isDateInToday(day))
+    init(day: Date, count: Int, first: Bool, searchExpanded: Bool = false, @ViewBuilder content: () -> Content) {
+        self.day = day; self.count = count; self.first = first; self.searchExpanded = searchExpanded; self.content = content()
+        _expanded = State(initialValue: searchExpanded || Calendar.current.isDateInToday(day))
     }
 
     var body: some View {
@@ -108,6 +109,7 @@ struct DayTimelineSection<Content: View>: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("\(expanded ? "Hide" : "Show") \(DayLabels.title(day)), \(count) saved")
                 .accessibilityIdentifier("timeline.day.\(DayLabels.key(day))")
+                .onChange(of: searchExpanded) { _, searching in if searching { expanded = true } }
                 if expanded { content }
             }
             .padding(.bottom, 18)
