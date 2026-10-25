@@ -150,6 +150,9 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
     // The framework invokes this editor callback only on Android 13 and later.
     @android.annotation.TargetApi(33)
     @Override public android.accessibilityservice.InputMethod onCreateInputMethod(){editor=new AccessibilityEditor(this);return editor;}
+    private long inputActivation;
+    private final ClipboardFallback.Pending copiedDictation=new ClipboardFallback.Pending();
+    void inputActivated(){inputActivation++;}
     void editorChanged(){handler.removeCallbacks(refresh);handler.postDelayed(refresh,70);}
     boolean isRecording(){return busy;}
     /** Clipboard observers must never query accessibility nodes in the main-thread callback. */
@@ -191,6 +194,7 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
             AccessibilityNodeInfo source=event.getSource();
             if(source!=null){inputInteraction=source.isEditable() && source.isFocused();if(inputInteraction && type!=AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED && isHomePackage(source.getPackageName()))homeFinderWindow=source.getWindowId();if(type==AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED && inputInteraction){if(busy && target!=null && target.sensitiveTarget!=null && target.sensitiveTarget.current())target.sensitiveTarget.invalidate();if(FlowKeyboard.instance!=null)FlowKeyboard.instance.sensitiveInputChanged();}if(inputInteraction && isHomePackage(source.getPackageName()))inputInteraction=homeInputOpen(source);source.recycle();}
         }
+        if(inputInteraction&&(type==AccessibilityEvent.TYPE_VIEW_FOCUSED||type==AccessibilityEvent.TYPE_VIEW_CLICKED))inputActivated();
         if(type==AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED && (!inputInteraction || recording()))return;
         handler.removeCallbacks(refresh); handler.postDelayed(refresh,70);
     }
@@ -366,10 +370,6 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
             positionBubble();handler.removeCallbacks(tick);handler.post(tick);return;
         }
         if(locked || !interactive){removeBubble();hideThought();return;}
-        if(fan!=null&&fan.isOpen()&&fan.isRecovery()){
-            if(ownAppActive||CaptureActivity.visible||focusedInputIsSensitive()){fan.dismissNow();fan=null;}
-            else return;
-        }
         // The explicit clipboard read briefly owns focus. Preserve the original fan only for this bounded handoff.
         if(clipboardPeekGrace())return;
         if(clipOpening)hideClipTray();
@@ -377,14 +377,14 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
         boolean keyboardMode=keyboardMode();
         AccessibilityNodeInfo field=focusedField();boolean hasAccessibleField=field!=null;
         InputCapturePolicy.Evidence evidence=inputEvidence(hasAccessibleField);boolean hasField=evidence!=InputCapturePolicy.Evidence.NONE;
-        String currentKey=field==null?"":field.getWindowId()+":"+field.hashCode();
+        String currentKey=field!=null?field.getWindowId()+":"+field.hashCode():Build.VERSION.SDK_INT>=33&&editor!=null&&editor.hasActiveEditor()?editor.activeKey():FlowKeyboard.instance!=null?FlowKeyboard.instance.activeKey():"";
         if(!currentKey.equals(focusedKey) && (hasField || android.os.SystemClock.elapsedRealtime()>keyboardTransitionUntil)){focusedKey=currentKey;automaticTypingSuppressedKey="";}
         boolean launcherField=field!=null && isHomePackage(field.getPackageName());
         boolean launcher=launcherField || homeFinderWindow>=0 || launcherInFront();
         // Sign-in fields temporarily use ordinary typing; keep the manual choice.
         AccessibilityNodeInfo authField=focusedField(true);boolean temporaryTyping=authField!=null;
-        if(!temporaryTyping && FlowKeyboard.instance!=null && FlowKeyboard.instance.hasInputSession() && FlowKeyboard.requiresTyping(FlowKeyboard.instance.getCurrentInputEditorInfo()))temporaryTyping=true;
-        if(temporaryTyping && focusedKey.equals(automaticTypingSuppressedKey))temporaryTyping=false;
+        if(!temporaryTyping)temporaryTyping=metadataRequiresTyping();
+        if(temporaryTyping && !automaticTypingSuppressedKey.isEmpty() && focusedKey.equals(automaticTypingSuppressedKey))temporaryTyping=false;
         // Niagara closes its search when the keyboard is hidden and opens it when a field is clicked.
         // Leave that keyboard alone unless the user uses Niagara's own key.
         if(!launcher && !(busy && thoughtSession)){
@@ -393,6 +393,10 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
         }
         if(authField!=null)authField.recycle();
         if(field!=null)field.recycle();
+        if(fan!=null&&fan.isOpen()&&fan.isRecovery()){
+            if(evidence!=InputCapturePolicy.Evidence.INPUT||ownAppActive||CaptureActivity.visible||focusedInputIsSensitive()){fan.dismissNow();fan=null;}
+            else return;
+        }
         boolean active=recording();
         if(QuickThoughtPolicy.visible(Store.quickThoughts(this),interactive,locked,ownAppActive,CaptureActivity.visible,hasField,active || Dictation.isWorking() || VoiceTake.running() || VoiceTake.updateBusy() || Translate.going() || LineWire.running() || problem!=null)){
             removeBubble();if(thoughtOverlay==null)thoughtOverlay=new QuickThoughtOverlay(this,manager,this::updateBubble,this::thoughtCaptureAllowed,this::beginThought,this::openThoughts);thoughtOverlay.show();return;
@@ -407,7 +411,15 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
         if(timer!=null && !recording())timer.setText(keyboardMode?FlowKeyboard.instance.floatingStatus():"Ready");
         else if(timer!=null && working())timer.setText(currentStage());
         positionBubble();
+        if(copiedDictation.available()){
+            boolean blocked=recording()||Dictation.isWorking()||VoiceTake.running()||CaptureActivity.visible||ownAppActive||focusedInputIsSensitive()||(fan!=null&&fan.isOpen());
+            String copied=copiedDictation.take(inputActivation,evidence==InputCapturePolicy.Evidence.INPUT,blocked);
+            if(copied!=null)showCopiedDictation(copied);
+        }
         if(recording()){handler.removeCallbacks(tick);handler.post(tick);}
+    }
+    private boolean metadataRequiresTyping(){
+        return (Build.VERSION.SDK_INT>=33&&editor!=null&&editor.requiresTyping())||(FlowKeyboard.instance!=null&&FlowKeyboard.instance.hasInputSession()&&FlowKeyboard.requiresTyping(FlowKeyboard.instance.getCurrentInputEditorInfo()));
     }
     /** Recheck at the tap, since focus and lock state can change after drawing the dot. */
     private boolean thoughtCaptureAllowed(){
@@ -454,7 +466,8 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
         // The action follows what is currently shown, so a hidden keyboard opens.
         typingRequested=!keyboardIndicatorVisible();
         AccessibilityNodeInfo authField=focusedField(true);
-        if(authField!=null){automaticTypingSuppressedKey=typingRequested?"":focusedKey;authField.recycle();}
+        if(authField!=null||metadataRequiresTyping())automaticTypingSuppressedKey=typingRequested?"":focusedKey;
+        if(authField!=null)authField.recycle();
         keyboardIndicatorPendingUntil=android.os.SystemClock.elapsedRealtime()+1200;
         handler.removeCallbacks(settleKeyboardIndicator);handler.postDelayed(settleKeyboardIndicator,1200);
         Store.prefs(this).edit().putBoolean("typing_visible",typingRequested).apply();
@@ -621,25 +634,22 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
         handler.postDelayed(()->{if(typingRequested&&!typingKeyboardVisible()){showTypingKeyboard();updateBubble();}},700);
     }
     private ArcFan fan;
-    /** Completion calls this before releasing the recording UI; display runs after that release. */
-    void revealCopiedDictation(String text){
-        final float x=layout==null?Ui.dp(this,48):layout.x+layout.width-Ui.dp(this,4)-diameter()/2f;
-        final float y=layout==null?Ui.dp(this,200):layout.y+layout.height/2f;
-        handler.post(()->{
-            android.app.KeyguardManager lock=(android.app.KeyguardManager)getSystemService(KEYGUARD_SERVICE);
-            android.os.PowerManager power=(android.os.PowerManager)getSystemService(POWER_SERVICE);
-            if(manager==null||recording()||ownAppActive||CaptureActivity.visible||(lock!=null&&lock.isKeyguardLocked())||(power!=null&&!power.isInteractive())||focusedInputIsSensitive())return;
-            hideThought();removeBubble();
-            final ArcFan[] shown=new ArcFan[1];
-            Runnable open=()->{if(shown[0]!=null)shown[0].dismissNow();startActivity(new Intent(this,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP).putExtra("open_copied_dictation",true));};
-            fan=shown[0]=new ArcFan(this,manager,new ArcFan.Actions(){
-                public boolean deleteWord(){return false;}public void openClipboard(){open.run();}
-                public void prepareClipboardPaste(){}public void cancelClipboardPaste(){}
-                public void pasteClipboard(String ignored){open.run();}public void openKeyboard(){}
-                public void closed(){if(fan==shown[0]){fan=null;handler.post(FlowAccessibility.this::updateBubble);}}
-            });
-            fan.openRecovered(x,y,text);
+    /** Copy completion only queues the preview; a later input activation releases it. */
+    void queueCopiedDictation(String text){copiedDictation.offer(text,inputActivation);}
+    private void showCopiedDictation(String text){
+        if(layout==null)return;
+        final float x=layout.x+layout.width-Ui.dp(this,4)-diameter()/2f;
+        final float y=layout.y+layout.height/2f;
+        AccessibilityNodeInfo field=focusedField();fanPackage=field==null?(Build.VERSION.SDK_INT>=33&&editor!=null?String.valueOf(editor.activePackage()):""):String.valueOf(field.getPackageName());if(field!=null)field.recycle();
+        Rect caret=caretLine();int keyboardHeight=imeHeight();hideThought();removeBubble();
+        final ArcFan[] shown=new ArcFan[1];
+        fan=shown[0]=new ArcFan(this,manager,new ArcFan.Actions(){
+            public boolean deleteWord(){return false;}public void openClipboard(){showClipTray();}
+            public void prepareClipboardPaste(){preparePillPaste();}public void cancelClipboardPaste(){clearPillPaste();}
+            public void pasteClipboard(String value){pasteAtCaret(value);if(shown[0]!=null)shown[0].dismissNow();}public void openKeyboard(){}
+            public void closed(){if(fan==shown[0]){hideClipTray();clearPillPaste();fan=null;handler.post(FlowAccessibility.this::updateBubble);}}
         });
+        fan.openRecovered(x,y,text,caret,keyboardHeight);
     }
     private String fanPackage="";
     private boolean isImePackage(String pkg){String ime=android.provider.Settings.Secure.getString(getContentResolver(),android.provider.Settings.Secure.DEFAULT_INPUT_METHOD);return ime!=null&&ime.startsWith(pkg+"/")||pkg.equals("com.android.systemui");}

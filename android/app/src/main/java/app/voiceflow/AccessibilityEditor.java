@@ -12,7 +12,7 @@ final class AccessibilityEditor extends InputMethod {
     private long selectionRevision;
     private SensitiveTarget activeSensitiveTarget;
     AccessibilityEditor(FlowAccessibility service){super(service);this.service=service;}
-    @Override public void onStartInput(EditorInfo info,boolean restarting){super.onStartInput(info,restarting);generation++;selectionStart=info.initialSelStart;selectionEnd=info.initialSelEnd;service.editorChanged();}
+    @Override public void onStartInput(EditorInfo info,boolean restarting){super.onStartInput(info,restarting);generation++;selectionStart=info.initialSelStart;selectionEnd=info.initialSelEnd;service.inputActivated();service.editorChanged();}
     @Override public void onFinishInput(){generation++;super.onFinishInput();service.editorChanged();}
     @Override public void onUpdateSelection(int oldStart,int oldEnd,int newStart,int newEnd,int candidatesStart,int candidatesEnd){super.onUpdateSelection(oldStart,oldEnd,newStart,newEnd,candidatesStart,candidatesEnd);if(newStart!=selectionStart || newEnd!=selectionEnd)selectionRevision++;selectionStart=newStart;selectionEnd=newEnd;service.editorChanged();}
     private boolean connected(){EditorInfo info=getCurrentInputEditorInfo();return getCurrentInputStarted() && getCurrentInputConnection()!=null && info!=null && !service.getPackageName().equals(info.packageName);}
@@ -20,6 +20,8 @@ final class AccessibilityEditor extends InputMethod {
     boolean hasActiveEditor(){return connected();}
     CharSequence activePackage(){EditorInfo info=getCurrentInputEditorInfo();return connected()?info.packageName:null;}
     boolean sensitive(){return connected() && FlowKeyboard.isPassword(getCurrentInputEditorInfo());}
+    boolean requiresTyping(){return connected() && FlowKeyboard.requiresTyping(getCurrentInputEditorInfo());}
+    String activeKey(){EditorInfo info=getCurrentInputEditorInfo();return connected()?"native:"+info.packageName+":"+info.fieldId+":"+generation:"";}
     /** Cached framework metadata only: safe from clipboard callbacks, including our own Activity. */
     boolean clipboardSensitiveContext(){EditorInfo info=getCurrentInputEditorInfo();return getCurrentInputStarted() && info!=null && FlowKeyboard.isPasswordType(info.inputType);}
     boolean eligible(){EditorInfo info=getCurrentInputEditorInfo();return getCurrentInputStarted() && getCurrentInputConnection()!=null && info!=null && !service.getPackageName().equals(info.packageName) && !FlowKeyboard.isPassword(info) && !service.focusedInputIsSensitive();}
