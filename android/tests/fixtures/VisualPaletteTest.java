@@ -77,6 +77,7 @@ public final class VisualPaletteTest extends Instrumentation {
             checks+=RecordingTransferChecks.run(context,AppProduct.isNotes());
             verifyRecordingGrowth();
             if(AppProduct.isNotes())checks+=VocadingChecks.run(context);
+            if(!AppProduct.isNotes())verifyUndoStorage();
             seed(preferences);
             verifyProductManifest();
             setInTouchMode(true);
@@ -131,6 +132,40 @@ public final class VisualPaletteTest extends Instrumentation {
             catch (Throwable cleanup) { result.putString("failure", result.getString("failure", "") + "\nCleanup: " + cleanup); }
         }
         finish(result.containsKey("failure") ? Activity.RESULT_CANCELED : Activity.RESULT_OK, result);
+    }
+    private void verifyUndoStorage() throws Exception {
+        String history=Store.get(context,"history","[]"),notes=Store.get(context,"notes","[]"),undo=Store.get(context,"recent_deletions","[]"),td=Store.get(context,"thought_deletions","[]"),nd=Store.get(context,"note_deletions","[]");
+        String database="audit-undo-fixture.db";context.deleteDatabase(database);
+        java.lang.reflect.Method lookup=Notes.class.getDeclaredMethod("find",Context.class,long.class);lookup.setAccessible(true);
+        try {
+            require(Store.save(context,"Original raw text","Saved dictation",1),"Fixture dictation save failed");
+            long id=Store.history(context).getJSONObject(0).getLong("id");
+            require(DeletionUndo.delete(context,"dictation",id),"Dictation delete failed");
+            require(Store.history(context).length()==0,"Deleted dictation still visible");
+            require(DeletionUndo.restore(context,"dictation",id),"Dictation Undo failed");
+            require(Store.history(context).getJSONObject(0).getString("raw").equals("Original raw text"),"Undo lost raw text");
+            long thought=Notes.keepThought(context,System.currentTimeMillis(),"Complete thought source with more than enough words to retain.",0);
+            require(thought>0,"Thought fixture save failed");
+            JSONObject before=(JSONObject)lookup.invoke(null,context,thought);long revision=before.optLong("revision",1);
+            require(DeletionUndo.delete(context,"thought",thought)&&lookup.invoke(null,context,thought)==null,"Thought delete failed");
+            require(DeletionUndo.restore(context,"thought",thought),"Thought Undo failed");
+            require(((JSONObject)lookup.invoke(null,context,thought)).optLong("revision")>revision,"Undo accepted an old provider revision");
+            android.database.sqlite.SQLiteDatabase legacy=context.openOrCreateDatabase(database,0,null);
+            legacy.execSQL("CREATE TABLE copies (_id INTEGER PRIMARY KEY AUTOINCREMENT,copied_at INTEGER NOT NULL,expires_at INTEGER NOT NULL,preview TEXT NOT NULL,legacy INTEGER NOT NULL DEFAULT 0)");
+            legacy.execSQL("CREATE TABLE copy_chunks (copy_id INTEGER NOT NULL REFERENCES copies(_id) ON DELETE CASCADE,part INTEGER NOT NULL,text TEXT NOT NULL,PRIMARY KEY(copy_id,part))");
+            legacy.execSQL("CREATE TABLE clipboard_meta (name TEXT PRIMARY KEY,value TEXT NOT NULL)");
+            long now=System.currentTimeMillis();legacy.execSQL("INSERT INTO copies VALUES (1,?,?,?,0)",new Object[]{now,now+10000,"Old clipboard"});legacy.execSQL("INSERT INTO copy_chunks VALUES (1,0,'Old clipboard')");legacy.setVersion(1);legacy.close();
+            ClipboardArchive archive=new ClipboardArchive(context,database);
+            try {
+                require("Old clipboard".equals(archive.text(1,now)),"Schema upgrade lost existing clipboard text");
+                String full=new String(new char[100000]).replace('\0','x')+"COMPLETE END";
+                long copy=archive.remember(full,now);long expires=archive.page(0,0,1,now).get(0).expiresAt;
+                require(archive.remove(copy)&&archive.text(copy,now)==null,"Soft-deleted copy still visible");
+                require(archive.undo(copy,now)&&full.equals(archive.text(copy,now)),"Undo lost clipboard chunks");
+                require(archive.page(0,0,1,now).get(0).expiresAt==expires,"Undo extended clipboard expiry");
+                require(archive.remove(copy)&&!archive.undo(copy,expires),"Undo resurrected an expired copy");
+            }finally{archive.close();}
+        }finally{context.deleteDatabase(database);Store.prefs(context).edit().putString("history",history).putString("notes",notes).putString("recent_deletions",undo).putString("thought_deletions",td).putString("note_deletions",nd).commit();}
     }
     /** Actual Notes save/delete paths must preserve an imported library above the old 100-row cap. */
     private void verifyRecordingGrowth() throws Exception {

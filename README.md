@@ -4,7 +4,7 @@ Two independent apps share the native capture/transcription code and Daybook int
 
 | App | Features | Android preview |
 | --- | --- | --- |
-| **Voitation** | Dictation, Quick Thoughts, full-text 30-day Clipboard | [0.1.18-split-preview — download APK](https://github.com/junior-rahman/Vonotation/releases/tag/v0.1.18-split-preview) |
+| **Voitation** | Dictation, Quick Thoughts, full-text 30-day Clipboard | [0.1.19-preview — download APK](https://github.com/junior-rahman/Vonotation/releases/tag/v0.1.19-preview) |
 | **Vocading** | Voice Notes, Call Recordings | [0.1.0-preview — download APK](https://github.com/junior-rahman/Vonotation/releases/tag/vocading-v0.1.0-preview) |
 
 [iPhone/iPad Simulator previews and source](https://github.com/junior-rahman/Vonotation/releases/tag/split-ios-v0.1.18-preview) · [Implementation and data preservation](APP-SPLIT.md) · [Verification and remaining device checks](RELEASE-STATUS.md)
@@ -13,7 +13,7 @@ Two independent apps share the native capture/transcription code and Daybook int
 
 Download the APK from the appropriate GitHub release and confirm Android's installer. Both require Android 8 or later. Voitation also appears through **Settings → Update** in the existing main app.
 
-**Install Voitation over the existing app; do not uninstall it.** Its package remains `app.voiceflow`, version code increases from 89 to 90, and its signature matches the previous 0.1.17 release. Its original private key was recovered and verified before signing. Android update compatibility is established from package, version and certificate checks; installation on the owner's physical phone remains a separate check.
+**Install Voitation over the existing app; do not uninstall it.** Its package remains `app.voiceflow`, version code increases from 90 to 91, and its signature matches the previous 0.1.18 and 0.1.17 releases. Its original private key was recovered and verified before signing. Android update compatibility is established from package, version and certificate checks; installation on the owner's physical phone remains a separate check.
 
 Vocading installs separately as `app.vonotation.notes`, version code 1, with its own retained signing identity. Its provider credentials and private data are independent. It does not use Voitation's update feed.
 
@@ -27,12 +27,14 @@ The iOS deployment target is 17 or later; native CI tested iPhone SE (3rd genera
 
 ## Verified source and builds
 
-The release application source is [`7d2c26a`](https://github.com/junior-rahman/Vonotation/commit/7d2c26aa8ce8d72b370138f5b1632093754e29c9), merged through [PR #1](https://github.com/junior-rahman/Vonotation/pull/1). The tested CI merge tree and final source merge tree are identical. Later documentation/update-feed commits do not change app source.
+Voitation Android 0.1.19 source is [`9aa8cf9`](https://github.com/junior-rahman/Vonotation/commit/9aa8cf9c237c094facc99689f591500e95e41967), merged through [PR #2](https://github.com/junior-rahman/Vonotation/pull/2). The native-tested tree and merged source tree match. It includes durable retry recovery, search, 24-hour Undo, supplied Voitation artwork and Settings refinements. The cancelled no-input change is excluded.
 
 | Verification | Result |
 | --- | --- |
-| [Android native run](https://github.com/junior-rahman/Vonotation/actions/runs/40154153363) | Both builds, full lint without errors, all 40 Java suites, product isolation, retained-data/transfer fixtures and contrast checks passed; 22 native screenshots reviewed |
-| [iOS native run](https://github.com/junior-rahman/Vonotation/actions/runs/40154153323) | Voitation 46 tests per simulator and Vocading 6 per simulator: 104 passed, zero failed/skipped; both unsigned device-SDK builds and Simulator archives passed; 32 screenshots reviewed |
+| [Voitation 0.1.19 Android native run](https://github.com/junior-rahman/Vonotation/actions/runs/40161476962) | Both builds and lints, all 40 Java suites, recovery regressions, native Undo/clipboard migration, light/dark, 160% text and unfolded layouts passed |
+| [Previous split iOS native run](https://github.com/junior-rahman/Vonotation/actions/runs/40154153323) | Applies to the existing 0.1.18 Simulator release only; no new iOS testing or release for 0.1.19 |
+
+The iOS audit changes are preserved on `deferred/voitation-ios-audit`. Vocading has a separate improvement branch and release process. [0.1.19 release assets](https://github.com/junior-rahman/Vonotation/releases/tag/v0.1.19-preview) include the signed APK, source, signature, checksums and verification evidence.
 
 These are native-verified previews for owner device testing. Physical microphone quality, live providers/calls, cross-app keyboard behavior, real recording transfer/playback and Apple signing/distribution are not established by simulator checks. **Backup/Google OAuth remains paused.**
 

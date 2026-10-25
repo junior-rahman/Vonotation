@@ -33,23 +33,15 @@ final class FloatingIcon extends View {
             paint.setStrokeWidth(2f);canvas.drawRoundRect(10,15,38,33,3,3,paint);paint.setStyle(Paint.Style.FILL);
             for(float x:new float[]{14,19.5f,25,30.5f})canvas.drawRoundRect(x,19,x+2.6f,21.6f,.8f,.8f,paint);canvas.drawRoundRect(18,27,30,29.4f,1.2f,1.2f,paint);
         }else if(kind.equals("finish")){
-            canvas.drawLine(12,25,21,34,paint);canvas.drawLine(21,34,37,15,paint);
+            canvas.drawCircle(24,24,17,paint);canvas.drawLine(14,25,21,32,paint);canvas.drawLine(21,32,34,17,paint);
         }else if(kind.equals("cancel")){
-            paint.setStrokeWidth(2f);canvas.drawLine(16,16,32,32,paint);canvas.drawLine(32,16,16,32,paint);
+            paint.setStrokeWidth(2f);canvas.drawCircle(24,24,17,paint);canvas.drawLine(16,16,32,32,paint);canvas.drawLine(32,16,16,32,paint);
         }else if(kind.equals("working")){
             paint.setStyle(Paint.Style.FILL);for(int x=12;x<=36;x+=12)canvas.drawCircle(x,24,2.5f,paint);
         }
         canvas.restore();
     }
-    static final float[][] BARS={{12,22},{10,25},{15,28},{20,38},{16,30},{13,26},{10,21}};
-    private void drawWaveV(Canvas canvas,boolean keyboard){
-        paint.setStyle(Paint.Style.FILL);
-        for(int i=0;i<BARS.length;i++){float x=10+i*4.267f,top=BARS[i][0],bottom=BARS[i][1];
-            if(keyboard){top=10+(top-10)*22f/28f;bottom=10+(bottom-10)*22f/28f;}
-            canvas.drawRoundRect(x,top,x+2.4f,bottom,1.2f,1.2f,paint);}
-        if(keyboard)canvas.drawRoundRect(10,36,38,38,1,1,paint);
-        paint.setStyle(Paint.Style.STROKE);
-    }
+    private void drawWaveV(Canvas canvas,boolean keyboard){VoitationGlyph.wave(canvas,paint,keyboard);}
     /** A folded source note, deliberately separate from the established dictation waveform. */
     private void drawThought(Canvas canvas,boolean compact){
         paint.setStrokeWidth(compact?3f:2.3f);

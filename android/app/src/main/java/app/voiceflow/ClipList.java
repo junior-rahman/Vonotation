@@ -40,10 +40,10 @@ final class ClipList {
     static void observe(Runnable observer){synchronized(OBSERVERS){if(!OBSERVERS.contains(observer))OBSERVERS.add(observer);}}
     static void forget(Runnable observer){synchronized(OBSERVERS){OBSERVERS.remove(observer);}}
     /** Explicit normal dictation recovery is eligible; private recovery never calls this. */
-    static void remember(Context context,String text) {
-        if(!ClipboardText.storable(text))return;
-        try{ClipboardArchive saved=archive(context);if(saved==null)return;saved.remember(text,System.currentTimeMillis());changed(context);}
-        catch(RuntimeException unavailable){failed();}
+    static boolean remember(Context context,String text) {
+        if(!ClipboardText.storable(text))return false;
+        try{ClipboardArchive saved=archive(context);if(saved==null)return false;saved.remember(text,System.currentTimeMillis());changed(context);return true;}
+        catch(RuntimeException unavailable){failed();return false;}
     }
     /** A bounded tray view, not a retention limit. Full copies remain available in the Clipboard card. */
     static String[] recent(Context context) {

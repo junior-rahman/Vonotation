@@ -173,7 +173,7 @@ final class CloudApi {
             if(probability< -1.0 || (probability< -0.5 && (silence>0.8 || repetition>2.4)))
                 throw new IOException("The speech model was unsure of this recording. Try again with a clear, complete sentence.");
         }
-        String text=(String)reply.opt("text");return sensitive?text:text.trim();
+        String text=(String)reply.opt("text");if(text.trim().isEmpty())throw new IOException("The provider returned no speech. Your recording is kept for Retry.");return sensitive?text:text.trim();
     }
     String summarizeDay(HistoryDays.Day day,String model) throws Exception {
         if(Store.engine(context).equals("offline"))throw new IOException("Daily summaries are paused in on-device mode.");

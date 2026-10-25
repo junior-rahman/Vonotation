@@ -39,6 +39,9 @@ final class Dictation {
     // releases or samples a recorder, including during activity teardown.
     private MediaRecorder recorder;
     private File file;
+    private volatile File recoveryAudio;
+    private boolean sizeLimited;
+    static final long MAX_CAPTURE_BYTES=20_000_000L;
     private boolean recorderStarted,recorderFailed;
     private volatile CloudApi api;
     private volatile boolean closed;
@@ -74,7 +77,7 @@ final class Dictation {
                 if(closed)return;
                 file=File.createTempFile("voiceflow-",".m4a",context.getCacheDir());
                 recorder=Build.VERSION.SDK_INT>=31?new MediaRecorder(context):new MediaRecorder();
-                recorder.setAudioSource(MediaRecorder.AudioSource.MIC);recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);recorder.setAudioSamplingRate(44100);recorder.setAudioEncodingBitRate(64000);recorder.setOutputFile(file.getAbsolutePath());recorder.prepare();
+                recorder.setAudioSource(MediaRecorder.AudioSource.MIC);recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);recorder.setAudioSamplingRate(44100);recorder.setAudioEncodingBitRate(64000);recorder.setOutputFile(file.getAbsolutePath());recorder.setMaxFileSize(MAX_CAPTURE_BYTES);recorder.setOnInfoListener((source,what,extra)->{if(what==MediaRecorder.MEDIA_RECORDER_INFO_MAX_FILESIZE_REACHED)handler.post(()->{sizeLimited=true;stop();});});recorder.prepare();
                 if(closed)return;
                 recorder.start();recorderStarted=true;
                 if(closed)return;
@@ -153,20 +156,29 @@ final class Dictation {
                 try{
                     if(closed || recorderFailed)return;
                     if(recorder==null || !recorderStarted)throw new IllegalStateException();
-                    recorder.stop();releaseRecorder();finalized=true;
+                    try{recorder.stop();}catch(RuntimeException stoppedAtLimit){if(!sizeLimited||file==null||file.length()==0)throw stoppedAtLimit;}
+                    releaseRecorder();finalized=true;
                     if(closed)return;
+                    File source=file;
+                    if(!sensitive){
+                        File kept=RetryBuffer.keep(context,file,thought);
+                        if(kept==null)throw new java.io.IOException("Could not save a recovery copy. Free some storage and try again.");
+                        recoveryAudio=kept;RetryBuffer.pin(kept);file=null;source=kept;
+                    }
                     CloudApi request=new CloudApi(context);api=request;
                     if(closed){request.cancel();return;}
                     stage("Uploading audio…");
-                    result=request.transcribe(file,sensitive || Store.verbatim(context),()->stage("Transcribing…"));
+                    result=request.transcribe(source,sensitive || Store.verbatim(context),()->stage("Transcribing…"));
+                    if(!sensitive)RetryBuffer.saveTranscript(source,result);
                 }catch(Exception error){
                     message=finalized?safe(error):"The recording was too short. Speak for a moment, then try again.";
                     // A cloud failure must not lose the recording. Keep a temporary private
                     // copy for Retry; private credential audio is never retained.
                     if(finalized && !closed && !sensitive && file!=null){
                         File kept=RetryBuffer.keep(context,file,thought);
-                        if(kept!=null){file=null;message=message+" Your recording was kept for 24 hours. Open Voitation and tap Retry.";}
+                        if(kept!=null){file=null;recoveryAudio=kept;}
                     }
+                    if(recoveryAudio!=null)message+=" Your audio is kept for 24 hours. Open Voitation to retry or export it.";
                 }
                 finally{cleanRecorder();}
                 if(closed)return;
@@ -182,26 +194,33 @@ final class Dictation {
     private void stage(String value){handler.post(()->{if(!closed && active)listener.state(value);});}
     /**
      * Retries a buffered cloud recording through the normal completion pipeline. The
-     * buffered file is removed only after the provider returns a transcript.
+     * buffered file is removed only after the destination acknowledges a durable save.
      */
     void retry(File audio){
         if(active || closed || audio==null)return;
         synchronized(Store.class){if(active || closed)return;captureLease=CaptureBarrier.begin(context);if(captureLease==null){listener.error("Finish or cancel the app update before retrying.");return;}active=true;markWorking(true);}
+        recoveryAudio=audio;RetryBuffer.pin(audio);
         cloudRecording=true;stopping=true;processing=true;listener.state("Uploading audio…");
         executor.execute(()->{
             String result=null,message=null;
             try{
                 if(closed)return;
-                CloudApi request=new CloudApi(context);api=request;
-                result=request.transcribe(audio,Store.verbatim(context),()->stage("Transcribing…"));
-                if(!thought)RetryBuffer.discard(audio);
+                recoveryAudio=audio;
+                result=RetryBuffer.transcript(audio);
+                if(result.trim().isEmpty()){
+                    CloudApi request=new CloudApi(context);api=request;
+                    result=request.transcribe(audio,Store.verbatim(context),()->stage("Transcribing…"));
+                    RetryBuffer.saveTranscript(audio,result);
+                }
             }catch(Exception error){message=safe(error)+" The recording is still kept for another try.";}
             if(closed)return;
             if(message!=null){final String failure=message;handler.post(()->fail(failure));}
             else{final String raw=result;handler.post(()->{processing=false;complete(raw);});}
         });
     }
-    /** User cancel: nothing is delivered or inserted afterwards; recorded audio is discarded. */
+    /** A successful durable save or acknowledged insertion releases the recovery source. */
+    void acknowledgeSaved(){File source=recoveryAudio;recoveryAudio=null;if(source!=null){RetryBuffer.discard(source);RetryBuffer.unpin(source);}}
+    /** Cancel stops delivery; an already sealed recovery source remains available. */
     void cancel(){close();}
     private void complete(String raw) {
         if(closed || !active || processing) return;
@@ -221,11 +240,11 @@ final class Dictation {
             executor.execute(()->{ try { String text=request.transform(clean,cleanup,romanize); handler.post(()->deliver(raw,text,"")); } catch(Exception e) { handler.post(()->deliver(raw,clean,"Text processing failed. Your original words are safe. "+safe(e))); } });
         } else deliver(raw,clean,"");
     }
-    private void deliver(String raw,String text,String warning) { if(closed) return; active=false; processing=false;awake.close();handler.removeCallbacksAndMessages(null);try{listener.result(raw,text,warning);}finally{markWorking(false);} }
+    private void deliver(String raw,String text,String warning) { if(closed) return; active=false; processing=false;awake.close();handler.removeCallbacksAndMessages(null);try{listener.result(raw,text,sizeLimited?"Recording finished at its safe size limit. "+warning:warning);}finally{RetryBuffer.unpin(recoveryAudio);markWorking(false);} }
     private void fail(String message) {
         if(closed) return; active=false; processing=false;awake.close();handler.removeCallbacksAndMessages(null);
         if(recognizer!=null) { recognizer.destroy(); recognizer=null; }
-        try{listener.error(message==null ? "Dictation failed. Please try again." : message);}finally{markWorking(false);}
+        try{listener.error(message==null ? "Dictation failed. Please try again." : message);}finally{RetryBuffer.unpin(recoveryAudio);markWorking(false);}
     }
     private static String first(Bundle results) { ArrayList<String> list=results==null?null:results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION); return list==null || list.isEmpty() || list.get(0)==null ? "" : list.get(0); }
     private static String join(String a,String b) { return a.isEmpty()?b:(b.isEmpty()?a:a+" "+b); }
@@ -257,7 +276,7 @@ final class Dictation {
         listener=new Listener(){
             public void state(String value){}public void partial(String value){}public void level(float value){}
             public void result(String raw,String text,String warning){
-                if(thought)saveThought(app,raw,duration);else Recovery.keep(app,raw,text,duration,false,sensitive);
+                if(thought){if(saveThought(app,raw,duration))acknowledgeSaved();}else if(Recovery.keep(app,raw,text,duration,false,sensitive))acknowledgeSaved();
                 close();
             }
             public void error(String message){
@@ -269,14 +288,15 @@ final class Dictation {
         };
         stop();
     }
-    private static void saveThought(Context app,String raw,long duration){
+    private static boolean saveThought(Context app,String raw,long duration){
         long id=Notes.keepThought(app,System.currentTimeMillis(),raw,duration);
         if(id>0)Notes.formatThought(app,id);
         else android.widget.Toast.makeText(app,"Could not save your quick thought. Check available phone storage.",android.widget.Toast.LENGTH_LONG).show();
+        return id>0;
     }
     void close() { if(closed)return;closed=true;active=false;awake.close();handler.removeCallbacksAndMessages(null);if(recognizer!=null){recognizer.cancel();recognizer.destroy();recognizer=null;}CloudApi request=api;if(request!=null)request.cancel();
         // Never drop queued setup/stop/cleanup. A native call may still be in
         // progress; its worker must release the microphone and delete the file.
-        executor.execute(()->{cleanRecorder();markWorking(false);});executor.shutdown();
+        executor.execute(()->{cleanRecorder();RetryBuffer.unpin(recoveryAudio);markWorking(false);});executor.shutdown();
     }
 }
