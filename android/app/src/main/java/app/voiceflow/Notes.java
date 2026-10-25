@@ -426,7 +426,7 @@ final class Notes {
                         remember(app,captureId,files,language,true);
                         stamp(app,captureId,"wave",barsText(VoiceTake.bars()));
                         if(!captureComplete)stamp(app,captureId,"capture_error","Recording ended before every audio segment could be finalized.");
-                        toast(app,captureComplete?(online(app)?"Saved. Writing it up.":"Saved on this phone. I'll write it up when you're online."):"The recording was interrupted. Surviving source audio is saved.");
+                        toast(app,captureComplete?(Vault.get(app).isEmpty()?"Audio saved. Add a provider key to transcribe.":online(app)?"Saved. Writing it up.":"Saved on this phone. I'll write it up when you're online."):"The recording was interrupted. Surviving source audio is saved.");
                     } finally { NoteRecordingService.completed(app,captureId); }
                     writeUp(app,captureId);
                 }
@@ -499,7 +499,7 @@ final class Notes {
         LinearLayout controls=Ui.row(activity);controls.setGravity(android.view.Gravity.CENTER);
         Button pause=Daybook.button(activity,VoiceTake.notePaused()?"Resume":"Pause",false,v->{Daybook.feedback(v);if(NoteRecordingService.togglePause(activity,liveId,Notes::recordingChanged))v.setEnabled(false);});
         pause.setEnabled(!VoiceTake.pauseChanging());controls.addView(pause,new LinearLayout.LayoutParams(Ui.dp(activity,112),Ui.dp(activity,48)));
-        Button finish=Daybook.button(activity,"Finish",false,v->{Daybook.feedback(v);record(activity,refresh);});controls.addView(finish,new LinearLayout.LayoutParams(Ui.dp(activity,112),Ui.dp(activity,48)));pill.addView(controls);
+        Button finish=Daybook.button(activity,"Finish",false,v->{Daybook.feedback(v);record(activity,refresh);});controls.addView(finish,new LinearLayout.LayoutParams(Ui.dp(activity,112),Ui.dp(activity,48)));pill.addView(controls,new LinearLayout.LayoutParams(-2,-2));
         pill.setContentDescription(VoiceTake.notePaused()?"Recording paused":"Recording in progress");
         armTick();
         return pill;

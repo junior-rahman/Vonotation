@@ -53,10 +53,11 @@ final class VocadingAudioChecks {
             main(runner,()->{Notes.stop();if(VoiceTake.noteRunning())Notes.finishRecording();});
             await(()->!VoiceTake.updateBusy(),"Fixture capture cleanup failed");
             if(recording>0){File[] parts=Notes.sourceDirectory(context).listFiles();if(parts!=null)for(File file:parts)if(file.getName().startsWith(recording+"-"))file.delete();}
-            first.delete();second.delete();Store.prefs(context).edit().putString("notes",before).commit();
+            first.delete();second.delete();Store.prefs(context).edit().putString("notes",before).commit();SystemClock.sleep(3700);
         }
     }
-    private static void screenshot(Instrumentation runner,String name)throws Exception{main(runner,Notes::recordingChanged);runner.waitForIdleSync();method(VisualPaletteTest.class,"capture",String.class).invoke(runner,name);}
+    private static void screenshot(Instrumentation runner,String name)throws Exception{main(runner,Notes::recordingChanged);runner.waitForIdleSync();method(VisualPaletteTest.class,"capture",String.class).invoke(runner,name);
+        main(runner,()->{android.view.View finish=(android.view.View)method(VisualPaletteTest.class,"findText",String.class).invoke(runner,"Finish");android.graphics.Rect visible=new android.graphics.Rect();require(finish!=null&&finish.getGlobalVisibleRect(visible)&&visible.width()==finish.getWidth(),"Finish control is clipped");});}
     private interface Action{void run()throws Exception;}
     private interface Condition{boolean get()throws Exception;}
     private static void main(Instrumentation runner,Action action)throws Exception{Throwable[] error={null};runner.runOnMainSync(()->{try{action.run();}catch(Throwable e){error[0]=e;}});if(error[0]!=null)throw new Exception("Main-thread audio check failed",error[0]);}
