@@ -1,9 +1,9 @@
 {
-  "versionCode": 92,
-  "versionName": "0.1.20-preview",
-  "apk": "https://github.com/junior-rahman/Vonotation/releases/download/v0.1.20-preview/Voitation-0.1.20-preview.apk",
-  "sha256": "a726fda185909d26ed105bde1b13030a21b2e8e9749611ed4c5930be1bec560e",
+  "versionCode": 93,
+  "versionName": "0.1.21-preview",
+  "apk": "https://github.com/junior-rahman/Vonotation/releases/download/v0.1.21-preview/Voitation-0.1.21-preview.apk",
+  "sha256": "fdadd68a74e49ccb3819fc40f949e8f7f59f3ea82be8760743a4b1e6d0006423",
   "size": 6275081,
   "package": "app.voiceflow",
-  "notes": "Polished Sand & Cocoa design, approved V-wave and Thought Loop artwork, clearer Settings, search, recovery and Restore cards. Clipboard pops out of the floating fan only when dictation loses its input and successfully copies the transcript. Regular copies do not open it. Android builds, lint, 43 Java suites and native light/dark, large-text and unfolded checks passed. Original signing identity retained; install over the existing app. Physical cross-app input-loss behavior remains for phone testing. iOS and backup/OAuth remain paused."
+  "notes": "Clipboard preview now waits until an input becomes active again after a transcription loses its original field. PIN, number, decimal and phone-number fields request the typing keyboard. Retains Sand & Cocoa and the approved artwork. Android builds, lint, 43 Java suites and native input, clipboard, privacy, recovery and layout checks passed. Original signing identity retained; install over the existing app. Physical cross-app keyboard/focus behavior remains for phone testing. iOS and backup/OAuth remain paused."
 }

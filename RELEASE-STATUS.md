@@ -1,6 +1,20 @@
-# Current Android release: Voitation 0.1.20-preview
+# Current Android release: Voitation 0.1.21-preview
 
-[Published APK and release notes](https://github.com/junior-rahman/Vonotation/releases/tag/v0.1.20-preview). Settings → Update selects version 92. Android 8.0+, package `app.voiceflow`; install over the existing app without uninstalling.
+[Published APK and release notes](https://github.com/junior-rahman/Vonotation/releases/tag/v0.1.21-preview). Settings → Update selects version 93. Android 8.0+, package `app.voiceflow`; install over the existing app without uninstalling.
+
+- A transcription copied after losing its input waits for a usable input to become active again before showing the clipboard fan. A tap uses guarded paste; ordinary copies do not trigger the popup, and private inputs suppress it.
+- PIN, number, decimal, signed-number and phone-number fields request the typing keyboard. Password/PIN privacy protections remain enabled. Retains Sand & Cocoa and the approved artwork.
+- Release source `e6b12cd4731bcf37c2c00f0b66cb651948cbe351`, tree `bdce264385678d7fa526ff481379c69f6aaea2b6`. The published source is available in the release and [PR #6](https://github.com/junior-rahman/Vonotation/pull/6); this feed update does not merge that PR.
+- [Native verification](https://github.com/junior-rahman/Vonotation/actions/runs/40169522754) passed both Android builds/lints, 43 Java suites, recovery, input-type routing, clipboard/privacy/Restore and light/dark, 160% text and unfolded layout checks. [PR verification retry](https://github.com/junior-rahman/Vonotation/actions/runs/40169525487) also passed.
+- APK: 6,275,081 bytes; SHA-256 `fdadd68a74e49ccb3819fc40f949e8f7f59f3ea82be8760743a4b1e6d0006423`. Original certificate SHA-256 `5dca2219fbe89fb885b24c904fd4c57d3b58930922d21d455fc10d7a35f7568a`. The release manifest records a matching native-tested application payload.
+- [Publication run](https://github.com/junior-rahman/Vonotation/actions/runs/40170101510) succeeded. Before advancing the feed, the public APK was downloaded again and checked against the release manifest and GitHub asset digest, with ZIP integrity verified.
+- Physical-phone installation and real cross-app keyboard/focus behavior remain unverified. No new iOS testing or release; backup/OAuth remains paused.
+
+---
+
+# Historical Android release: Voitation 0.1.20-preview
+
+[Published APK and release notes](https://github.com/junior-rahman/Vonotation/releases/tag/v0.1.20-preview). The update feed selected version 92 at that release. Android 8.0+, package `app.voiceflow`; install over the existing app without uninstalling.
 
 - Polished Sand & Cocoa Settings, search, recovery and Recently deleted. Approved V-wave and selected Thought Loop across native controls, states and notifications.
 - Clipboard pops out of the floating fan only after dictation loses its input and successfully copies the transcript. Ordinary copies, successful insertion, private dictation and failed copies do not trigger it. Tapping opens saved Clipboard; the fan never automatically pastes.
