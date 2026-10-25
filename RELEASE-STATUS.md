@@ -1,4 +1,18 @@
-# Split preview release status
+# Current Android release: Voitation 0.1.19-preview
+
+Published on GitHub: [download and release notes](https://github.com/junior-rahman/Vonotation/releases/tag/v0.1.19-preview). The main update feed now selects version 91. Android 8.0+, package `app.voiceflow`; install over the existing app without uninstalling. The original certificate matches 0.1.18 and 0.1.17.
+
+- Source: `9aa8cf9c237c094facc99689f591500e95e41967`; [PR #2](https://github.com/junior-rahman/Vonotation/pull/2) merged as `f26021590449f7e0f7d4a5cc0d7276f5f32228d4`. Both share tree `7f54c0f7435ee4ac94a44fb1a0e442434920b144`.
+- [Native Android run 40161476962](https://github.com/junior-rahman/Vonotation/actions/runs/40161476962) passed both builds/lints, all 40 Java suites, recovery regressions, native Undo and clipboard migration, light/dark screens, 160% text and unfolded layouts. A parallel PR run was blocked by a Quickstep launcher ANR; the successful run tested the identical tree.
+- Recovery audio survives empty responses and interrupted delivery until text is saved. Unexpired retries are no longer silently evicted; each has Retry, Export and Discard controls. Includes search, a 24-hour Undo journal, upload-size protection, supplied branding and Settings refinements.
+- Signed APK: 6,245,065 bytes; SHA-256 `ab92034fdcce27c9f62a98c083ff9ae534705cf6ef15f9e4cc6232b05f3b8267`. Certificate SHA-256 `5dca2219fbe89fb885b24c904fd4c57d3b58930922d21d455fc10d7a35f7568a`. Every application ZIP entry matches the native-tested unsigned build; only signing metadata is added.
+- [Publication run 40161943534](https://github.com/junior-rahman/Vonotation/actions/runs/40161943534) succeeded and verified every uploaded asset digest.
+- No new iOS testing or release. iOS audit source is preserved on `deferred/voitation-ios-audit`; Vocading improvements remain separate. The cancelled no-input change is excluded. Backup/OAuth remains paused.
+- Physical-phone installation, real microphone/provider behavior, folding during live capture and third-party text insertion remain unverified.
+
+---
+
+# Historical split preview release status (0.1.18)
 
 Completed October 25, 2026 UTC. Voitation's approved Sand & Cocoa pass and the Voitation/Vocading split are implemented, native-verified and delivered as previews through GitHub. Backup/OAuth remains paused.
 

@@ -1,9 +1,9 @@
 {
-  "versionCode": 90,
-  "versionName": "0.1.18-split-preview",
-  "apk": "https://github.com/junior-rahman/Vonotation/releases/download/v0.1.18-split-preview/Voitation-0.1.18-preview.apk",
-  "sha256": "1facc7cf489b1531817683d753256d4ca0f5f9bee96c31a395f935b701459f9c",
-  "size": 6240969,
+  "versionCode": 91,
+  "versionName": "0.1.19-preview",
+  "apk": "https://github.com/junior-rahman/Vonotation/releases/download/v0.1.19-preview/Voitation-0.1.19-preview.apk",
+  "sha256": "ab92034fdcce27c9f62a98c083ff9ae534705cf6ef15f9e4cc6232b05f3b8267",
+  "size": 6245065,
   "package": "app.voiceflow",
-  "notes": "Voitation now keeps Dictation, Quick Thoughts and the 30-day Clipboard with the approved Sand & Cocoa colors. Voice Notes and Call Recordings are in the separate Vocading app. Previous recordings remain available under Settings, with explicit local export/import to copy them. Signed with the existing main-app identity; install as an update without uninstalling. Native Android/iOS checks passed; physical-phone testing remains pending. Backup/Google OAuth stays paused."
+  "notes": "Fixes recording recovery so audio stays until text is safely saved. Adds individual retry/export/discard controls, full-text search, 24-hour Undo, supplied Voitation artwork and clearer Settings. Long cloud dictations finish below the upload limit. Android builds, lint, recovery/storage tests and light/dark, large-text and unfolded layouts passed. Original signing identity retained: install over the existing app without uninstalling. Physical microphone, live providers and cross-app insertion still need phone testing. iOS and backup/OAuth remain paused."
 }
