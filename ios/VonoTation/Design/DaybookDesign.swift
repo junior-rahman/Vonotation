@@ -1,21 +1,26 @@
 import SwiftUI
 import UIKit
 
-/// The same quiet paper and botanical palette used by the Android Daybook.
+/// Sand & Cocoa for Voitation; Vocading retains the original Daybook palette.
 enum Daybook {
-    static let paper = adaptive(0xf3f1ea, 0x121c19)
-    static let surface = adaptive(0xfffcf6, 0x1b2923)
-    static let ink = adaptive(0x25352f, 0xeef3e9)
-    static let muted = adaptive(0x596960, 0xb2c2b5)
-    static let accent = adaptive(0x3f6b5f, 0xaccebb)
-    static let soft = adaptive(0xe3e9df, 0x2a3d32)
-    static let line = adaptive(0xcbd5ca, 0x3f5748)
-    static let fieldOutline = adaptive(0x7b8e80, 0x6e8c77)
+    private static func palette(_ light: UInt32,_ dark: UInt32,_ legacyLight: UInt32,_ legacyDark: UInt32) -> Color {
+        AppProduct.current == .notes ? adaptive(legacyLight, legacyDark) : adaptive(light, dark)
+    }
+    static let paper = palette(0xeae3d9, 0x211b17, 0xf3f1ea, 0x121c19)
+    static let surface = palette(0xfff9ef, 0x30261f, 0xfffcf6, 0x1b2923)
+    static let ink = palette(0x372d25, 0xfbf3e8, 0x25352f, 0xeef3e9)
+    static let muted = palette(0x6b5b4a, 0xd1bea7, 0x596960, 0xb2c2b5)
+    static let accent = palette(0x6b4f3c, 0xe5c8a1, 0x3f6b5f, 0xaccebb)
+    static let soft = palette(0xe9ded0, 0x45372b, 0xe3e9df, 0x2a3d32)
+    static let line = palette(0x9a8468, 0xad9170, 0xcbd5ca, 0x3f5748)
+    static let fieldOutline = palette(0x9a8468, 0xad9170, 0x7b8e80, 0x6e8c77)
+    static let action = palette(0x6b4f3c, 0xe5c8a1, 0x28594e, 0xaccebb)
+    static let actionInk = palette(0xffffff, 0x211b17, 0xffffff, 0x15271e)
+    static let brand = palette(0x6b4f3c, 0xe5c8a1, 0xa46144, 0xd9ab8d)
     static let coral = adaptive(0xae403d, 0xffb4aa)
-    static let action = adaptive(0x28594e, 0xaccebb)
-    static let actionInk = adaptive(0xffffff, 0x15271e)
-    static let brand = adaptive(0xa46144, 0xd9ab8d)
-    static let shadow = adaptive(0x25352f, 0x07110c)
+    static let shadow = palette(0x372d25, 0x211b17, 0x25352f, 0x07110c)
+    static let underlayNear = AppProduct.current == .notes ? surface.opacity(0.75) : adaptive(0xe5d4bb, 0x4a392c)
+    static let underlayMiddle = AppProduct.current == .notes ? soft : adaptive(0xc7b291, 0x634d39)
 
     private static func adaptive(_ light: UInt32, _ dark: UInt32) -> Color {
         Color(uiColor: UIColor { traits in

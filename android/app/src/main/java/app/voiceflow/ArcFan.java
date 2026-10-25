@@ -92,7 +92,7 @@ final class ArcFan {
         String[] kinds={"cancel","delete","clipboard","keyboard"},names={"Cancel","Delete word","Clipboard","Open keyboard"},short_={"Cancel","Delete","Clipboard","Keyboard"};
         ring=new Ring(ctx);root.addView(ring,new FrameLayout.LayoutParams(Math.round(60*density),Math.round(60*density)));
         for(int i=0;i<4;i++){
-            FloatingIcon.Control tile=new FloatingIcon.Control(ctx,kinds[i],Color.WHITE,Math.round(T));
+            FloatingIcon.Control tile=new FloatingIcon.Control(ctx,kinds[i],i==0?Color.WHITE:Daybook.actionInk(ctx),Math.round(T));
             android.graphics.drawable.GradientDrawable g=i==0?FlowAccessibility.coralFace(ctx,12*density,0xFF8F3424,0xFF7F2D1F):FlowAccessibility.solidFace(ctx,12*density);if(i==0)g.setStroke(Math.max(1,Math.round(density)),0x40FFFFFF);
             tile.setBackground(g);tile.setElevation(4*density);if(android.os.Build.VERSION.SDK_INT>=28){tile.setOutlineAmbientShadowColor(0xFF000000);tile.setOutlineSpotShadowColor(0xFF000000);}
             tile.setId(View.generateViewId());tile.setContentDescription(names[i]);tile.setFocusable(false);tile.setFocusableInTouchMode(false);tile.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
@@ -117,7 +117,7 @@ final class ArcFan {
             for(int j=0;j<=12;j++){float a=start+(angles[k]-start)*j/12f;float[] p=pos(cx,cy,a,R*1.09f);l=Math.min(l,p[0]-pad);t=Math.min(t,p[1]-pad);r=Math.max(r,p[0]+pad);b=Math.max(b,p[1]+pad);}}
         clipPillBounds=choosePill(W,H-keyboardHeight,caret);
         if(clipPillBounds!=null){l=Math.min(l,clipPillBounds.left);t=Math.min(t,clipPillBounds.top);r=Math.max(r,clipPillBounds.right);b=Math.max(b,clipPillBounds.bottom);}
-        clipPill=Ui.text(ctx,"",12,Color.WHITE,false);clipPill.setSingleLine(true);clipPill.setEllipsize(android.text.TextUtils.TruncateAt.END);clipPill.setGravity(Gravity.CENTER_VERTICAL);
+        clipPill=Ui.text(ctx,"",12,Daybook.actionInk(ctx),false);clipPill.setSingleLine(true);clipPill.setEllipsize(android.text.TextUtils.TruncateAt.END);clipPill.setGravity(Gravity.CENTER_VERTICAL);
         clipPill.setPadding(Math.round(12*density),0,Math.round(12*density),0);clipPill.setBackground(FlowAccessibility.solidFace(ctx,12*density));clipPill.setElevation(4*density);clipPill.setFocusable(false);
         clipPill.setOnClickListener(v->{if(!touchable)return;String exact=pressedClipboardValue!=null?pressedClipboardValue:clipboardValue;if(exact==null)return;Haptics.fire(ctx,Haptics.RELEASE);actions.pasteClipboard(exact);mark();});
         clipPill.setOnTouchListener((v,event)->{
@@ -229,7 +229,7 @@ final class ArcFan {
             if(dur>0){p=Math.min(1,(SystemClock.uptimeMillis()-t0)/(float)dur);if(p<1)postInvalidateOnAnimation();}
             if(p<=0)return;float s=getWidth()/60f,in=1.5f*s;RectF r=new RectF(in,in,getWidth()-in,getHeight()-in);
             pt.setStyle(Paint.Style.STROKE);pt.setStrokeWidth(3*s);pt.setColor(0xFFD8C8B6);c.drawRoundRect(r,16*s,16*s,pt);
-            pt.setColor(0xFFB3422F);pt.setStrokeCap(Paint.Cap.ROUND);android.graphics.Path path=new android.graphics.Path();path.addRoundRect(r,16*s,16*s,android.graphics.Path.Direction.CW);
+            pt.setColor(Daybook.action(getContext()));pt.setStrokeCap(Paint.Cap.ROUND);android.graphics.Path path=new android.graphics.Path();path.addRoundRect(r,16*s,16*s,android.graphics.Path.Direction.CW);
             android.graphics.PathMeasure m=new android.graphics.PathMeasure(path,false);android.graphics.Path seg=new android.graphics.Path();m.getSegment(0,m.getLength()*p,seg,true);c.drawPath(seg,pt);
         }
     }

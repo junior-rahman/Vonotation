@@ -23,32 +23,43 @@ import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
-/** Native Sage + Paper Daybook tokens; floating glass controls keep their own theme. */
+/** Shared native roles: Sand & Cocoa for Voitation, original Daybook for Vocading. */
 final class Daybook {
     private static boolean dark(Context c) { return (c.getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES; }
     private static int color(Context c, int light, int night) { return dark(c) ? night : light; }
-    static int paper(Context c) { return color(c,0xfff3f1ea,0xff121c19); }
-    static int surface(Context c) { return color(c,0xfffffcf6,0xff1b2923); }
-    static int ink(Context c) { return color(c,0xff25352f,0xffeef3e9); }
-    static int muted(Context c) { return color(c,0xff596960,0xffb2c2b5); }
-    static int accent(Context c) { return color(c,0xff3f6b5f,0xffaccebb); }
-    static int soft(Context c) { return color(c,0xffe3e9df,0xff2a3d32); }
-    static int line(Context c) { return color(c,0xffcbd5ca,0xff3f5748); }
-    static int controlOutline(Context c) { return color(c,0xff7b8e80,0xff6e8c77); }
+    private static int palette(Context c,int light,int night,int legacyLight,int legacyNight) { return color(c,AppProduct.isNotes()?legacyLight:light,AppProduct.isNotes()?legacyNight:night); }
+    static int paper(Context c) { return palette(c,0xffeae3d9,0xff211b17,0xfff3f1ea,0xff121c19); }
+    static int surface(Context c) { return palette(c,0xfffff9ef,0xff30261f,0xfffffcf6,0xff1b2923); }
+    static int ink(Context c) { return palette(c,0xff372d25,0xfffbf3e8,0xff25352f,0xffeef3e9); }
+    static int muted(Context c) { return palette(c,0xff6b5b4a,0xffd1bea7,0xff596960,0xffb2c2b5); }
+    static int accent(Context c) { return palette(c,0xff6b4f3c,0xffe5c8a1,0xff3f6b5f,0xffaccebb); }
+    static int soft(Context c) { return palette(c,0xffe9ded0,0xff45372b,0xffe3e9df,0xff2a3d32); }
+    static int line(Context c) { return palette(c,0xff9a8468,0xffad9170,0xffcbd5ca,0xff3f5748); }
+    static int controlOutline(Context c) { return palette(c,0xff9a8468,0xffad9170,0xff7b8e80,0xff6e8c77); }
+    static int action(Context c) { return palette(c,0xff6b4f3c,0xffe5c8a1,0xff28594e,0xffaccebb); }
+    static int actionInk(Context c) { return palette(c,0xffffffff,0xff211b17,0xffffffff,0xff15271e); }
+    static int brand(Context c) { return palette(c,0xff6b4f3c,0xffe5c8a1,0xffa46144,0xffd9ab8d); }
     static int coral(Context c) { return color(c,0xffae403d,0xffffb4aa); }
-    static int action(Context c) { return color(c,0xff28594e,0xffaccebb); }
-    static int actionInk(Context c) { return color(c,0xffffffff,0xff15271e); }
-    static int brand(Context c) { return color(c,0xffa46144,0xffd9ab8d); }
+    static int cardSurface(Context c,int depth) {
+        if(AppProduct.isNotes() || depth<=0)return surface(c);
+        if(depth==1)return color(c,0xffe5d4bb,0xff4a392c);
+        if(depth==2)return color(c,0xffc7b291,0xff634d39);
+        return color(c,0xffa58e6c,0xff81654d);
+    }
+    static int mix(int first,int second,float fraction) {
+        return Color.rgb(Math.round(Color.red(first)*(1-fraction)+Color.red(second)*fraction),Math.round(Color.green(first)*(1-fraction)+Color.green(second)*fraction),Math.round(Color.blue(first)*(1-fraction)+Color.blue(second)*fraction));
+    }
+    static int opacity(int value,int alpha) { return (value & 0x00ffffff) | (alpha<<24); }
     static TextView text(Context c,String value,float size,int color,boolean bold) {
         TextView text=Ui.text(c,value,size,color,bold); text.setLineSpacing(Ui.dp(c,2),1); return text;
     }
     static GradientDrawable shape(Context c,int color,float radius) {
         GradientDrawable shape=Ui.shape(color,radius,c);
-        if(Color.alpha(color)!=0) shape.setStroke(Ui.dp(c,0.5f),color(c,0x70cbd5ca,0x803f5748));
+        if(Color.alpha(color)!=0) shape.setStroke(Ui.dp(c,0.5f),AppProduct.isNotes()?color(c,0x70cbd5ca,0x803f5748):line(c));
         return shape;
     }
     static Drawable ripple(Context c,int color,float radius) {
-        return new RippleDrawable(ColorStateList.valueOf(color(c,0x193f6b5f,0x26accebb)),shape(c,color,radius),Ui.shape(Color.WHITE,radius,c));
+        return new RippleDrawable(ColorStateList.valueOf(opacity(accent(c),dark(c)?0x26:0x19)),shape(c,color,radius),Ui.shape(Color.WHITE,radius,c));
     }
     static LinearLayout card(Context c) {
         LinearLayout card=Ui.column(c);card.setPadding(Ui.dp(c,13),0,Ui.dp(c,13),0);card.setBackground(shape(c,surface(c),17));return card;
@@ -86,7 +97,7 @@ final class Daybook {
         private final Paint base=new Paint(),fiber=new Paint();
         Backdrop(Context c) {
             base.setColor(paper(c));int w=Math.max(4,Ui.dp(c,4)),h=Math.max(3,Ui.dp(c,3));
-            Bitmap tile=Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888);Canvas canvas=new Canvas(tile);Paint ink=new Paint();ink.setColor(color(c,0x033f6b5f,0x03accebb)); // Subtle linen, below 1.2% opacity.
+            Bitmap tile=Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888);Canvas canvas=new Canvas(tile);Paint ink=new Paint();ink.setColor(opacity(accent(c),0x03)); // Subtle linen, below 1.2% opacity.
             canvas.drawRect(0,Math.max(0,h-Ui.dp(c,1)),w,h,ink);canvas.drawRect(Math.max(0,w-Ui.dp(c,1)),0,w,h,ink);
             fiber.setShader(new BitmapShader(tile,Shader.TileMode.REPEAT,Shader.TileMode.REPEAT));
         }

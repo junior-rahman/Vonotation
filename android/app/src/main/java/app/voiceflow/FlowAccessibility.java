@@ -492,8 +492,8 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
     }
     private View iconControl(String kind,String description,boolean active){
         int size=Math.max(Ui.dp(this,28),bdp(active?30:34));
-        FloatingIcon.Control view=new FloatingIcon.Control(this,kind,active?Daybook.actionInk(this):Color.WHITE,size);view.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);view.setContentDescription(description);
-        int rippleColor=0x30ffffff;
+        FloatingIcon.Control view=new FloatingIcon.Control(this,kind,Daybook.actionInk(this),size);view.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);view.setContentDescription(description);
+        int rippleColor=Daybook.opacity(Daybook.actionInk(this),0x30);
         float corner=size*0f+diameter()/4f; // 48dp square, 12dp corners (scaled with bubble size)
         android.graphics.drawable.Drawable face=active?Ui.glass(this,corner/getResources().getDisplayMetrics().density,Glass.DAYBOOK_ACTION):frostedGlass(corner);
         android.graphics.drawable.GradientDrawable mask=new android.graphics.drawable.GradientDrawable();mask.setColor(Color.WHITE);mask.setCornerRadius(corner);
@@ -504,8 +504,8 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
     static final boolean GLOW_WHILE_DICTATING=false;
     /** Round6: regular solid button (opaque surface, thin line border, subtle shadow via elevation). */
     private android.graphics.drawable.Drawable frostedGlass(float corner){return solidFace(this,corner);}
-    /** Round7: solid coral face (#B3422F -> #A33A28 top-to-bottom), no light surface; white glyph on top. */
-    static android.graphics.drawable.GradientDrawable solidFace(android.content.Context c,float corner){return coralFace(c,corner,0xFFB3422F,0xFFA33A28);}
+    /** Existing opaque gradient face follows the primary action role in both appearances. */
+    static android.graphics.drawable.GradientDrawable solidFace(android.content.Context c,float corner){return coralFace(c,corner,Daybook.action(c),Daybook.mix(Daybook.action(c),Color.BLACK,.04f));}
     static android.graphics.drawable.GradientDrawable coralFace(android.content.Context c,float corner,int top,int bottom){
         android.graphics.drawable.GradientDrawable g=new android.graphics.drawable.GradientDrawable(android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,new int[]{top,bottom});
         g.setCornerRadius(corner);return g;
@@ -1166,7 +1166,7 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
         void setLevel(float value) { level=Math.max(0,Math.min(1,value)); invalidate(); }
         @Override protected void onDraw(Canvas canvas) {
             boolean moving=ValueAnimator.areAnimatorsEnabled() && recording() && !working();
-            paint.setColor(Daybook.coral(FlowAccessibility.this)); float gap=bdp(8),width=bdp(4),center=getWidth()/2f;
+            paint.setColor(Daybook.action(FlowAccessibility.this)); float gap=bdp(8),width=bdp(4),center=getWidth()/2f;
             for(int i=0;i<5;i++) {
                 float h=bdp(barHeights[i]);
                 if(moving) h*=.5f+level*.5f*(float)(.6+.4*Math.abs(Math.sin(android.os.SystemClock.uptimeMillis()/140.0+i)));

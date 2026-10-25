@@ -129,7 +129,7 @@ python3 - "$task_output" <<'PY'
 import hashlib, json, os, struct, sys, zlib
 from pathlib import Path
 root = Path(sys.argv[1]); screenshots = {}
-products = {'vonotation': ('dictations', 'thoughts', 'clipboard', 'settings'), 'notes': ('voice-notes', 'calls', 'settings')}
+products = {'vonotation': ('dictations', 'thoughts', 'clipboard', 'settings', 'settings-size', 'settings-cleanup', 'settings-dictionary', 'settings-permissions'), 'notes': ('voice-notes', 'calls', 'settings')}
 for product, screens in products.items():
   for appearance in ('light', 'dark'):
     for screen in screens:
@@ -150,7 +150,7 @@ for product, screens in products.items():
         screenshots[str(path.relative_to(root))] = {'size': len(data), 'sha256': hashlib.sha256(data).hexdigest(), 'width': width, 'height': height}
 logs = (root / 'logs/logcat-verified-interval.txt').read_text(errors='replace')
 if 'FATAL EXCEPTION' in logs and any('Process: ' + package in logs for package in ('app.voiceflow', 'app.vonotation.notes')): raise SystemExit('Target process crash found; inspect logcat')
-receipt = {'commit': os.environ.get('GITHUB_SHA', 'local'), 'checks': {'both_preview_builds': 'passed', 'both_full_lints': 'passed', 'pure_java_suites': 'passed', 'both_products_native_light_dark': 'passed', 'manifest_and_card_isolation': 'passed', 'legacy_recording_retention': 'passed', 'synthetic_recording_archive_roundtrips': 'passed'}, 'applications': {'vonotation': 'app.voiceflow', 'notes': 'app.vonotation.notes'}, 'screenshots': screenshots, 'qualification': 'Actual split-product native emulator screenshots with synthetic QA data. Cards selected through production saved-state restore. One physical Settings tap per product/theme. Synthetic native archive codec roundtrips do not establish real document-picker or playback behavior. Independent disposable QA certificates are unrelated to release signing. Exported application artifacts are UNSIGNED and are not installable updates.', 'not_tested': ['Physical Android hardware', 'Live provider calls', 'Google sign-in or backup restore', 'Full recording and cross-app dictation flows', 'Live telephony', 'User recording transfer through SAF picker and real-source playback']}
+receipt = {'commit': os.environ.get('GITHUB_SHA', 'local'), 'checks': {'both_preview_builds': 'passed', 'both_full_lints': 'passed', 'pure_java_suites': 'passed', 'both_products_native_light_dark': 'passed', 'manifest_and_card_isolation': 'passed', 'native_resource_and_rendered_capture_contrast': 'passed', 'legacy_recording_retention': 'passed', 'synthetic_recording_archive_roundtrips': 'passed'}, 'applications': {'vonotation': 'app.voiceflow', 'notes': 'app.vonotation.notes'}, 'screenshots': screenshots, 'qualification': 'Actual split-product native emulator screenshots with synthetic QA data. Cards selected through production saved-state restore. One physical Settings tap per product/theme. Synthetic native archive codec roundtrips do not establish real document-picker or playback behavior. Independent disposable QA certificates are unrelated to release signing. Exported application artifacts are UNSIGNED and are not installable updates.', 'not_tested': ['Physical Android hardware', 'Live provider calls', 'Google sign-in or backup restore', 'Full recording and cross-app dictation flows', 'Live telephony', 'User recording transfer through SAF picker and real-source playback']}
 (root / 'VERIFICATION.json').write_text(json.dumps(receipt, indent=2) + '\n')
 print(json.dumps({'native_screenshots': len(screenshots), 'checks': receipt['checks']}, indent=2))
 PY
@@ -159,3 +159,8 @@ for task_product in vonotation notes; do
   python3 scripts/prepare-unsigned.py "app/build/outputs/apk/$task_product/preview/app-$task_product-preview.apk" "$task_output/unsigned/$task_product-UNSIGNED.apk" --zipalign "$ANDROID_SDK_ROOT/build-tools/35.0.0/zipalign"
 done
 printf '%s\n' 'These APKs are UNSIGNED and cannot be installed. They contain the exact verified DEX/resource payload but require each app owner’s production signing key. Disposable QA signatures are never promoted as updates. Voitation must retain its old signer to update the installed app. Do not uninstall an existing app.' > "$task_output/unsigned/README.txt"
+
+# Public Android SDK utilities only; no signing keys or credentials leave the runner.
+mkdir -p "$task_output/sdk-tools"
+cp "$ANDROID_SDK_ROOT/build-tools/35.0.0/lib/apksigner.jar" "$task_output/sdk-tools/"
+cp "$ANDROID_SDK_ROOT/build-tools/35.0.0/aapt2" "$task_output/sdk-tools/"

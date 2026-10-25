@@ -1,6 +1,6 @@
 # Voitation and Vocading for iOS
 
-The source now builds two native products while retaining the approved forest/ivory/copper Daybook design:
+The source builds two native products. Voitation uses the approved Sand & Cocoa colors; Vocading retains the original forest/ivory/copper Daybook palette. Their existing layouts and interaction patterns are preserved:
 
 | Scheme | App and bundle | Version | Main cards |
 | --- | --- | --- | --- |

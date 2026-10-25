@@ -88,6 +88,7 @@ public final class VisualPaletteTest extends Instrumentation {
                 waitForIdleSync(); awaitFocusedWindow();
                 boolean dark = (activity.getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
                 require(dark == appearance.equals("dark"), "Native appearance does not match requested theme");
+                verifyPalette();
                 require(findText(headings[i]) != null, "Missing production card heading: " + headings[i]);
                 String[] excluded = AppProduct.isNotes()?new String[]{"Dictation","Thoughts","Clipboard","Translate"}:new String[]{"Voice notes","Call","Call Recordings","Translate"};
                 for(String heading:excluded)require(findText(heading)==null,"Excluded card leaked into the product: "+heading);
@@ -101,6 +102,13 @@ public final class VisualPaletteTest extends Instrumentation {
                     require(findDescription("Back to Home") != null, "One physical Settings tap did not open production Settings");
                     require(findText("Settings") != null, "Production Settings heading is absent");
                     capture("settings");
+                    if(!AppProduct.isNotes())for(String section:new String[]{"size","cleanup","dictionary","permissions"}){
+                        final java.lang.reflect.Method open=MainActivity.class.getDeclaredMethod("openPanel",String.class);open.setAccessible(true);
+                        final Throwable[] failure=new Throwable[1];
+                        runOnMainSync(()->{try{open.invoke(activity,section);}catch(Throwable error){failure[0]=error;}});
+                        require(failure[0]==null,"Could not open production Settings panel: "+section);
+                        waitForIdleSync();capture("settings-"+section);
+                    }
                 }
                 finishActivity();
             }
@@ -283,6 +291,32 @@ public final class VisualPaletteTest extends Instrumentation {
         require(focused[0], "Production Activity is obscured or unfocused; refusing to capture or tap a system window");
         waitForIdleSync();
     }
+    /** Check the actual native resources and rendered capture backgrounds, including translucency. */
+    private void verifyPalette() throws Exception {
+        int paper=activity.getResources().getIdentifier("daybook_paper","color",activity.getPackageName());
+        int surface=activity.getResources().getIdentifier("daybook_surface","color",activity.getPackageName());
+        require(activity.getColor(paper)==Daybook.paper(activity)&&activity.getColor(surface)==Daybook.surface(activity),"System and in-app product palettes disagree");
+        for(int background:new int[]{Daybook.paper(activity),Daybook.surface(activity),Daybook.soft(activity)}){
+            require(contrast(Daybook.ink(activity),background)>=4.5,"Primary text contrast fails");
+            require(contrast(Daybook.muted(activity),background)>=4.5,"Secondary text contrast fails");
+        }
+        require(contrast(Daybook.actionInk(activity),Daybook.action(activity))>=4.5,"Primary action contrast fails");
+        require(contrast(Daybook.controlOutline(activity),Daybook.surface(activity))>=3,"Input boundary contrast fails");
+        if(!AppProduct.isNotes()){
+            require(Daybook.cardSurface(activity,1)!=Daybook.surface(activity)&&Daybook.cardSurface(activity,1)!=Daybook.cardSurface(activity,2),"Stack depth colors are indistinguishable");
+            for(int background:new int[]{android.graphics.Color.BLACK,android.graphics.Color.WHITE,Daybook.surface(activity)}){
+                android.graphics.drawable.Drawable[] faces={FlowAccessibility.solidFace(activity,12),Ui.glass(activity,12,Glass.DAYBOOK_ACTION),Ui.glass(activity,12,Glass.DAYBOOK_TRANSLUCENT_ACTION)};
+                for(android.graphics.drawable.Drawable face:faces){
+                    Bitmap sample=Bitmap.createBitmap(96,96,Bitmap.Config.ARGB_8888);sample.eraseColor(background);
+                    face.setBounds(0,0,96,96);face.draw(new android.graphics.Canvas(sample));
+                    for(int y:new int[]{16,32,48,64,80})require(contrast(Daybook.actionInk(activity),sample.getPixel(48,y))>=4.5,"Composited capture-control contrast fails");
+                    sample.recycle();
+                }
+            }
+        }
+    }
+    private static double luminance(int value){double total=0;int[] channels={android.graphics.Color.red(value),android.graphics.Color.green(value),android.graphics.Color.blue(value)};double[] weights={.2126,.7152,.0722};for(int i=0;i<3;i++){double v=channels[i]/255.0;total+=weights[i]*(v<=.04045?v/12.92:Math.pow((v+.055)/1.055,2.4));}return total;}
+    private static double contrast(int first,int second){double a=luminance(first),b=luminance(second);return (Math.max(a,b)+.05)/(Math.min(a,b)+.05);}
     private File captureDirectory() throws Exception {
         File[] locations = context.getExternalMediaDirs();
         require(locations != null && locations.length > 0 && locations[0] != null, "External media path unavailable");

@@ -657,6 +657,11 @@ final class CardDeck extends android.widget.FrameLayout {
         if(animate)card.animate().translationX(tx).translationY(ty).rotation(rot).scaleX(scale).scaleY(scale).alpha(alpha).setDuration(340).setInterpolator(new android.view.animation.OvershootInterpolator(1.15f)).start();
         else{card.animate().cancel();card.setTranslationX(tx);card.setTranslationY(ty);card.setRotation(rot);card.setScaleX(scale);card.setScaleY(scale);card.setAlpha(alpha);}
     }
+    private int colorDepth(int id){int delta=(id-front+getChildCount())%getChildCount();return delta==0?0:delta==1?1:delta==getChildCount()-1?2:3;}
+    private void tintCard(android.view.View card,int id,float exposure){
+        if(card.getBackground() instanceof android.graphics.drawable.GradientDrawable)
+            ((android.graphics.drawable.GradientDrawable)card.getBackground()).setColor(Daybook.mix(Daybook.cardSurface(getContext(),colorDepth(id)),Daybook.surface(getContext()),exposure));
+    }
     private void rest(int id,float[] out){
         int delta=(id-front+getChildCount())%getChildCount();
         float lift=Ui.dp(getContext(),20),nudge=Ui.dp(getContext(),14);
@@ -677,7 +682,7 @@ final class CardDeck extends android.widget.FrameLayout {
         for(int i=0;i<getChildCount();i++){
             android.view.View card=getChildAt(i);
             int id=(Integer)card.getTag();
-            rest(id,at);
+            rest(id,at);tintCard(card,id,0);
             card.setElevation(Ui.dp(getContext(),id==front?18:at[4]==0?0:6));
             pose(card,at[0],at[1],at[2],at[3],at[4],animate);
         }
@@ -704,7 +709,7 @@ final class CardDeck extends android.widget.FrameLayout {
             boolean fromRight=raw<0;
             android.view.View side=card(fromRight?rightOf(front):leftOf(front));
             if(side!=null){
-                float p=Math.min(1f,Math.abs(dx)/(span*0.7f));
+                float p=Math.min(1f,Math.abs(dx)/(span*0.7f));tintCard(side,fromRight?rightOf(front):leftOf(front),p);
                 float[] at=new float[5];rest(fromRight?rightOf(front):leftOf(front),at);
                 side.setTranslationX(at[0]*(1f-p));side.setTranslationY(at[1]*(1f-p));side.setRotation(at[2]*(1f-p));
                 side.setScaleX(at[3]+(1f-at[3])*p);side.setScaleY(at[3]+(1f-at[3])*p);side.setAlpha(at[4]+(1f-at[4])*p);

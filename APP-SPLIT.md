@@ -47,6 +47,8 @@ Do not treat the rename as a new install of the original app. Keep previous reco
 
 ### 2. Apply Sand & Cocoa to Voitation
 
+Implementation is now in the candidate source: shared light/dark roles, depth-dependent card colors, native system colors and floating capture/clipboard controls. Vocading retains its original palette. Candidate native verification and screenshot review are pending.
+
 Reference: [approved design](https://chatgpt.com/library?file_id=libfile_98bab84d922881919f3e20bead6622b5&account_id=personal), approved October 21. This is a color-only pass: preserve interfaces, card geometry, stacking, spacing, type, icons, navigation, gestures, motion and behavior.
 
 | Shared theme role | Light | Dark |
@@ -89,4 +91,4 @@ After this naming update, all 40 existing pure-Java suites passed locally. The X
 
 The pre-rename split commit `7cb318dfd16dbf06e1a4475101280f0ba1c98bdc` has successful [Android verification](https://github.com/junior-rahman/Vonotation/actions/runs/39623319209) and [iOS verification](https://github.com/junior-rahman/Vonotation/actions/runs/39623319425). Those results do not validate later naming or color changes.
 
-This plan and the naming update do not mean Sand & Cocoa is implemented or a new release has been delivered. The next deliverable is a tested color-update candidate with native screenshots; installable delivery depends on compatible signing.
+Sand & Cocoa is implemented in source; no new release has been delivered. The next deliverable is a tested color-update candidate with native screenshots; installable delivery depends on compatible signing.

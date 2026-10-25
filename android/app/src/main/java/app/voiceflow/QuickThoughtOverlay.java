@@ -15,7 +15,7 @@ import android.view.WindowManager;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.widget.FrameLayout;
 
-/** An optional thought control, with its own note mark inside the existing coral surface. */
+/** An optional thought control, with its own note mark inside the shared primary-action surface. */
 final class QuickThoughtOverlay {
     private final Context context;
     private final WindowManager manager;
@@ -40,10 +40,10 @@ final class QuickThoughtOverlay {
         host=new FrameLayout(context);host.setClipChildren(false);host.setContentDescription("Quick thoughts: tap to record, hold to open thoughts, drag to move");host.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);host.setClickable(true);
         View face;
         if(compact){
-            face=new FloatingIcon(context,"thoughtDot",Color.WHITE);face.setBackground(FlowAccessibility.solidFace(context,Ui.dp(context,6)));face.setAlpha(.35f);
+            face=new FloatingIcon(context,"thoughtDot",Daybook.actionInk(context));face.setBackground(FlowAccessibility.solidFace(context,Ui.dp(context,6)));face.setAlpha(.35f);
             host.addView(face,new FrameLayout.LayoutParams(Ui.dp(context,12),Ui.dp(context,12),Gravity.CENTER));
         }else{
-            FloatingIcon.Control note=new FloatingIcon.Control(context,"thought",Color.WHITE,Ui.dp(context,30));note.setBackground(FlowAccessibility.solidFace(context,Ui.dp(context,12)));note.setAlpha(.65f);face=note;
+            FloatingIcon.Control note=new FloatingIcon.Control(context,"thought",Daybook.actionInk(context),Ui.dp(context,30));note.setBackground(FlowAccessibility.solidFace(context,Ui.dp(context,12)));note.setAlpha(.65f);face=note;
             host.addView(face,new FrameLayout.LayoutParams(size,size,Gravity.CENTER));
         }
         // One semantic click target: a tiny visual dot still has a 48dp hit area.

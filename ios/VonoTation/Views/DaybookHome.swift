@@ -60,12 +60,12 @@ struct DaybookHome: View {
                     cardNavigation
                     ZStack(alignment: .top) {
                         RoundedRectangle(cornerRadius: 28)
-                            .fill(Daybook.soft)
+                            .fill(Daybook.underlayMiddle)
                             .rotationEffect(.degrees(reduceMotion ? 0 : -3))
                             .padding(.horizontal, 18).padding(.top, 8).padding(.bottom, 12)
                             .accessibilityHidden(true).allowsHitTesting(false)
                         RoundedRectangle(cornerRadius: 28)
-                            .fill(Daybook.surface.opacity(0.75))
+                            .fill(Daybook.underlayNear)
                             .rotationEffect(.degrees(reduceMotion ? 0 : 2))
                             .padding(.horizontal, 12).padding(.top, 4).padding(.bottom, 6)
                             .accessibilityHidden(true).allowsHitTesting(false)
