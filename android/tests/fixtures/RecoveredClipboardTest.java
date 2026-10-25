@@ -10,7 +10,6 @@ import android.os.Bundle;
 import android.os.SystemClock;
 import android.view.InputDevice;
 import android.view.MotionEvent;
-import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityWindowInfo;
 import java.io.File;
@@ -60,7 +59,7 @@ public final class RecoveredClipboardTest extends Instrumentation {
             focus(REJECT);waitNode("Paste copied dictation: Dismiss me");touch("Dismiss copied dictation");
             focus(NORMAL);SystemClock.sleep(700);require(find("Paste copied dictation: Dismiss me")==null,"Explicitly dismissed copy reopened");
             capture("paste-completed.png");
-            result.putString("result","PASS: "+checks+" native assertions; recovered overlay survives 13-second idle and keyboard focus events, failed paste remains retryable, private/missing inputs hide without consuming, real tap pastes once at caret, and explicit dismissal does not reopen");
+            result.putString("result","PASS: "+checks+" native assertions; recovered overlay survives 13-second idle and auxiliary focus events, failed paste remains retryable, private/missing inputs hide without consuming, real tap pastes once at caret, and explicit dismissal does not reopen");
         }catch(Throwable failure){result.putString("failure",android.util.Log.getStackTraceString(failure));try{capture("failure.png");}catch(Exception ignored){}}
         finally{try{shell("settings delete secure enabled_accessibility_services");shell("settings put secure accessibility_enabled 0");}catch(Exception ignored){}}
         finish(result.containsKey("failure")?Activity.RESULT_CANCELED:Activity.RESULT_OK,result);
