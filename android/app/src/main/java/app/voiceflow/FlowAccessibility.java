@@ -354,6 +354,7 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
         android.os.PowerManager power=(android.os.PowerManager)getSystemService(POWER_SERVICE);
         boolean locked=lock!=null && lock.isKeyguardLocked(),interactive=power==null || power.isInteractive();
         if(busy || (FlowKeyboard.instance!=null && FlowKeyboard.instance.isRecording())){
+            if(fan!=null&&fan.isRecovery()){fan.dismissNow();fan=null;}
             observeCaptureDestination();
             // Capture mode and destination were frozen at Start. Focus loss only suspends insertion.
             hideThought();if(clipOpening)hideClipTray();
@@ -622,7 +623,7 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
     private ArcFan fan;
     /** Completion calls this before releasing the recording UI; display runs after that release. */
     void revealCopiedDictation(String text){
-        final float x=layout==null?Ui.dp(this,48):layout.x+layout.width/2f;
+        final float x=layout==null?Ui.dp(this,48):layout.x+layout.width-Ui.dp(this,4)-diameter()/2f;
         final float y=layout==null?Ui.dp(this,200):layout.y+layout.height/2f;
         handler.post(()->{
             android.app.KeyguardManager lock=(android.app.KeyguardManager)getSystemService(KEYGUARD_SERVICE);
