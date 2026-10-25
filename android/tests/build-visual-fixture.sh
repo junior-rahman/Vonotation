@@ -61,13 +61,15 @@ PY
 "${compiler[@]}" -source 8 -target 8 -encoding UTF-8 \
     -classpath "$android_jar:$app_classes" -d "$fixture_dir/classes" \
     "$project_dir/tests/fixtures/VisualPaletteTest.java" \
-    "$project_dir/tests/fixtures/RecordingTransferChecks.java"
+    "$project_dir/tests/fixtures/RecordingTransferChecks.java" \
+    "$project_dir/tests/fixtures/VocadingChecks.java"
 
 # The compiler output must contain only this instrumentation and its inner classes.
 while IFS= read -r -d '' generated; do
     case "${generated#"$fixture_dir/classes/"}" in
         app/voiceflow/VisualPaletteTest.class|app/voiceflow/VisualPaletteTest\$*.class) ;;
         app/voiceflow/RecordingTransferChecks.class|app/voiceflow/RecordingTransferChecks\$*.class) ;;
+        app/voiceflow/VocadingChecks.class|app/voiceflow/VocadingChecks\$*.class) ;;
         *) echo "Unexpected class in fixture output: $generated" >&2; exit 1 ;;
     esac
 done < <(find "$fixture_dir/classes" -type f -name '*.class' -print0)

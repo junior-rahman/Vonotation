@@ -76,6 +76,7 @@ public final class VisualPaletteTest extends Instrumentation {
             } : null);
             checks+=RecordingTransferChecks.run(context,AppProduct.isNotes());
             verifyRecordingGrowth();
+            if(AppProduct.isNotes())checks+=VocadingChecks.run(context);
             seed(preferences);
             verifyProductManifest();
             setInTouchMode(true);
