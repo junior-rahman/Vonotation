@@ -1,0 +1,19 @@
+{
+  "app": "Voitation",
+  "package": "app.voiceflow",
+  "versionName": "0.1.21-preview",
+  "versionCode": 93,
+  "minSdk": 26,
+  "minAndroid": "8.0",
+  "abis": [],
+  "size": 6275081,
+  "sha256": "fdadd68a74e49ccb3819fc40f949e8f7f59f3ea82be8760743a4b1e6d0006423",
+  "signerSha256": "5dca2219fbe89fb885b24c904fd4c57d3b58930922d21d455fc10d7a35f7568a",
+  "sourceCommit": "e6b12cd4731bcf37c2c00f0b66cb651948cbe351",
+  "sourceTree": "bdce264385678d7fa526ff481379c69f6aaea2b6",
+  "androidRun": 40169522754,
+  "nativeTestCommit": "e6b12cd4731bcf37c2c00f0b66cb651948cbe351",
+  "payloadMatchesNativeArtifact": true,
+  "physicalDeviceInstallTested": false,
+  "iosTestedForThisRelease": false
+}

@@ -1,0 +1,30 @@
+name: Publish verified Voitation Android 0.1.21
+
+on:
+  push:
+    branches: [release/voitation-0.1.21]
+    paths:
+      - 'release-assets/**'
+      - '.github/workflows/publish-voitation-021.yml'
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: voitation-021-publication
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.repository_id == '1416658953' && github.repository == 'junior-rahman/Vonotation' && github.ref == 'refs/heads/release/voitation-0.1.21'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Verify and publish the signed Android update
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 release-assets/publish_voitation_021.py
