@@ -34,8 +34,8 @@ android {
         notes {
             dimension 'product'
             applicationId 'app.vonotation.notes'
-            versionCode 1
-            versionName '0.1.0-preview'
+            versionCode 2
+            versionName '0.1.1-preview'
             if (System.getenv('VONO_UNSIGNED_BUILDS') != 'true') signingConfig signingConfigs.notesPreview
         }
     }

@@ -39,7 +39,15 @@ final class Notes {
     private static List<File> queue=new ArrayList<>();
     private static int queueAt;
     private static MediaPlayer player;
-    private static boolean paused;
+    private static boolean paused,loading,seeking;
+    private static int playbackGeneration;
+    private static float playbackSpeed=1f;
+    private static android.widget.SeekBar playSeek;
+    private static final java.util.concurrent.ExecutorService mediaWork=java.util.concurrent.Executors.newSingleThreadExecutor();
+    private static String search="";
+    private static boolean trashVisible,pinnedOnly;
+    private static int visibleLimit=60;
+    private static long undoTrash=-1;
     private static long[] queueSpans=new long[0];
     private static long playing=-1,liveId=-1;
     private static volatile boolean draining;
@@ -56,7 +64,7 @@ final class Notes {
     static void thoughtsMode(){callsOnly=false;thoughtsOnly=true;}
     static boolean hasThought(Context context,long id){synchronized(Store.class){JSONObject note=find(context,id);return note!=null && note.optBoolean("thought");}}
     static boolean thoughtOpened(Context context){JSONObject note=find(context,open);return note!=null && note.optBoolean("thought");}
-    static boolean opened(){return open>=0;}
+    static boolean opened(){return open>=0 || trashVisible;}
     /** Updater gate includes queued thought formatting until its guarded save finishes. */
     static boolean updateBusy(){return busy || draining || transcribing>=0 || thoughtWork.get()>0;}
     private static Runnable onChange=()->{};
@@ -64,8 +72,9 @@ final class Notes {
 
     private Notes() {}
 
-    static boolean back(){if(open<0)return false;stopPlayback();fixing=false;original=false;translating=false;thoughtSourceShown=-1;open=-1;return true;}
+    static boolean back(){if(open<0){if(trashVisible){trashVisible=false;return true;}return false;}stopPlayback();fixing=false;original=false;translating=false;thoughtSourceShown=-1;open=-1;return true;}
     static void stop(){stopPlayback();}
+    static void recordingChanged(){poke();}
     static boolean finishRecording(){return finishRecording(liveId);}
     static boolean finishRecording(long id){return id>0 && liveId==id && VoiceTake.finishNote(id);}
     /** Only the current explicit Cancel action may discard a voice note. */
@@ -73,7 +82,7 @@ final class Notes {
         if(!AppProduct.isNotes() || id<=0 || liveId!=id || !VoiceTake.cancelNote(id))return false;
         liveId=-1;remove(context,id);poke();return true;
     }
-    private static boolean ownsNote(JSONObject note){return note!=null && (AppProduct.isNotes()!=note.optBoolean("thought"));}
+    private static boolean ownsNote(JSONObject note){return note!=null && !note.optBoolean("trashed") && (AppProduct.isNotes()!=note.optBoolean("thought"));}
     static void resumeThoughtSummaries(Context context){if(!AppProduct.isNotes())ThoughtDailySummaries.resume(context);}
     static void pauseThoughtSummaries(){ThoughtDailySummaries.pause();}
     static void refreshThoughtSummaries(){if(ThoughtDailySummaries.active())poke();}
@@ -85,13 +94,13 @@ final class Notes {
         if(AppProduct.isNotes()==thoughtsOnly)return;
         if(open>=0 && !ownsNote(find(activity,open)))back();
         if(thoughtsOnly && !Store.quickThoughts(activity))return;
-        if(open<0)list(activity,body,dock,refresh);else detail(activity,body,refresh);
+        if(trashVisible && AppProduct.isNotes()){if(dock!=null)dock.removeAllViews();showTrash(activity,body,refresh);}else if(open<0)list(activity,body,dock,refresh);else detail(activity,body,refresh);
     }
 
     private static void list(Activity activity,LinearLayout body,android.widget.FrameLayout dock,Runnable refresh) {
         if(thoughtsOnly){thoughtList(activity,body,refresh);return;}
         if(!callsOnly){
-            body.addView(Daybook.text(activity,"I'll hold this and write it up when you're back online.",13,Daybook.muted(activity),false));
+            body.addView(Daybook.text(activity,"Audio saves on this phone. Transcription needs a connection and provider key.",13,Daybook.muted(activity),false));
             Ui.space(body,8);
             TextView language=Daybook.text(activity,name(pick),14,Daybook.accent(activity),true);
             language.setOnClickListener(v->{Daybook.feedback(v);if(!busy && !VoiceTake.noteRunning()){choosing=!choosing;refresh.run();}});
@@ -110,7 +119,7 @@ final class Notes {
             Ui.space(live,8);
             liveWave=new Wave(activity);liveWave.show(VoiceTake.liveBars(48),1f);live.addView(liveWave,new LinearLayout.LayoutParams(-1,Ui.dp(activity,44)));
             Ui.space(live,6);
-            String hint=VoiceTake.bothSides()?"Both sides are being recorded. You can leave this screen.":"Turn the speaker on so the other person is recorded too. Your side is always saved.";
+            String hint=VoiceTake.bothSides()?"Call audio capture is active. Listen back to check that both voices are audible.":"Microphone capture is active. Speakerphone may help; check both voices in playback.";
             live.addView(Daybook.text(activity,hint,13,Daybook.muted(activity),false));
             body.addView(live);armTick();
         } else if(callsOnly){ liveTime=null; liveWave=null; }
@@ -121,19 +130,47 @@ final class Notes {
             dock.removeAllViews();
             dock.addView(actionPill(activity,refresh),new android.widget.FrameLayout.LayoutParams(-2,-2));
         }
+        if(AppProduct.isNotes()){
+            android.widget.EditText query=Daybook.field(activity,search,"Search title or transcript",false);
+            query.setSingleLine(true);query.setContentDescription("Search recordings");body.addView(query);
+            LinearLayout options=Ui.row(activity);
+            options.addView(quiet(activity,pinnedOnly?"All recordings":"Pinned",v->{pinnedOnly=!pinnedOnly;visibleLimit=60;refresh.run();}));
+            options.addView(quiet(activity,"Recently deleted",v->{trashVisible=true;stopPlayback();refresh.run();}));body.addView(options);
+            if(undoTrash>0){long restoreId=undoTrash;body.addView(Daybook.button(activity,"Undo last deletion",false,v->{if(restoreSaved(activity,restoreId)){undoTrash=-1;refresh.run();}}));}
+            LinearLayout results=Ui.column(activity);body.addView(results);
+            renderResults(activity,results,refresh);
+            query.addTextChangedListener(new android.text.TextWatcher(){
+                private Runnable pending;
+                public void beforeTextChanged(CharSequence text,int start,int count,int after){}
+                public void onTextChanged(CharSequence text,int start,int before,int count){search=text.toString();visibleLimit=60;if(pending!=null)tick.removeCallbacks(pending);pending=()->{if(results.isAttachedToWindow())renderResults(activity,results,refresh);};tick.postDelayed(pending,180);}
+                public void afterTextChanged(android.text.Editable text){}
+            });return;
+        }
+        renderResults(activity,body,refresh);
+    }
+    private static void renderResults(Activity activity,LinearLayout body,Runnable refresh){
+        body.removeAllViews();JSONArray notes=all(activity);
         if(notes.length()==0 && !VoiceTake.running()){
             LinearLayout empty=Daybook.card(activity);empty.setPadding(Ui.dp(activity,16),Ui.dp(activity,18),Ui.dp(activity,16),Ui.dp(activity,18));
-            if(callsOnly){empty.addView(Daybook.text(activity,"No calls yet.",18,Daybook.ink(activity),true));Ui.space(empty,7);empty.addView(Daybook.text(activity,"When a call connects, it is saved here and written up online.",13,Daybook.muted(activity),false));}
-            else{empty.addView(Daybook.text(activity,"Nothing recorded yet.",18,Daybook.ink(activity),true));Ui.space(empty,7);empty.addView(Daybook.text(activity,"Tap Record. The audio stays on this phone, and the words fill in when you're online.",13,Daybook.muted(activity),false));}
+            if(callsOnly){empty.addView(Daybook.text(activity,"No calls yet.",18,Daybook.ink(activity),true));Ui.space(empty,7);empty.addView(Daybook.text(activity,"Enabled call capture depends on this phone. Check a short call in playback before relying on it.",13,Daybook.muted(activity),false));}
+            else{empty.addView(Daybook.text(activity,"Nothing recorded yet.",18,Daybook.ink(activity),true));Ui.space(empty,7);empty.addView(Daybook.text(activity,"Tap Record. Audio saves on this phone; a connection and provider key are needed for transcription.",13,Daybook.muted(activity),false));}
             body.addView(empty);return;
         }
         String bucket="";
         int shown=0;
+        List<JSONObject> matches=new ArrayList<>();
         for(int i=0;i<notes.length();i++){
-            JSONObject note=notes.optJSONObject(i);if(note==null)continue;
+            JSONObject note=notes.optJSONObject(i);if(note==null || note.optBoolean("trashed"))continue;
             if(note.optBoolean("thought") || (callsOnly?!note.optBoolean("call"):note.optBoolean("call")))continue;
-            shown++;
-            String group=bucketOf(note);
+            if(pinnedOnly&&!note.optBoolean("pinned"))continue;
+            if(!NotebookPolicy.matches(search,titleOf(note),note.optString("text"),note.optString("raw"),note.optString("who")))continue;
+            matches.add(note);
+        }
+        matches.sort((a,b)->{int pinned=Boolean.compare(b.optBoolean("pinned"),a.optBoolean("pinned"));return pinned!=0?pinned:Long.compare(b.optLong("created",b.optLong("id")),a.optLong("created",a.optLong("id")));});
+        boolean keyed=!Vault.get(activity).isEmpty(),connected=online(activity);
+        for(int i=0;i<Math.min(visibleLimit,matches.size());i++){
+            JSONObject note=matches.get(i);shown++;
+            String group=note.optBoolean("pinned")?"Pinned":bucketOf(note);
             if(!group.equals(bucket)){bucket=group;if(i>0)Ui.space(body,8);body.addView(Daybook.text(activity,group,13,Daybook.muted(activity),true));Ui.space(body,6);}
             long id=note.optLong("id");
             LinearLayout card=Daybook.card(activity);card.setPadding(Ui.dp(activity,14),Ui.dp(activity,12),Ui.dp(activity,12),Ui.dp(activity,12));
@@ -141,7 +178,7 @@ final class Notes {
             LinearLayout row=Ui.row(activity);row.setGravity(android.view.Gravity.CENTER_VERTICAL);
             LinearLayout words=Ui.column(activity);
             boolean coming=transcribing==id;
-            TextView line=Daybook.text(activity,coming?"Writing it up…":titleOf(note),16,coming?Daybook.muted(activity):Daybook.ink(activity),false);
+            TextView line=Daybook.text(activity,titleOf(note),16,coming?Daybook.muted(activity):Daybook.ink(activity),false);
             line.setMaxLines(2);line.setEllipsize(android.text.TextUtils.TruncateAt.END);
             words.addView(line);
             Ui.space(words,4);
@@ -151,11 +188,13 @@ final class Notes {
             TextView metaLine=Daybook.text(activity,meta,12,Daybook.muted(activity),false);
             metaLine.setMaxLines(1);metaLine.setEllipsize(android.text.TextUtils.TruncateAt.END);
             words.addView(metaLine);
+            TextView state=Daybook.text(activity,status(activity,note,keyed,connected),12,Daybook.muted(activity),false);
+            VocadingIcons.attach(state,coming?"transcribing":note.optBoolean("recording")?"recording":note.optBoolean("pending")||note.optBoolean("source_interrupted")?"retry":"saved",0);words.addView(state);
             row.addView(words,new LinearLayout.LayoutParams(0,-2,1));
             boolean on=playing==id&&!paused;
             Button play=Daybook.button(activity,on?"Pause":"Play",false,v->togglePlay(activity,note,refresh));
             if(filesOf(activity,note).isEmpty())play.setEnabled(false);
-            LinearLayout.LayoutParams playLp=new LinearLayout.LayoutParams(Ui.dp(activity,72),Ui.dp(activity,40));playLp.leftMargin=Ui.dp(activity,8);
+            LinearLayout.LayoutParams playLp=new LinearLayout.LayoutParams(Ui.dp(activity,100),Ui.dp(activity,48));playLp.leftMargin=Ui.dp(activity,8);
             row.addView(play,playLp);
             card.addView(row);
             String preview=previewOf(note);
@@ -176,6 +215,8 @@ final class Notes {
             card.setOnClickListener(v->{Daybook.feedback(v);open=id;fixing=false;original=false;translating=false;refresh.run();});
             body.addView(card);Ui.space(body,8);
         }
+        if(matches.size()>visibleLimit)body.addView(Daybook.button(activity,"Show more recordings",false,v->{visibleLimit+=60;renderResults(activity,body,refresh);}));
+        if(shown==0 && (!search.trim().isEmpty()||pinnedOnly)){body.addView(Daybook.text(activity,"No matching recordings.",16,Daybook.muted(activity),false));return;}
         if(shown==0 && !VoiceTake.noteRunning()){
             LinearLayout empty=Daybook.card(activity);empty.setPadding(Ui.dp(activity,16),Ui.dp(activity,18),Ui.dp(activity,16),Ui.dp(activity,18));
             if(callsOnly){empty.addView(Daybook.text(activity,"No calls yet.",18,Daybook.ink(activity),true));Ui.space(empty,7);empty.addView(Daybook.text(activity,"A connected call shows up here, not in Notes.",13,Daybook.muted(activity),false));}
@@ -197,6 +238,8 @@ final class Notes {
         body.addView(Daybook.text(activity,titleOf(note),22,Daybook.ink(activity),true));
         Ui.space(body,4);
         body.addView(Daybook.text(activity,(note.optBoolean("call")?"Call · ":"")+when(note)+" · "+name(note.optString("heard","").isEmpty()?note.optString("lang","auto"):note.optString("heard","")),12,Daybook.muted(activity),false));
+        Ui.space(body,8);
+        body.addView(Daybook.text(activity,status(activity,note,!Vault.get(activity).isEmpty(),online(activity)),13,Daybook.muted(activity),true));
         Ui.space(body,12);
         playTime=Daybook.text(activity,(playing==id?clock(position()):"0:00")+" / "+clock(note.optLong("duration")),16,Daybook.ink(activity),true);
         body.addView(playTime);
@@ -216,6 +259,15 @@ final class Notes {
         TextView fwd=Daybook.text(activity,"+5s",14,Daybook.muted(activity),true);fwd.setPadding(Ui.dp(activity,8),Ui.dp(activity,8),Ui.dp(activity,8),Ui.dp(activity,8));fwd.setOnClickListener(v->{Daybook.feedback(v);nudge(5000);});
         controls.addView(fwd);
         body.addView(controls);
+        playSeek=new android.widget.SeekBar(activity);playSeek.setMax(1000);playSeek.setContentDescription("Playback position");
+        playSeek.setProgress(playing==id&&totalDuration>0?(int)(1000*position()/totalDuration):0);playSeek.setEnabled(playing==id&&!loading);
+        playSeek.setOnSeekBarChangeListener(new android.widget.SeekBar.OnSeekBarChangeListener(){
+            public void onStartTrackingTouch(android.widget.SeekBar bar){seeking=true;}
+            public void onStopTrackingTouch(android.widget.SeekBar bar){seeking=false;seekTo(totalDuration*bar.getProgress()/1000);}
+            public void onProgressChanged(android.widget.SeekBar bar,int progress,boolean user){if(user&&playTime!=null)playTime.setText(clock(totalDuration*progress/1000)+" / "+clock(totalDuration));}
+        });body.addView(playSeek,new LinearLayout.LayoutParams(-1,Ui.dp(activity,48)));
+        body.addView(quiet(activity,"Speed · "+playbackSpeed+"×",v->new android.app.AlertDialog.Builder(activity).setTitle("Playback speed").setItems(new String[]{"0.75×","1×","1.25×","1.5×","2×"},(dialog,index)->{playbackSpeed=new float[]{.75f,1f,1.25f,1.5f,2f}[index];applySpeed();refresh.run();}).show()));
+        if(loading&&playing==id)body.addView(Daybook.text(activity,"Loading audio…",13,Daybook.muted(activity),false));
         Ui.space(body,16);
         String summary=note.optString("summary","");
         if(!coming && !summary.isEmpty()){
@@ -224,7 +276,7 @@ final class Notes {
             Ui.space(body,14);
         }
         if(!coming&&note.optBoolean("partial_transcript")){body.addView(Daybook.text(activity,note.optBoolean("replacement_pending")?"Replacement incomplete · your previous transcript is kept.":"Partial transcript · retry to fill in missing source segments.",13,Daybook.muted(activity),false));Ui.space(body,6);}
-        String shown=coming?"Writing it up…":note.optBoolean("pending")&&note.optString("text").isEmpty()?"Saved on this phone. I'll write the summary and the full note when you're online.":note.optString("text","").isEmpty()?"The words will show up here.":note.optString("text");
+        String shown=coming?"Writing it up…":note.optBoolean("pending")&&note.optString("text").isEmpty()?status(activity,note,!Vault.get(activity).isEmpty(),online(activity))+". Use More → Retry transcription when ready.":note.optString("text","").isEmpty()?"The words will show up here.":note.optString("text");
         if(!coming && !note.optBoolean("pending") && !note.optString("text","").isEmpty())body.addView(Daybook.text(activity,"Everything you said",12,Daybook.muted(activity),true));
         Ui.space(body,4);
         TextView transcript=Daybook.text(activity,shown,17,note.optString("text","").isEmpty()?Daybook.muted(activity):Daybook.ink(activity),false);
@@ -240,23 +292,70 @@ final class Notes {
         }
         Ui.space(body,18);
         LinearLayout actions=Ui.row(activity);actions.setGravity(android.view.Gravity.CENTER_VERTICAL);
-        String writeLabel=note.optBoolean("pending")?"Transcribe":"Again";
-        actions.addView(quiet(activity,coming?"Working":writeLabel,v->{
-            if(note.optBoolean("pending")){resetRetry(activity,note.optLong("id"));writeUp(activity.getApplicationContext(),note.optLong("id"));}
-            else retranscribe(activity,note,note.optString("lang","auto"),refresh);
-        }));
-        actions.addView(quiet(activity,"Summary",v->summarize(activity,note)));
-        actions.addView(quiet(activity,"Translate",v->{translating=!translating;fixing=false;refresh.run();}));
-        actions.addView(quiet(activity,"Language",v->{fixing=!fixing;translating=false;refresh.run();}));
-        actions.addView(quiet(activity,"Delete",v->confirmDelete(activity,note,refresh)));
-        body.addView(actions);
+        actions.addView(quiet(activity,"Edit",v->editDialog(activity,note,refresh)));
+        actions.addView(quiet(activity,"Copy",v->{String text=shareText(note);((android.content.ClipboardManager)activity.getSystemService(Context.CLIPBOARD_SERVICE)).setPrimaryClip(android.content.ClipData.newPlainText(titleOf(note),text));toast(activity,"Copied");}));
+        actions.addView(quiet(activity,"Share",v->new android.app.AlertDialog.Builder(activity).setTitle("Share recording").setItems(new String[]{"Text","Source audio"},(d,which)->{if(which==0){android.content.Intent send=new android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain").putExtra(android.content.Intent.EXTRA_TEXT,shareText(note));activity.startActivity(android.content.Intent.createChooser(send,"Share text"));}else shareAudio(activity,note);}).show()));
+        actions.addView(quiet(activity,"More",v->new android.app.AlertDialog.Builder(activity).setTitle("Recording actions").setItems(new String[]{note.optBoolean("pinned")?"Unpin":"Pin","Retry transcription","Summary","Translate","Language","Move to Recently deleted"},(d,which)->{
+            if(which==0){togglePin(activity,id);refresh.run();}
+            if(which==1){if(note.optBoolean("user_edited"))new android.app.AlertDialog.Builder(activity).setTitle("Transcribe original audio again?").setMessage("Your edited transcript stays unchanged. The original transcription may be updated.").setNegativeButton("Cancel",null).setPositiveButton("Transcribe",(dd,w)->retranscribe(activity,note,note.optString("lang","auto"),refresh)).show();else if(note.optBoolean("pending")){resetRetry(activity,id);writeUp(activity.getApplicationContext(),id);}else retranscribe(activity,note,note.optString("lang","auto"),refresh);}
+            if(which==2)summarize(activity,note);
+            if(which==3){translating=!translating;fixing=false;refresh.run();}
+            if(which==4){fixing=!fixing;translating=false;refresh.run();}
+            if(which==5)confirmDelete(activity,note,refresh);
+        }).show()));body.addView(actions);
         if(translating){Ui.space(body,8);languageChoices(activity,body,note.optString("translationLang",""),code->{translating=false;translateNote(activity,note,code);});}
         if(fixing){Ui.space(body,8);languageChoices(activity,body,note.optString("lang","auto"),code->retranscribe(activity,note,code,refresh));}
     }
 
+    private static String status(Context context,JSONObject note,boolean keyed,boolean connected){
+        return NotebookPolicy.status(note.optBoolean("recording"),liveId==note.optLong("id")&&VoiceTake.notePaused(),!filesOf(context,note).isEmpty(),note.optBoolean("source_interrupted")||!note.optString("capture_error").isEmpty(),transcribing==note.optLong("id"),note.optBoolean("partial_transcript"),!note.optString("transcription_error").isEmpty(),note.optBoolean("pending"),keyed,connected);
+    }
+    private static String shareText(JSONObject note){return titleOf(note)+"\n\n"+(note.optString("summary").isEmpty()?"":note.optString("summary")+"\n\n")+note.optString("text");}
+    static boolean editSaved(Context context,long id,String title,String transcript){
+        synchronized(Store.class){try{JSONObject current=find(context,id);if(!ownsNote(current)||current.optBoolean("recording"))return false;
+            return updateCaptured(context,current,item->{String clean=title.trim();item.put("title",clean.substring(0,Math.min(300,clean.length())));if(!transcript.equals(item.optString("text"))){item.put("text",transcript).put("user_edited",true).put("pending",false).put("summary","").put("translation","").put("transcription_error","");}});
+        }catch(Exception error){return false;}}
+    }
+    private static void editDialog(Activity activity,JSONObject note,Runnable refresh){
+        if(note.optBoolean("recording")){toast(activity,"Finish recording before editing.");return;}
+        LinearLayout fields=Ui.column(activity);int pad=Ui.dp(activity,20);fields.setPadding(pad,pad,pad,pad);
+        android.widget.EditText title=Daybook.field(activity,titleOf(note),"Title",false);title.setSingleLine(true);fields.addView(title);
+        android.widget.EditText text=Daybook.field(activity,note.optString("text"),"Transcript",false);text.setMinLines(4);text.setMaxLines(9);fields.addView(text);
+        fields.addView(Daybook.text(activity,"Original transcript and source audio are kept.",13,Daybook.muted(activity),false));
+        android.widget.ScrollView scroll=new android.widget.ScrollView(activity);scroll.addView(fields);
+        android.app.AlertDialog dialog=new android.app.AlertDialog.Builder(activity).setTitle("Edit recording").setView(scroll).setNegativeButton("Cancel",null).setPositiveButton("Save",null).create();
+        dialog.setOnShowListener(d->dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{if(editSaved(activity,note.optLong("id"),title.getText().toString(),text.getText().toString())){dialog.dismiss();refresh.run();}else text.setError("Could not save. The recording may have changed or storage is full.");}));dialog.show();
+    }
+    static boolean togglePin(Context context,long id){synchronized(Store.class){try{JSONObject current=find(context,id);return ownsNote(current)&&updateCaptured(context,current,item->item.put("pinned",!item.optBoolean("pinned")));}catch(Exception error){return false;}}}
+    static boolean trashSaved(Context context,long id){synchronized(Store.class){try{JSONObject current=find(context,id);if(!ownsNote(current)||current.optBoolean("recording"))return false;boolean saved=updateCaptured(context,current,item->item.put("trashed",true).put("trashed_at",System.currentTimeMillis()));if(saved&&playing==id)stopPlayback();return saved;}catch(Exception error){return false;}}}
+    static boolean restoreSaved(Context context,long id){synchronized(Store.class){try{JSONArray before=all(context),next=new JSONArray(before.toString());boolean found=false;for(int i=0;i<next.length();i++){JSONObject item=next.optJSONObject(i);if(item!=null&&item.optLong("id")==id&&item.optBoolean("trashed")){item.remove("trashed");item.remove("trashed_at");item.put("revision",item.optLong("revision",1)+1);found=true;}}return found&&commitNotes(context,before,next);}catch(Exception error){return false;}}}
+    private static void showTrash(Activity activity,LinearLayout body,Runnable refresh){
+        body.addView(Daybook.button(activity,"Back to recordings",false,v->{trashVisible=false;refresh.run();}));
+        body.addView(Daybook.text(activity,"Recently deleted",22,Daybook.ink(activity),true));
+        body.addView(Daybook.text(activity,"Kept until you restore or permanently delete. These recordings still use phone storage.",13,Daybook.muted(activity),false));
+        JSONArray all=all(activity);int count=0;
+        for(int i=0;i<all.length();i++){JSONObject note=all.optJSONObject(i);if(note==null||!note.optBoolean("trashed")||note.optBoolean("thought"))continue;count++;long id=note.optLong("id");
+            LinearLayout row=Daybook.card(activity);row.addView(Daybook.text(activity,titleOf(note),16,Daybook.ink(activity),true));
+            row.addView(Daybook.button(activity,"Restore",false,v->{if(restoreSaved(activity,id)){if(undoTrash==id)undoTrash=-1;refresh.run();}else toast(activity,"Could not restore. Check available storage.");}));
+            row.addView(Daybook.button(activity,"Delete permanently",false,v->new android.app.AlertDialog.Builder(activity).setTitle("Delete permanently?").setMessage("This removes the text and source audio. It cannot be undone.").setNegativeButton("Keep",null).setPositiveButton("Delete permanently",(d,w)->{remove(activity,id);refresh.run();}).show()));body.addView(row);Ui.space(body,8);
+        }
+        if(count==0)body.addView(Daybook.text(activity,"No deleted recordings.",16,Daybook.muted(activity),false));
+    }
+    private static void shareAudio(Activity activity,JSONObject note){
+        if(note.optBoolean("recording")){toast(activity,"Finish recording before sharing.");return;}
+        toast(activity,"Preparing source audio…");Context app=activity.getApplicationContext();long id=note.optLong("id");
+        mediaWork.execute(()->{try{List<File> sources;
+            synchronized(Store.class){JSONObject current=find(app,id);if(!ownsNote(current))throw new java.io.IOException("The recording is no longer available.");List<File> files=filesOf(app,current);JSONArray declared=current.optJSONArray("parts");if(declared!=null&&declared.length()>files.size())throw new java.io.IOException("A source segment is missing. No incomplete copy was shared.");sources=new ArrayList<>(files);}
+            android.net.Uri uri=RecordingShare.prepare(app,sources);
+            synchronized(Store.class){if(!ownsNote(find(app,id)))throw new java.io.IOException("The recording is no longer available.");}
+            activity.runOnUiThread(()->{if(activity.isDestroyed()||activity.isFinishing())return;android.content.Intent send=new android.content.Intent(android.content.Intent.ACTION_SEND).setType(uri.getLastPathSegment().endsWith(".zip")?"application/zip":"audio/mp4").putExtra(android.content.Intent.EXTRA_STREAM,uri).addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION);send.setClipData(android.content.ClipData.newRawUri("Source audio",uri));activity.startActivity(android.content.Intent.createChooser(send,"Share source audio"));});
+        }catch(Exception error){toast(app,error.getMessage()==null?"Could not prepare source audio.":error.getMessage());}});
+    }
+
     private static TextView quiet(Activity activity,String label,android.view.View.OnClickListener click) {
         TextView word=Daybook.text(activity,label,13,Daybook.accent(activity),true);
-        word.setPadding(0,Ui.dp(activity,8),Ui.dp(activity,14),Ui.dp(activity,8));
+        word.setPadding(0,Ui.dp(activity,8),Ui.dp(activity,14),Ui.dp(activity,8));word.setMinHeight(Ui.dp(activity,48));word.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        if(!label.equals("Copy")&&!label.equals("Share"))VocadingIcons.label(word,label,Daybook.accent(activity));
         word.setOnClickListener(v->{Daybook.feedback(v);click.onClick(v);});
         return word;
     }
@@ -327,7 +426,7 @@ final class Notes {
                         remember(app,captureId,files,language,true);
                         stamp(app,captureId,"wave",barsText(VoiceTake.bars()));
                         if(!captureComplete)stamp(app,captureId,"capture_error","Recording ended before every audio segment could be finalized.");
-                        toast(app,captureComplete?(online(app)?"Saved. Writing it up.":"Saved on this phone. I'll write it up when you're online."):"The recording was interrupted. Surviving source audio is saved.");
+                        toast(app,captureComplete?(Vault.get(app).isEmpty()?"Audio saved. Add a provider key to transcribe.":online(app)?"Saved. Writing it up.":"Saved on this phone. I'll write it up when you're online."):"The recording was interrupted. Surviving source audio is saved.");
                     } finally { NoteRecordingService.completed(app,captureId); }
                     writeUp(app,captureId);
                 }
@@ -364,17 +463,18 @@ final class Notes {
         if(!timing){
             liveDigits=null;liveMeter=null;shownFace="";
             if(beat!=null){beat.cancel();beat=null;}
-            TextView label=Daybook.text(activity,busy?"Saving…":"Record",16,Daybook.actionInk(activity),true);
+            TextView label=Daybook.text(activity,(busy||NoteRecordingService.busy())?"Saving…":"Record",16,Daybook.actionInk(activity),true);
             label.setGravity(android.view.Gravity.CENTER);
             label.setMinHeight(Ui.dp(activity,32));
+            VocadingIcons.attach(label,(busy||NoteRecordingService.busy())?"saving":held?"disabled":activity.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED?"mic-blocked":"ready",0);
             pill.addView(label);
             pill.setOnClickListener(v->{Daybook.feedback(v);record(activity,refresh);});
-            pill.setContentDescription(busy?"Saving":"Record");
+            pill.setContentDescription((busy||NoteRecordingService.busy())?"Saving":"Record");pill.setEnabled(!busy&&!NoteRecordingService.busy()&&!held);
             return pill;
         }
-        TextView title=Daybook.text(activity,"Recording",12,Daybook.actionInk(activity),true);
+        TextView title=Daybook.text(activity,VoiceTake.notePaused()?"Paused":"Recording",12,Daybook.actionInk(activity),true);
         title.setGravity(android.view.Gravity.CENTER);
-        pill.addView(title);
+        VocadingIcons.attach(title,VoiceTake.notePaused()?"pause":"recording",0);pill.addView(title);
         LinearLayout row=Ui.row(activity);row.setGravity(android.view.Gravity.CENTER);
         android.view.View dot=new android.view.View(activity);
         android.graphics.drawable.GradientDrawable mark=new android.graphics.drawable.GradientDrawable();
@@ -386,7 +486,7 @@ final class Notes {
         row.addView(dot,dp);
         if(beat!=null)beat.cancel();
         beat=android.animation.ObjectAnimator.ofFloat(dot,android.view.View.ALPHA,1f,0.25f);
-        beat.setDuration(700);beat.setRepeatMode(android.animation.ValueAnimator.REVERSE);beat.setRepeatCount(android.animation.ValueAnimator.INFINITE);beat.start();
+        beat.setDuration(700);beat.setRepeatMode(android.animation.ValueAnimator.REVERSE);beat.setRepeatCount(android.animation.ValueAnimator.INFINITE);if(!VoiceTake.notePaused())beat.start();
         liveDigits=Daybook.text(activity,face(VoiceTake.elapsed()),22,Daybook.actionInk(activity),true);
         liveDigits.setTypeface(android.graphics.Typeface.MONOSPACE,android.graphics.Typeface.BOLD);
         liveDigits.setGravity(android.view.Gravity.CENTER);
@@ -396,8 +496,11 @@ final class Notes {
         Ui.space(pill,6);
         liveMeter=new Wave(activity);liveMeter.tone(Daybook.actionInk(activity));liveMeter.show(VoiceTake.liveBars(24),1f);
         pill.addView(liveMeter,new LinearLayout.LayoutParams(Ui.dp(activity,148),Ui.dp(activity,28)));
-        pill.setOnClickListener(v->{Daybook.feedback(v);record(activity,refresh);});
-        pill.setContentDescription("Finish recording");
+        LinearLayout controls=Ui.row(activity);controls.setGravity(android.view.Gravity.CENTER);
+        Button pause=Daybook.button(activity,VoiceTake.notePaused()?"Resume":"Pause",false,v->{Daybook.feedback(v);if(NoteRecordingService.togglePause(activity,liveId,Notes::recordingChanged))v.setEnabled(false);});
+        pause.setEnabled(!VoiceTake.pauseChanging());controls.addView(pause,new LinearLayout.LayoutParams(Ui.dp(activity,112),Ui.dp(activity,48)));
+        Button finish=Daybook.button(activity,"Finish",false,v->{Daybook.feedback(v);record(activity,refresh);});controls.addView(finish,new LinearLayout.LayoutParams(Ui.dp(activity,112),Ui.dp(activity,48)));pill.addView(controls,new LinearLayout.LayoutParams(-2,-2));
+        pill.setContentDescription(VoiceTake.notePaused()?"Recording paused":"Recording in progress");
         armTick();
         return pill;
     }
@@ -476,33 +579,49 @@ final class Notes {
     }
 
     private static void confirmDelete(Activity activity,JSONObject note,Runnable refresh) {
-        new android.app.AlertDialog.Builder(activity).setTitle("Delete this recording?").setMessage("The audio and the words are removed from this phone.").setNegativeButton("Keep",null).setPositiveButton("Delete",(d,w)->{remove(activity,note.optLong("id"));back();refresh.run();}).show();
+        if(note.optBoolean("recording")){toast(activity,"Finish recording before deleting.");return;}
+        new android.app.AlertDialog.Builder(activity).setTitle("Move to Recently deleted?").setMessage("Text and source audio are kept until you restore or permanently delete them.").setNegativeButton("Keep",null).setPositiveButton("Move",(d,w)->{if(trashSaved(activity,note.optLong("id"))){undoTrash=note.optLong("id");back();refresh.run();}else toast(activity,"Could not save deletion. The recording was kept.");}).show();
     }
 
     private static void togglePlay(Activity activity,JSONObject note,Runnable refresh) {
         long id=note.optLong("id");
+        if(VoiceTake.updateBusy()||LineWire.updateBusy()){toast(activity,"Finish recording before playing audio.");return;}
+        if(playing==id&&loading){paused=!paused;refresh.run();return;}
         if(playing==id&&player!=null){
-            try{if(paused){player.start();paused=false;PlayWatch.show(activity.getApplicationContext(),titleOf(note));armTick();}else{player.pause();paused=true;PlayWatch.hide();}refresh.run();return;}catch(Exception failed){stopPlayback();}
+            try{if(paused){player.start();paused=false;applySpeed();PlayWatch.show(activity.getApplicationContext(),titleOf(note));armTick();}else{player.pause();paused=true;PlayWatch.hide();}refresh.run();return;}catch(RuntimeException failed){stopPlayback();}
         }
         stopPlayback();List<File> files=filesOf(activity,note);
-        if(files.isEmpty()){Toast.makeText(activity,"The recording is missing.",Toast.LENGTH_SHORT).show();return;}
-        queue=files;queueSpans=new long[files.size()];totalDuration=0;
-        for(int i=0;i<files.size();i++){queueSpans[i]=Math.max(0,audioDuration(files.get(i)));totalDuration+=queueSpans[i];}
-        totalDuration=Math.max(1,totalDuration>0?totalDuration:note.optLong("duration"));queueAt=0;playedBefore=0;playing=id;paused=false;playQueue(activity,refresh,0);armTick();
-        if(playing==id)PlayWatch.show(activity.getApplicationContext(),titleOf(note));
+        if(files.isEmpty()){toast(activity,"The recording is missing.");return;}
+        final int generation=playbackGeneration;playing=id;paused=false;loading=true;queue=new ArrayList<>(files);refresh.run();
+        mediaWork.execute(()->{
+            long[] spans=new long[files.size()];long total=0;for(int i=0;i<files.size();i++){spans[i]=Math.max(0,audioDuration(files.get(i)));total+=spans[i];}
+            final long duration=total;
+            tick.post(()->{if(generation!=playbackGeneration||playing!=id)return;
+                if(duration<=0){stopPlayback();toast(activity,"The source audio could not be read.");poke();return;}
+                queueSpans=spans;totalDuration=duration;queueAt=0;playedBefore=0;playQueue(activity,refresh,0);armTick();
+            });
+        });
     }
     private static void playQueue(Activity activity,Runnable refresh,int seek) {
-        if(queue==null || queueAt>=queue.size()){stopPlayback();activity.runOnUiThread(refresh);return;}
+        if(queue==null || queueAt>=queue.size()){stopPlayback();poke();return;}
+        final int generation=playbackGeneration;loading=true;
         try {
             MediaPlayer next=new MediaPlayer();player=next;
-            next.setDataSource(queue.get(queueAt).getAbsolutePath());next.prepare();
-            int span=Math.max(0,next.getDuration());if(queueAt<queueSpans.length)queueSpans[queueAt]=span;
-            next.setOnCompletionListener(mp->{if(player!=mp)return;playedBefore+=span;try{mp.release();}catch(Exception ignored){}player=null;queueAt++;playQueue(activity,refresh,0);});
-            if(seek>0)next.seekTo(Math.min(seek,Math.max(0,span-1)));
-            if(!paused)next.start();activity.runOnUiThread(refresh);
-        }catch(Exception e){stopPlayback();Toast.makeText(activity,"Couldn't play that recording.",Toast.LENGTH_SHORT).show();}
+            next.setAudioAttributes(new android.media.AudioAttributes.Builder().setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH).setUsage(android.media.AudioAttributes.USAGE_MEDIA).build());
+            next.setDataSource(queue.get(queueAt).getAbsolutePath());
+            next.setOnPreparedListener(mp->{
+                if(player!=mp||generation!=playbackGeneration)return;loading=false;
+                int span=Math.max(0,mp.getDuration());if(queueAt<queueSpans.length)queueSpans[queueAt]=span;
+                if(seek>0)mp.seekTo(Math.min(seek,Math.max(0,span-1)));
+                applySpeed();if(!paused){mp.start();JSONObject current=find(activity,playing);PlayWatch.show(activity.getApplicationContext(),current==null?"Recording":titleOf(current));armTick();}poke();
+            });
+            next.setOnErrorListener((mp,what,extra)->{if(player==mp&&generation==playbackGeneration){stopPlayback();toast(activity,"Could not play this audio segment. Your source is kept.");poke();}return true;});
+            next.setOnCompletionListener(mp->{if(player!=mp||generation!=playbackGeneration)return;playedBefore+=queueAt<queueSpans.length?queueSpans[queueAt]:0;mp.release();player=null;queueAt++;playQueue(activity,refresh,0);});
+            next.prepareAsync();
+        }catch(Exception error){stopPlayback();toast(activity,"Couldn't play that recording.");poke();}
     }
-    private static void stopPlayback(){playing=-1;paused=false;queueSpans=new long[0];if(player!=null){try{player.stop();}catch(Exception ignored){}try{player.release();}catch(Exception ignored){}player=null;}PlayWatch.hide();}
+    private static void applySpeed(){if(player==null||loading||paused)return;try{player.setPlaybackParams(new android.media.PlaybackParams().setSpeed(playbackSpeed).setPitch(1f));}catch(RuntimeException unavailable){Activity visible=screen.get();if(visible!=null)toast(visible,"This audio does not support that speed.");}}
+    private static void stopPlayback(){playbackGeneration++;playing=-1;paused=false;loading=false;seeking=false;playSeek=null;queueSpans=new long[0];queue=new ArrayList<>();totalDuration=0;playedBefore=0;if(player!=null){try{player.release();}catch(Exception ignored){}player=null;}PlayWatch.hide();}
     static void stopFromNotice(){stopPlayback();poke();}
 
     private static void touch(Activity activity,JSONObject note,Runnable refresh) {
@@ -543,6 +662,7 @@ final class Notes {
     }
     static String name(String code){for(int i=0;i<CODES.length;i++)if(CODES[i].equals(code))return NAMES[i];return code==null||code.isEmpty()?"Auto":code;}
     private static String titleOf(JSONObject note){
+        if(!note.optString("title").trim().isEmpty())return note.optString("title").trim();
         if(note.optBoolean("thought")){String saved=note.optString("title","").trim();return saved.isEmpty()?QuickThoughtPolicy.title(thoughtBody(note),"Quick thought"):saved;}
         if(note.optBoolean("call") && note.optString("text","").isEmpty() && note.optString("summary","").isEmpty()){String who=note.optString("who","");return who.isEmpty()?"Phone call":who;}
         String summary=note.optString("summary","").replace('\n',' ').trim();
@@ -557,7 +677,7 @@ final class Notes {
         String translation=note.optString("translation","").replace('\n',' ').trim();
         if(!summary.isEmpty() && !text.isEmpty())return text;
         if(!translation.isEmpty())return translation;
-        if(note.optBoolean("pending"))return "Writes the summary and the full note when you're online.";
+        if(note.optBoolean("pending"))return "Transcription pending · open for details.";
         return "";
     }
     private static String when(JSONObject note){
@@ -979,6 +1099,7 @@ final class Notes {
         synchronized(Store.class){try{JSONObject current=find(context,id);if(current!=null)updateCaptured(context,current,item->item.put("retry_after",0).put("retry_count",0));}catch(Exception ignored){}}
     }
     private static boolean noteDeleted(Context context,long id){
+        JSONObject existing=find(context,id);if(existing!=null&&existing.optBoolean("trashed"))return true;
         if(thoughtDeleted(context,id))return true;
         try{JSONArray ids=new JSONArray(Store.get(context,"note_deletions","[]"));for(int i=0;i<ids.length();i++)if(ids.optLong(i)==id)return true;}catch(Exception ignored){}return false;
     }
@@ -1309,24 +1430,25 @@ final class Notes {
                 if(liveWave!=null)liveWave.show(VoiceTake.liveBars(48),1f);
                 again=true;
             }
-            if(playing>=0 && player!=null && !paused){
+            if(playing>=0 && player!=null && !paused && !loading){
                 float p=totalDuration<=0?0:Math.min(1f,position()/(float)totalDuration);
                 if(playWave!=null)playWave.show(null,p);
-                if(playTime!=null)playTime.setText(clock(position())+" / "+clock(totalDuration));
+                if(!seeking){if(playTime!=null)playTime.setText(clock(position())+" / "+clock(totalDuration));if(playSeek!=null)playSeek.setProgress(totalDuration<=0?0:(int)(1000*position()/totalDuration));}
                 again=true;
             }
             if(again)tick.postDelayed(this,200);
         }
     };
     private static void armTick(){tick.removeCallbacks(pulse);tick.post(pulse);}
-    private static long position(){long at=playedBefore;try{if(player!=null)at+=player.getCurrentPosition();}catch(Exception ignored){}return at;}
-    private static void nudge(int delta){
-        if(player==null||queue.isEmpty())return;Activity activity=screen.get();if(activity==null||activity.isDestroyed())return;
+    private static long position(){long at=playedBefore;try{if(player!=null&&!loading)at+=player.getCurrentPosition();}catch(Exception ignored){}return at;}
+    private static void nudge(int delta){seekTo(position()+delta);}
+    private static void seekTo(long target){
+        if(player==null||loading||queue.isEmpty())return;Activity activity=screen.get();if(activity==null||activity.isDestroyed())return;
         try{
-            PlaybackPosition at=PlaybackPosition.locate(queueSpans,position()+delta);if(at.index==queueAt){player.seekTo((int)at.offset);return;}
-            MediaPlayer old=player;player=null;try{old.stop();}catch(Exception ignored){}try{old.release();}catch(Exception ignored){}
-            queueAt=at.index;playedBefore=at.before;playQueue(activity,onChange,(int)at.offset);if(!paused)armTick();
-        }catch(Exception ignored){}
+            PlaybackPosition at=PlaybackPosition.locate(queueSpans,Math.max(0,Math.min(Math.max(0,totalDuration-1),target)));
+            if(at.index==queueAt){player.seekTo((int)at.offset);return;}
+            MediaPlayer old=player;player=null;old.release();queueAt=at.index;playedBefore=at.before;playQueue(activity,onChange,(int)at.offset);if(!paused)armTick();
+        }catch(RuntimeException error){toast(activity,"Could not seek in this recording.");}
     }
 
     static final class Wave extends android.view.View {

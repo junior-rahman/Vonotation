@@ -67,7 +67,7 @@ final class Daybook {
     }
     static Button button(Context c,String label,boolean primary,View.OnClickListener click) {
         Button b=new Button(c);b.setText(label);b.setAllCaps(false);b.setTextSize(14);b.setTextColor(primary?actionInk(c):accent(c));b.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));
-        b.setBackground(ripple(c,primary?action(c):surface(c),12));b.setMinimumHeight(Ui.dp(c,44));b.setMinHeight(Ui.dp(c,44));b.setPadding(Ui.dp(c,12),Ui.dp(c,8),Ui.dp(c,12),Ui.dp(c,8));b.setFocusableInTouchMode(false);b.setOnClickListener(v->{feedback(v);click.onClick(v);});return b;
+        b.setBackground(ripple(c,primary?action(c):surface(c),12));b.setMinimumHeight(Ui.dp(c,44));b.setMinHeight(Ui.dp(c,44));b.setPadding(Ui.dp(c,12),Ui.dp(c,8),Ui.dp(c,12),Ui.dp(c,8));b.setFocusableInTouchMode(false);if(AppProduct.isNotes())VocadingIcons.label(b,label,primary?actionInk(c):accent(c));b.setOnClickListener(v->{feedback(v);click.onClick(v);});return b;
     }
     /** One round action, meant to float over a scrolling card. */
     static void pill(Button b,boolean primary) {
@@ -111,16 +111,15 @@ final class Daybook {
         private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);
         Mark(Context c) { super(c);paint.setColor(brand(c));setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO); }
         @Override protected void onDraw(Canvas canvas) {
-            if(!AppProduct.isNotes()){float unit=Math.min(getWidth(),getHeight())/48f;canvas.save();canvas.translate((getWidth()-48*unit)/2,(getHeight()-48*unit)/2);canvas.scale(unit,unit);VoitationGlyph.wave(canvas,paint,false);canvas.restore();return;}
-            float unit=Math.min(getWidth()/30f,getHeight()/31f);canvas.save();canvas.translate((getWidth()-30*unit)/2,(getHeight()-31*unit)/2);canvas.scale(unit,unit);canvas.rotate(13,15,15);
-            canvas.drawRoundRect(2,10,6,21,2,2,paint);canvas.drawRoundRect(9,4,13,27,2,2,paint);canvas.drawRoundRect(16,6,20,24,2,2,paint);canvas.drawRoundRect(23,11,27,19,2,2,paint);
-            canvas.rotate(-45,19,28);canvas.drawRoundRect(15,26,24,30,2,2,paint);canvas.restore();
+            if(AppProduct.isNotes()){Drawable logo=VocadingIcons.icon(getContext(),"mark",0,30);if(logo!=null){logo.setBounds(0,0,getWidth(),getHeight());logo.draw(canvas);}return;}
+            float unit=Math.min(getWidth(),getHeight())/48f;canvas.save();canvas.translate((getWidth()-48*unit)/2,(getHeight()-48*unit)/2);canvas.scale(unit,unit);VoitationGlyph.wave(canvas,paint,false);canvas.restore();
         }
     }
     static final class SettingsIcon extends View {
         private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);
         SettingsIcon(Context c) { super(c);paint.setColor(accent(c));paint.setStyle(Paint.Style.STROKE);paint.setStrokeCap(Paint.Cap.ROUND); }
         @Override protected void onDraw(Canvas canvas) {
+            if(AppProduct.isNotes()){Drawable icon=VocadingIcons.icon(getContext(),"settings",accent(getContext()),24);if(icon!=null){int size=Ui.dp(getContext(),24),left=(getWidth()-size)/2,top=(getHeight()-size)/2;icon.setBounds(left,top,left+size,top+size);icon.draw(canvas);}return;}
             float size=Ui.dp(getContext(),19),left=(getWidth()-size)/2,top=(getHeight()-size)/2,unit=size/24;
             canvas.save();canvas.translate(left,top);canvas.scale(unit,unit);paint.setStrokeWidth(1.8f);
             canvas.drawLine(3,5,7,5,paint);canvas.drawLine(13,5,21,5,paint);canvas.drawCircle(10,5,2.5f,paint);
