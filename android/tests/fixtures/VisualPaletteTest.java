@@ -102,23 +102,25 @@ public final class VisualPaletteTest extends Instrumentation {
                     require(findDescription("Back to Home") != null, "One physical Settings tap did not open production Settings");
                     require(findText("Settings") != null, "Production Settings heading is absent");
                     capture("settings");
-                    if(!AppProduct.isNotes())for(String section:new String[]{"size","cleanup","dictionary","permissions"}){
+                    if(!AppProduct.isNotes())for(String[] panel:new String[][]{{"size","Bubble size"},{"cleanup","Cleanup options"},{"dictionary","Personal dictionary"},{"permissions","Permissions"}}){
+                        final String section=panel[0];
                         final java.lang.reflect.Method open=MainActivity.class.getDeclaredMethod("openPanel",String.class);open.setAccessible(true);
                         final Throwable[] failure=new Throwable[1];
                         runOnMainSync(()->{try{open.invoke(activity,section);}catch(Throwable error){failure[0]=error;}});
                         require(failure[0]==null,"Could not open production Settings panel: "+section);
-                        waitForIdleSync();capture("settings-"+section);
+                        waitForIdleSync();require(findText(panel[1])!=null,"Missing production Settings heading: "+panel[1]);capture("settings-"+section);
                     }
                 }
                 finishActivity();
             }
             require(requests.get() == 0, "Unexpected external request attempted");
             result.putInt("executed_checks", checks);
-            result.putInt("native_screenshots", pages.length+1);
+            int screenshotCount=pages.length+1+(AppProduct.isNotes()?0:4);
+            result.putInt("native_screenshots", screenshotCount);
             result.putString("product", requestedProduct);
             result.putString("appearance", appearance);
             result.putString("capture_directory", captureDirectory().getAbsolutePath());
-            result.putString("result", "PASS: " + (pages.length+1) + " actual production native screens for " + requestedProduct + " in " + appearance + "; manifest/card separation and retained legacy data; synthetic QA data; saved-state card selection; one physical Settings tap; no provider calls. Split and visual fixture only.");
+            result.putString("result", "PASS: " + screenshotCount + " actual production native screens for " + requestedProduct + " in " + appearance + "; manifest/card separation and retained legacy data; synthetic QA data; saved-state card selection; one physical Settings tap; no provider calls. Split and visual fixture only.");
         } catch (Throwable failure) {
             result.putString("failure", android.util.Log.getStackTraceString(failure));
             result.putInt("executed_checks", checks);
@@ -325,6 +327,9 @@ public final class VisualPaletteTest extends Instrumentation {
     }
     private void capture(String name) throws Exception {
         awaitFocusedWindow();
+        // Idle UI work does not imply that SurfaceFlinger has presented the new frame.
+        // Allow the existing 160ms panel motion and compositor to settle before capture.
+        SystemClock.sleep(400);waitForIdleSync();
         Bitmap screen = getUiAutomation().takeScreenshot(); require(screen != null, "Native screenshot unavailable");
         try (FileOutputStream output = new FileOutputStream(new File(captureDirectory(), name + ".png"))) { require(screen.compress(Bitmap.CompressFormat.PNG, 100, output), "Native screenshot could not be exported"); }
         finally { screen.recycle(); }

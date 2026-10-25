@@ -55,7 +55,8 @@ final class Daybook {
     }
     static GradientDrawable shape(Context c,int color,float radius) {
         GradientDrawable shape=Ui.shape(color,radius,c);
-        if(Color.alpha(color)!=0) shape.setStroke(Ui.dp(c,0.5f),AppProduct.isNotes()?color(c,0x70cbd5ca,0x803f5748):line(c));
+        // Retain the existing edge opacity; opaque edges also change Android's elevation shadow.
+        if(Color.alpha(color)!=0) shape.setStroke(Ui.dp(c,0.5f),opacity(line(c),dark(c)?0x80:0x70));
         return shape;
     }
     static Drawable ripple(Context c,int color,float radius) {
