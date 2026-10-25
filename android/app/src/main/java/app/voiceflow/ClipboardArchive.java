@@ -19,17 +19,17 @@ final class ClipboardArchive extends SQLiteOpenHelper {
         return instance;
     }
     // Named databases let the isolated native fixture avoid the user's real clipboard journal.
-    ClipboardArchive(Context context,String name){super(context,name,null,1);}
+    ClipboardArchive(Context context,String name){super(context,name,null,2);}
     @Override public void onConfigure(SQLiteDatabase db){db.setForeignKeyConstraintsEnabled(true);}
     @Override public void onCreate(SQLiteDatabase db){
-        db.execSQL("CREATE TABLE copies (_id INTEGER PRIMARY KEY AUTOINCREMENT, copied_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, preview TEXT NOT NULL, legacy INTEGER NOT NULL DEFAULT 0)");
+        db.execSQL("CREATE TABLE copies (_id INTEGER PRIMARY KEY AUTOINCREMENT, copied_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, preview TEXT NOT NULL, legacy INTEGER NOT NULL DEFAULT 0, deleted_at INTEGER NOT NULL DEFAULT 0)");
         db.execSQL("CREATE INDEX copies_order ON copies(copied_at DESC,_id DESC)");
         db.execSQL("CREATE INDEX copies_expiry ON copies(expires_at)");
         // Small chunks also support full copies larger than Android's CursorWindow row limit.
         db.execSQL("CREATE TABLE copy_chunks (copy_id INTEGER NOT NULL REFERENCES copies(_id) ON DELETE CASCADE, part INTEGER NOT NULL, text TEXT NOT NULL, PRIMARY KEY(copy_id,part))");
         db.execSQL("CREATE TABLE clipboard_meta (name TEXT PRIMARY KEY,value TEXT NOT NULL)");
     }
-    @Override public void onUpgrade(SQLiteDatabase db,int oldVersion,int newVersion){throw new IllegalStateException("Unsupported clipboard archive version");}
+    @Override public void onUpgrade(SQLiteDatabase db,int oldVersion,int newVersion){if(oldVersion==1&&newVersion==2){db.execSQL("ALTER TABLE copies ADD COLUMN deleted_at INTEGER NOT NULL DEFAULT 0");return;}throw new IllegalStateException("Unsupported clipboard archive version");}
     static final class Item {
         final long id,copiedAt,expiresAt;final String preview;final boolean legacy;
         Item(long id,long copiedAt,long expiresAt,String preview,boolean legacy){this.id=id;this.copiedAt=copiedAt;this.expiresAt=expiresAt;this.preview=preview;this.legacy=legacy;}
@@ -46,20 +46,20 @@ final class ClipboardArchive extends SQLiteOpenHelper {
         long oldest=now-ClipboardRetention.RETENTION_MILLIS,normalEnd=boundary.getTimeInMillis(),normalStart=normalEnd;
         for(int i=0;i<32;i++){long upper=boundary.getTimeInMillis();boundary.add(java.util.Calendar.DAY_OF_MONTH,-1);long lower=boundary.getTimeInMillis();
             normalStart=lower;
-            try(Cursor cursor=db.rawQuery("SELECT MAX(copied_at),COUNT(*) FROM copies WHERE legacy=0 AND copied_at>=? AND copied_at<? AND expires_at>?",new String[]{Long.toString(lower),Long.toString(upper),Long.toString(now)})){
+            try(Cursor cursor=db.rawQuery("SELECT MAX(copied_at),COUNT(*) FROM copies WHERE deleted_at=0 AND legacy=0 AND copied_at>=? AND copied_at<? AND expires_at>?",new String[]{Long.toString(lower),Long.toString(upper),Long.toString(now)})){
                 if(cursor.moveToFirst()&&cursor.getLong(1)>0){long time=cursor.getLong(0);Day day=new Day(ClipboardRetention.key(time,zone),time,false);day.count=cursor.getInt(1);days.add(day);}
             }
             if(lower<=oldest)break;
         }
         // A clock rollback must not hide copies that still have a valid fixed expiry.
-        try(Cursor cursor=db.rawQuery("SELECT MAX(copied_at),COUNT(*) FROM copies WHERE legacy=0 AND (copied_at<? OR copied_at>=?) AND expires_at>?",new String[]{Long.toString(normalStart),Long.toString(normalEnd),Long.toString(now)})){
+        try(Cursor cursor=db.rawQuery("SELECT MAX(copied_at),COUNT(*) FROM copies WHERE deleted_at=0 AND legacy=0 AND (copied_at<? OR copied_at>=?) AND expires_at>?",new String[]{Long.toString(normalStart),Long.toString(normalEnd),Long.toString(now)})){
             if(cursor.moveToFirst()&&cursor.getLong(1)>0){Day day=new Day("other_dates",cursor.getLong(0),false);day.count=cursor.getInt(1);day.rangeStart=normalStart;day.rangeEnd=normalEnd;days.add(0,day);}
         }
-        try(Cursor cursor=db.rawQuery("SELECT COUNT(*) FROM copies WHERE legacy=1 AND expires_at>?",new String[]{Long.toString(now)})){if(cursor.moveToFirst()&&cursor.getLong(0)>0){Day day=new Day("legacy",0,true);day.count=cursor.getInt(0);days.add(day);}}
+        try(Cursor cursor=db.rawQuery("SELECT COUNT(*) FROM copies WHERE deleted_at=0 AND legacy=1 AND expires_at>?",new String[]{Long.toString(now)})){if(cursor.moveToFirst()&&cursor.getLong(0)>0){Day day=new Day("legacy",0,true);day.count=cursor.getInt(0);days.add(day);}}
         return days;
     }
     synchronized List<Item> dayPage(Day day,java.util.TimeZone zone,long beforeTime,long beforeId,int limit,long now){
-        SQLiteDatabase db=getWritableDatabase();String where="expires_at>?";ArrayList<String> args=new ArrayList<>();args.add(Long.toString(now));
+        SQLiteDatabase db=getWritableDatabase();String where="deleted_at=0 AND expires_at>?";ArrayList<String> args=new ArrayList<>();args.add(Long.toString(now));
         if(day.legacy)where+=" AND legacy=1";
         else if("other_dates".equals(day.key)){where+=" AND legacy=0 AND (copied_at<? OR copied_at>=?)";args.add(Long.toString(day.rangeStart));args.add(Long.toString(day.rangeEnd));}
         else{java.util.Calendar start=java.util.Calendar.getInstance(zone);start.setTimeInMillis(day.time);start.set(java.util.Calendar.HOUR_OF_DAY,0);start.set(java.util.Calendar.MINUTE,0);start.set(java.util.Calendar.SECOND,0);start.set(java.util.Calendar.MILLISECOND,0);long lower=start.getTimeInMillis();start.add(java.util.Calendar.DAY_OF_MONTH,1);where+=" AND legacy=0 AND copied_at>=? AND copied_at<?";args.add(Long.toString(lower));args.add(Long.toString(start.getTimeInMillis()));}
@@ -114,7 +114,7 @@ final class ClipboardArchive extends SQLiteOpenHelper {
     }
     synchronized List<Item> page(long beforeTime,long beforeId,int limit,long now){
         SQLiteDatabase db=getWritableDatabase();
-        String where="expires_at>?";ArrayList<String> args=new ArrayList<>();args.add(Long.toString(now));
+        String where="deleted_at=0 AND expires_at>?";ArrayList<String> args=new ArrayList<>();args.add(Long.toString(now));
         if(beforeId>0){where+=" AND (copied_at<? OR (copied_at=? AND _id<?))";args.add(Long.toString(beforeTime));args.add(Long.toString(beforeTime));args.add(Long.toString(beforeId));}
         ArrayList<Item> items=new ArrayList<>();
         try(Cursor cursor=db.query("copies",new String[]{"_id","copied_at","expires_at","preview","legacy"},where,args.toArray(new String[0]),null,null,"copied_at DESC,_id DESC",Integer.toString(Math.max(1,limit)))){
@@ -124,17 +124,19 @@ final class ClipboardArchive extends SQLiteOpenHelper {
     }
     synchronized String text(long id,long now){
         SQLiteDatabase db=getWritableDatabase();
-        try(Cursor row=db.rawQuery("SELECT 1 FROM copies WHERE _id=? AND expires_at>?",new String[]{Long.toString(id),Long.toString(now)})){if(!row.moveToFirst())return null;}
+        try(Cursor row=db.rawQuery("SELECT 1 FROM copies WHERE deleted_at=0 AND _id=? AND expires_at>?",new String[]{Long.toString(id),Long.toString(now)})){if(!row.moveToFirst())return null;}
         StringBuilder text=new StringBuilder();
         try(Cursor cursor=db.query("copy_chunks",new String[]{"text"},"copy_id=?",new String[]{Long.toString(id)},null,null,"part ASC")){while(cursor.moveToNext())text.append(cursor.getString(0));}
         return text.toString();
     }
-    synchronized boolean remove(long id){return getWritableDatabase().delete("copies","_id=?",new String[]{Long.toString(id)})>0;}
+    synchronized boolean remove(long id){ContentValues value=new ContentValues();value.put("deleted_at",System.currentTimeMillis());return getWritableDatabase().update("copies",value,"_id=? AND deleted_at=0",new String[]{Long.toString(id)})>0;}
+    synchronized boolean undo(long id,long now){ContentValues value=new ContentValues();value.put("deleted_at",0);return getWritableDatabase().update("copies",value,"_id=? AND deleted_at>0 AND deleted_at>? AND expires_at>?",new String[]{Long.toString(id),Long.toString(now-DeletionUndo.KEEP),Long.toString(now)})>0;}
+    synchronized List<Item> deleted(long now){ArrayList<Item> result=new ArrayList<>();try(Cursor cursor=getReadableDatabase().query("copies",new String[]{"_id","copied_at","expires_at","preview","legacy"},"deleted_at>0 AND deleted_at>? AND expires_at>?",new String[]{Long.toString(now-DeletionUndo.KEEP),Long.toString(now)},null,null,"deleted_at DESC")){while(cursor.moveToNext())result.add(new Item(cursor.getLong(0),cursor.getLong(1),cursor.getLong(2),cursor.getString(3),cursor.getInt(4)!=0));}return result;}
     synchronized int prune(long now){return prune(getWritableDatabase(),now);}
-    synchronized long nextExpiry(){try(Cursor cursor=getReadableDatabase().rawQuery("SELECT MIN(expires_at) FROM copies",null)){return cursor.moveToFirst()&&!cursor.isNull(0)?cursor.getLong(0):0;}}
-    synchronized long nextVisibleExpiry(long now){try(Cursor cursor=getReadableDatabase().rawQuery("SELECT MIN(expires_at) FROM copies WHERE expires_at>?",new String[]{Long.toString(now)})){return cursor.moveToFirst()&&!cursor.isNull(0)?cursor.getLong(0):0;}}
-    synchronized long count(long now){try(Cursor cursor=getReadableDatabase().rawQuery("SELECT COUNT(*) FROM copies WHERE expires_at>?",new String[]{Long.toString(now)})){return cursor.moveToFirst()?cursor.getLong(0):0;}}
-    private static int prune(SQLiteDatabase db,long now){return db.delete("copies","expires_at<=?",new String[]{Long.toString(now)});}
+    synchronized long nextExpiry(){try(Cursor cursor=getReadableDatabase().rawQuery("SELECT MIN(CASE WHEN deleted_at>0 THEN MIN(expires_at,deleted_at+86400000) ELSE expires_at END) FROM copies",null)){return cursor.moveToFirst()&&!cursor.isNull(0)?cursor.getLong(0):0;}}
+    synchronized long nextVisibleExpiry(long now){try(Cursor cursor=getReadableDatabase().rawQuery("SELECT MIN(expires_at) FROM copies WHERE deleted_at=0 AND expires_at>?",new String[]{Long.toString(now)})){return cursor.moveToFirst()&&!cursor.isNull(0)?cursor.getLong(0):0;}}
+    synchronized long count(long now){try(Cursor cursor=getReadableDatabase().rawQuery("SELECT COUNT(*) FROM copies WHERE deleted_at=0 AND expires_at>?",new String[]{Long.toString(now)})){return cursor.moveToFirst()?cursor.getLong(0):0;}}
+    private static int prune(SQLiteDatabase db,long now){return db.delete("copies","expires_at<=? OR (deleted_at>0 AND deleted_at<=?)",new String[]{Long.toString(now),Long.toString(now-DeletionUndo.KEEP)});}
     private static long expires(long timestamp){return timestamp>Long.MAX_VALUE-ClipboardRetention.RETENTION_MILLIS?Long.MAX_VALUE:timestamp+ClipboardRetention.RETENTION_MILLIS;}
     private static long insert(SQLiteDatabase db,String text,long timestamp,long expiry,boolean legacy){
         ContentValues entry=new ContentValues();entry.put("copied_at",timestamp);entry.put("expires_at",expiry);entry.put("preview",ClipboardText.preview(text));entry.put("legacy",legacy?1:0);

@@ -61,7 +61,7 @@ public final class MainActivity extends Activity {
     private int firstCard(){return visibleCards()[0];}
     private void refreshClipboard(){int index=clipboardIndex();if(AppProduct.isNotes()||deckPages==null||deckPages[index]==null)return;LinearLayout page=deckPages[index];int held=deckScrolls[index].getScrollY();page.removeAllViews();clipboardCard.show(this,page,this::refreshClipboard);deckScrolls[index].post(()->deckScrolls[index].scrollTo(0,held));}
     @Override public void onCreate(Bundle state) {
-        super.onCreate(state);part=firstCard();Store.migrate(this);DriveBackup.pauseScheduling(this);if(!AppProduct.isNotes())ClipList.watch(this);if(!CaptureActivity.visible)Store.removeStaleAudio(this);
+        super.onCreate(state);if(state!=null)retryExport=state.getString("retry_export");part=firstCard();Store.migrate(this);DriveBackup.pauseScheduling(this);if(!AppProduct.isNotes())ClipList.watch(this);if(!CaptureActivity.visible)Store.removeStaleAudio(this);
         if(state!=null){part=Math.max(0,Math.min(5,state.getInt("daybook_part",0)));settingsVisible=state.getBoolean("settings_visible",false);backupReturnFocus=state.getBoolean("backup_return_focus",false);panel=state.getString("daybook_panel","");origin=state.getString("daybook_origin","");homeTab=state.getString("home_tab","days");historyScrollY=Math.max(0,state.getInt("history_scroll_y",0));settingsScrollY=Math.max(0,state.getInt("settings_scroll_y",0));DraftState.restore(this,state);restoreSet(state,"days_open",expandedDays);restoreSet(state,"days_closed",collapsedDays);restoreSet(state,"entries_open",expandedEntries);heardDraft=state.getString("dictionary_heard","");preferredDraft=state.getString("dictionary_preferred","");}
         clipboardCard.restore(state);
         if(state!=null&&state.getBoolean("clipboard_selected",false))part=clipboardIndex();
@@ -96,11 +96,11 @@ public final class MainActivity extends Activity {
         requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},21);
     }
     private void restoreSet(Bundle state,String key,java.util.Set<String> target){java.util.ArrayList<String> saved=state.getStringArrayList(key);if(saved!=null)target.addAll(saved);}
-    @Override protected void onResume(){super.onResume();foreground=true;DriveBackup.pauseScheduling(this);if(!AppProduct.isNotes()){ClipList.observe(clipboardChanged);ClipboardExpiryJob.schedule(this);Notes.resumeThoughtSummaries(this);}Notes.catchUp(this);if(AppProduct.isNotes())LineWatch.start(this,callConnectionChanged);maybeRequestNotifications();boolean focusBackup=backupReturnFocus;backupReturnFocus=false;render();if(!AppProduct.isNotes())AppUpdate.resume(this);if(focusBackup&&panel.isEmpty()){View row=settingRows.get("backup");if(row!=null)row.post(row::requestFocusFromTouch);}}
+    @Override protected void onResume(){super.onResume();foreground=true;RetryCoordinator.observe(retryChanged);DriveBackup.pauseScheduling(this);if(!AppProduct.isNotes()){ClipList.observe(clipboardChanged);ClipboardExpiryJob.schedule(this);Notes.resumeThoughtSummaries(this);}Notes.catchUp(this);if(AppProduct.isNotes())LineWatch.start(this,callConnectionChanged);maybeRequestNotifications();boolean focusBackup=backupReturnFocus;backupReturnFocus=false;render();if(!AppProduct.isNotes())AppUpdate.resume(this);if(focusBackup&&panel.isEmpty()){View row=settingRows.get("backup");if(row!=null)row.post(row::requestFocusFromTouch);}}
     @Override public void onWindowFocusChanged(boolean hasFocus){super.onWindowFocusChanged(hasFocus);if(hasFocus){if(!AppProduct.isNotes())ClipList.capture(this);if(settingsVisible&&panel.equals("permissions"))render();}}
-    @Override protected void onPause(){foreground=false;ClipList.forget(clipboardChanged);clipboardCard.stop();LineWatch.detach(callConnectionChanged);Notes.pauseThoughtSummaries();if(!AppProduct.isNotes())AppUpdate.pause(this);saveScrollPosition();rememberDictionaryDraft();stopSummaryWork();super.onPause();}
-    @Override protected void onDestroy(){foreground=false;ClipList.forget(clipboardChanged);clipboardCard.stop();LineWatch.detach(callConnectionChanged);Notes.pauseThoughtSummaries();if(retryDictation!=null){retryDictation.cancel();retryDictation=null;}Notes.stop();Translate.stop();scrollGeneration++;stopSummaryWork();summaryWorker.shutdownNow();if(chimeTrack!=null){try{chimeTrack.release();}catch(RuntimeException ignored){}chimeTrack=null;}super.onDestroy();}
-    @Override protected void onSaveInstanceState(Bundle state){clipboardCard.save(state);state.putBoolean("clipboard_selected",part==clipboardIndex());saveScrollPosition();rememberDictionaryDraft();state.putInt("history_scroll_y",historyScrollY);state.putInt("settings_scroll_y",settingsScrollY);state.putInt("daybook_part",part);state.putBoolean("settings_visible",settingsVisible);state.putBoolean("backup_return_focus",backupReturnFocus);state.putString("daybook_panel",panel);state.putString("daybook_origin",origin);state.putString("home_tab",homeTab);DraftState.save(this,state);state.putStringArrayList("days_open",new java.util.ArrayList<>(expandedDays));state.putStringArrayList("days_closed",new java.util.ArrayList<>(collapsedDays));state.putStringArrayList("entries_open",new java.util.ArrayList<>(expandedEntries));state.putString("dictionary_heard",heardDraft);state.putString("dictionary_preferred",preferredDraft);super.onSaveInstanceState(state);}
+    @Override protected void onPause(){foreground=false;RetryCoordinator.detach(retryChanged);ClipList.forget(clipboardChanged);clipboardCard.stop();LineWatch.detach(callConnectionChanged);Notes.pauseThoughtSummaries();if(!AppProduct.isNotes())AppUpdate.pause(this);saveScrollPosition();rememberDictionaryDraft();stopSummaryWork();super.onPause();}
+    @Override protected void onDestroy(){foreground=false;RetryCoordinator.detach(retryChanged);ClipList.forget(clipboardChanged);clipboardCard.stop();LineWatch.detach(callConnectionChanged);Notes.pauseThoughtSummaries();Notes.stop();Translate.stop();scrollGeneration++;stopSummaryWork();summaryWorker.shutdownNow();if(chimeTrack!=null){try{chimeTrack.release();}catch(RuntimeException ignored){}chimeTrack=null;}super.onDestroy();}
+    @Override protected void onSaveInstanceState(Bundle state){state.putString("retry_export",retryExport);clipboardCard.save(state);state.putBoolean("clipboard_selected",part==clipboardIndex());saveScrollPosition();rememberDictionaryDraft();state.putInt("history_scroll_y",historyScrollY);state.putInt("settings_scroll_y",settingsScrollY);state.putInt("daybook_part",part);state.putBoolean("settings_visible",settingsVisible);state.putBoolean("backup_return_focus",backupReturnFocus);state.putString("daybook_panel",panel);state.putString("daybook_origin",origin);state.putString("home_tab",homeTab);DraftState.save(this,state);state.putStringArrayList("days_open",new java.util.ArrayList<>(expandedDays));state.putStringArrayList("days_closed",new java.util.ArrayList<>(collapsedDays));state.putStringArrayList("entries_open",new java.util.ArrayList<>(expandedEntries));state.putString("dictionary_heard",heardDraft);state.putString("dictionary_preferred",preferredDraft);super.onSaveInstanceState(state);}
     @Override public void onBackPressed(){if(!panel.isEmpty())backToSettings();else if(settingsVisible){settingsVisible=false;render();}else if(Notes.opened()){Notes.back();render();}else super.onBackPressed();}
     private void createShell() {
         root=Ui.column(this);root.setBackground(new Daybook.Backdrop(this));getWindow().setStatusBarColor(Daybook.paper(this));getWindow().setNavigationBarColor(Daybook.paper(this));
@@ -126,7 +126,7 @@ public final class MainActivity extends Activity {
         if(deckHome && deckReady && strip!=null && strip.getChildCount()>0){fillDeck();return;}
         saveScrollPosition();rememberDictionaryDraft();renderedScreen=screen();hasRendered=true;stopSummaryWork();dayCards.clear();settingRows.clear();heardField=null;preferredField=null;clipboardCard.stop();body.removeAllViews();header.removeAllViews();if(footer!=null)footer.removeAllViews();if(strip!=null)strip.removeAllViews();deckReady=false;deck=null;
         if(settingsVisible){((View)header.getParent()).setVisibility(View.VISIBLE);if(footer!=null)footer.setVisibility(View.GONE);TextView back=Daybook.text(this,"‹",30,Daybook.accent(this),false);back.setGravity(Gravity.CENTER);back.setBackground(Daybook.ripple(this,android.graphics.Color.TRANSPARENT,14));back.setContentDescription(panel.isEmpty()?"Back to Home":"Back to Settings");back.setTooltipText(back.getContentDescription());back.setOnClickListener(v->{Daybook.feedback(v);if(panel.isEmpty()){settingsVisible=false;render();}else backToSettings();});LinearLayout.LayoutParams bp=new LinearLayout.LayoutParams(Ui.dp(this,44),Ui.dp(this,44));bp.rightMargin=Ui.dp(this,6);header.addView(back,bp);header.addView(Daybook.text(this,panel.isEmpty()?"Settings":panelTitle(panel),24,Daybook.ink(this),true),new LinearLayout.LayoutParams(0,-2,1));}
-        else{((View)header.getParent()).setVisibility(View.GONE);footer.setVisibility(View.VISIBLE);Daybook.Mark mark=new Daybook.Mark(this);LinearLayout.LayoutParams mp=new LinearLayout.LayoutParams(Ui.dp(this,26),Ui.dp(this,27));mp.rightMargin=Ui.dp(this,8);footer.addView(mark,mp);footer.addView(Daybook.text(this,AppProduct.name(),18,Daybook.ink(this),true),new LinearLayout.LayoutParams(0,-2,1));Daybook.SettingsIcon gear=new Daybook.SettingsIcon(this);gear.setBackground(Daybook.ripple(this,Daybook.surface(this),14));gear.setContentDescription("Settings");gear.setTooltipText("Settings");gear.setOnClickListener(v->{Daybook.feedback(v);Notes.stop();Translate.stop();settingsVisible=true;panel="";render();Daybook.motion(body);});footer.addView(gear,new LinearLayout.LayoutParams(Ui.dp(this,44),Ui.dp(this,44)));}
+        else{((View)header.getParent()).setVisibility(View.GONE);footer.setVisibility(View.VISIBLE);Daybook.Mark mark=new Daybook.Mark(this);LinearLayout.LayoutParams mp=new LinearLayout.LayoutParams(Ui.dp(this,26),Ui.dp(this,27));mp.rightMargin=Ui.dp(this,8);footer.addView(mark,mp);footer.addView(Daybook.text(this,AppProduct.name(),18,Daybook.ink(this),true),new LinearLayout.LayoutParams(0,-2,1));if(!AppProduct.isNotes()){Button search=Daybook.button(this,"Search",false,v->startActivity(new Intent(this,SavedContentActivity.class)));footer.addView(search,new LinearLayout.LayoutParams(-2,-2));}Daybook.SettingsIcon gear=new Daybook.SettingsIcon(this);gear.setBackground(Daybook.ripple(this,Daybook.surface(this),14));gear.setContentDescription("Settings");gear.setTooltipText("Settings");gear.setOnClickListener(v->{Daybook.feedback(v);Notes.stop();Translate.stop();settingsVisible=true;panel="";render();Daybook.motion(body);});footer.addView(gear,new LinearLayout.LayoutParams(Ui.dp(this,44),Ui.dp(this,44)));}
         detail=!settingsVisible && Notes.opened();
         homeTab=detail && part==1?"calls":"days";
         deckHome=!settingsVisible && !detail;
@@ -247,7 +247,7 @@ public final class MainActivity extends Activity {
         LinearLayout detail=Ui.column(this);detail.setPadding(Ui.dp(this,67),0,0,Ui.dp(this,11));boolean changed=!entry.raw.equals(entry.text);if(changed){detail.addView(Daybook.text(this,"INSERTED",10,Daybook.accent(this),true));Ui.space(detail,3);}TextView full=Daybook.text(this,entry.text,17,Daybook.ink(this),false);full.setTextIsSelectable(true);detail.addView(full);
         if(changed){Ui.space(detail,10);detail.addView(Daybook.text(this,"HEARD (BEFORE CLEANUP)",10,Daybook.accent(this),true));Ui.space(detail,3);TextView heard=Daybook.text(this,entry.raw,15,Daybook.muted(this),false);heard.setTextIsSelectable(true);heard.setContentDescription("Heard before cleanup: "+entry.raw);detail.addView(heard);}
         else{Ui.space(detail,4);detail.addView(Daybook.text(this,"Same as heard · no cleanup changes",10,Daybook.muted(this),false));}
-        Ui.space(detail,8);LinearLayout actions=Ui.row(this);Button copy=Daybook.button(this,"Copy",false,v->Ui.copy(this,entry.text));copy.setContentDescription("Copy dictation "+entry.id);Button delete=Daybook.button(this,"Delete",false,v->{Store.delete(this,entry.id);expandedEntries.remove(key);render();});delete.setContentDescription("Delete dictation "+entry.id);LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(0,Ui.dp(this,44),1);cp.rightMargin=Ui.dp(this,8);actions.addView(copy,cp);actions.addView(delete,new LinearLayout.LayoutParams(0,Ui.dp(this,44),1));detail.addView(actions);boolean open=expandedEntries.contains(key);detail.setVisibility(open?View.VISIBLE:View.GONE);summary.setContentDescription((open?"Close":"Open")+" dictation "+entry.id);summary.setOnClickListener(v->{Daybook.feedback(v);boolean show=detail.getVisibility()!=View.VISIBLE;detail.setVisibility(show?View.VISIBLE:View.GONE);if(show){expandedEntries.add(key);Daybook.motion(detail);}else expandedEntries.remove(key);summary.setContentDescription((show?"Close":"Open")+" dictation "+entry.id);});item.addView(detail);timeline.addView(item);
+        Ui.space(detail,8);LinearLayout actions=Ui.row(this);Button copy=Daybook.button(this,"Copy",false,v->Ui.copy(this,entry.text));copy.setContentDescription("Copy dictation "+entry.id);Button delete=Daybook.button(this,"Delete",false,v->{if(DeletionUndo.delete(this,"dictation",entry.id)){expandedEntries.remove(key);render();DeletionUndo.offer(this,"dictation",entry.id,this::render);}else Toast.makeText(this,"Could not delete. Your text was kept.",Toast.LENGTH_SHORT).show();});delete.setContentDescription("Delete dictation "+entry.id);LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(0,Ui.dp(this,44),1);cp.rightMargin=Ui.dp(this,8);actions.addView(copy,cp);actions.addView(delete,new LinearLayout.LayoutParams(0,Ui.dp(this,44),1));detail.addView(actions);boolean open=expandedEntries.contains(key);detail.setVisibility(open?View.VISIBLE:View.GONE);summary.setContentDescription((open?"Close":"Open")+" dictation "+entry.id);summary.setOnClickListener(v->{Daybook.feedback(v);boolean show=detail.getVisibility()!=View.VISIBLE;detail.setVisibility(show?View.VISIBLE:View.GONE);if(show){expandedEntries.add(key);Daybook.motion(detail);}else expandedEntries.remove(key);summary.setContentDescription((show?"Close":"Open")+" dictation "+entry.id);});item.addView(detail);timeline.addView(item);
     }
     private final class DayCard{TextView summary,status;Button retry;}
     private java.util.List<HistoryDays.Day> historyDays(){java.util.List<HistoryDays.Entry> entries=new java.util.ArrayList<>();JSONArray all=Store.history(this);for(int i=0;i<all.length();i++){JSONObject item=all.optJSONObject(i);if(item!=null&&item.optLong("id")>0)entries.add(new HistoryDays.Entry(item.optLong("id"),item.optString("text"),item.optInt("words"),item.optString("raw",item.optString("text"))));}return HistoryDays.group(entries,java.util.TimeZone.getDefault());}
@@ -337,6 +337,7 @@ public final class MainActivity extends Activity {
             LinearLayout backup=card("backup","Backup","On hold");
             if(backup!=null){hint(backup,"Google Drive backup work is paused. Your existing local history stays on this phone.");Ui.space(backup,10);}
         }
+        if(!AppProduct.isNotes()){LinearLayout deleted=Daybook.card(this);settingRow(deleted,"Recently deleted","Undo for 24 hours","recent_deletions",v->startActivity(new Intent(this,SavedContentActivity.class).putExtra("deleted",true)));body.addView(deleted);Ui.space(body,12);}
         // Permissions (live)
         boolean notif=android.os.Build.VERSION.SDK_INT<33||checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)==PackageManager.PERMISSION_GRANTED;
         boolean allSet=microphoneAllowed()&&(AppProduct.isNotes()||FlowAccessibility.instance!=null)&&notif&&BubbleHealth.ignoringBattery(this);
@@ -360,7 +361,7 @@ public final class MainActivity extends Activity {
         }
         Ui.space(body,8);
         String version="";try{version=getPackageManager().getPackageInfo(getPackageName(),0).versionName;}catch(PackageManager.NameNotFoundException ignored){}
-        TextView foot=Daybook.text(this,AppProduct.name()+" "+version,11,Daybook.muted(this),false);foot.setGravity(Gravity.CENTER);body.addView(foot);Ui.space(body,12);
+        if(AppProduct.isNotes()){TextView foot=Daybook.text(this,AppProduct.name()+" "+version,11,Daybook.muted(this),false);foot.setGravity(Gravity.CENTER);body.addView(foot);}Ui.space(body,12);
     }
     private String modelSummary(){
         return modelName(ModelCatalog.TRANSCRIPT_NAMES,ModelCatalog.TRANSCRIPT_IDS,Store.get(this,AppProduct.isNotes()?"notes_transcribe_model":"transcribe_model",AppProduct.isNotes()?"whisper-large-v3":CloudApi.DEFAULT_TRANSCRIBE));
@@ -395,7 +396,7 @@ public final class MainActivity extends Activity {
         Ui.space(body,12);LinearLayout c=Daybook.card(this);boolean open=id.equals(openCard);
         settingRow(c,title,status,"card_"+id,v->{openCard=open?"":id;render();});
         c.getChildAt(c.getChildCount()-1).setContentDescription(title+", "+status+(open?", expanded":", collapsed"));
-        body.addView(c);if(!open)return null;separator(c);return c;
+        body.addView(c);if(!open)return null;c.setPadding(c.getPaddingLeft(),0,c.getPaddingRight(),Ui.dp(this,12));separator(c);return c;
     }
     private void settingsPanel() {
         if(panel.equals("size")){Ui.space(body,6);options(body,new String[]{"Small","Medium","Large"},null,new String[]{"small","medium","large"},"bubble_size","small",true);}
@@ -424,7 +425,9 @@ public final class MainActivity extends Activity {
         });
         row.addView(toggle);row.setBackground(Daybook.ripple(this,android.graphics.Color.TRANSPARENT,8));row.setOnClickListener(v->toggle.setChecked(!toggle.isChecked()));parent.addView(row);
     }
-    private Dictation retryDictation;
+    private final Runnable retryChanged=()->{if(foreground&&!isDestroyed())render();};
+    private String retryExport;
+    private static final int EXPORT_RETRY=8704;
     /** Unsent cloud recordings and private dictations awaiting an explicit copy. */
     private void pendingBanners(){
         LinearLayout host=historyHost!=null?historyHost:body;
@@ -459,44 +462,38 @@ public final class MainActivity extends Activity {
             LinearLayout actions=Ui.row(this);Button copy=Daybook.button(this,"Copy privately",true,v->{boolean ok=PrivatePending.copy(this);Toast.makeText(this,ok?"Copied as sensitive clipboard text.":"It has expired.",Toast.LENGTH_SHORT).show();render();});Button discard=Daybook.button(this,"Discard",false,v->{PrivatePending.discard();render();});
             LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(0,Ui.dp(this,44),1);cp.rightMargin=Ui.dp(this,8);actions.addView(copy,cp);actions.addView(discard,new LinearLayout.LayoutParams(0,Ui.dp(this,44),1));card.addView(actions);host.addView(card);Ui.space(host,14);
         }
-        java.io.File audio=RetryBuffer.latest(this);
-        if(audio!=null || retryDictation!=null){
-            LinearLayout card=Daybook.card(this);card.setPadding(Ui.dp(this,14),Ui.dp(this,12),Ui.dp(this,14),Ui.dp(this,12));card.setBackground(Daybook.shape(this,Daybook.soft(this),17));
-            card.addView(Daybook.text(this,"Recording not transcribed",14,Daybook.ink(this),true));Ui.space(card,4);
-            int count=RetryBuffer.list(this).size();
-            TextView detail=Daybook.text(this,retryDictation!=null?"Retrying…":"Cloud transcription failed"+(audio==null?"":" at "+DateFormat.getTimeInstance(DateFormat.SHORT).format(new Date(RetryBuffer.time(audio))))+". The audio is kept privately on this phone for 24 hours"+(count>1?" ("+count+" recordings)":"")+" and is not in History or backups.",12,Daybook.muted(this),false);card.addView(detail);Ui.space(card,10);
+        if(!RetryCoordinator.status().isEmpty()){host.addView(Daybook.text(this,RetryCoordinator.status(),13,Daybook.muted(this),false));Ui.space(host,8);}
+        for(java.io.File audio:RetryBuffer.list(this)){
+            if(RetryBuffer.thought(audio)&&!Store.quickThoughts(this))continue;
+            LinearLayout card=Daybook.card(this);card.setPadding(Ui.dp(this,14),Ui.dp(this,12),Ui.dp(this,14),Ui.dp(this,12));
+            String transcript=RetryBuffer.transcript(audio);
+            card.addView(Daybook.text(this,transcript.isEmpty()?"Recording waiting for transcription":"Recovered transcript",14,Daybook.ink(this),true));
+            long expiry=RetryBuffer.time(audio)+RetryBuffer.KEEP_MS;
+            card.addView(Daybook.text(this,"Recorded "+DateFormat.getDateTimeInstance(DateFormat.SHORT,DateFormat.SHORT).format(new Date(RetryBuffer.time(audio)))+" · Expires "+DateFormat.getDateTimeInstance(DateFormat.SHORT,DateFormat.SHORT).format(new Date(expiry)),12,Daybook.muted(this),false));
+            if(RetryCoordinator.owns(audio))card.addView(Daybook.text(this,RetryCoordinator.status(),13,Daybook.accent(this),false));
+            if(!transcript.isEmpty()){
+                Button view=Daybook.button(this,"View / copy text",false,v->new AlertDialog.Builder(this).setTitle("Recovered transcript").setMessage(RetryBuffer.transcript(audio)).setPositiveButton("Copy",(d,w)->Ui.copy(this,RetryBuffer.transcript(audio))).setNegativeButton("Close",null).show());card.addView(view);
+            }
+            boolean tooLarge=audio.length()>24_000_000L&&transcript.isEmpty();
+            if(tooLarge)card.addView(Daybook.text(this,"This older recording exceeds the upload limit. Export its audio to keep it safely.",12,Daybook.muted(this),false));
             LinearLayout actions=Ui.row(this);
-            Button retry=Daybook.button(this,retryDictation!=null?"Cancel retry":"Retry",true,v->{if(retryDictation!=null){retryDictation.cancel();retryDictation=null;render();}else retryRecording(audio);});
-            Button discard=Daybook.button(this,"Discard",false,v->{RetryBuffer.discard(audio);render();});discard.setEnabled(retryDictation==null);
-            LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(0,Ui.dp(this,44),1);cp.rightMargin=Ui.dp(this,8);actions.addView(retry,cp);actions.addView(discard,new LinearLayout.LayoutParams(0,Ui.dp(this,44),1));card.addView(actions);host.addView(card);Ui.space(host,14);
+            Button retry=Daybook.button(this,RetryCoordinator.owns(audio)?"Cancel retry":transcript.isEmpty()?"Retry":"Save text",true,v->{if(RetryCoordinator.owns(audio))RetryCoordinator.cancel();else RetryCoordinator.start(this,audio);});
+            retry.setEnabled(!tooLarge&&(!RetryCoordinator.busy()||RetryCoordinator.owns(audio)));
+            actions.addView(retry,new LinearLayout.LayoutParams(0,-2,1));
+            Button discard=Daybook.button(this,"Discard",false,v->new AlertDialog.Builder(this).setTitle("Discard this recovery recording?").setMessage("Its audio and recovered text will be removed.").setNegativeButton("Keep",null).setPositiveButton("Discard",(d,w)->{RetryBuffer.discard(audio);render();}).show());discard.setEnabled(!RetryCoordinator.owns(audio));actions.addView(discard,new LinearLayout.LayoutParams(0,-2,1));
+            card.addView(actions);card.addView(Daybook.button(this,"Export audio",false,v->{retryExport=audio.getAbsolutePath();Intent pick=new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("audio/mp4").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE,"Voitation-recording-"+RetryBuffer.time(audio)+".m4a");try{startActivityForResult(pick,EXPORT_RETRY);}catch(RuntimeException unavailable){retryExport=null;Toast.makeText(this,"No file picker is available.",Toast.LENGTH_LONG).show();}}));
+            host.addView(card);Ui.space(host,14);
         }
     }
-    private void retryRecording(java.io.File audio){
-        if(audio==null || retryDictation!=null)return;
-        final long kept=RetryBuffer.time(audio);
-        final boolean retryThought=RetryBuffer.thought(audio);
-        if(retryThought && !Store.quickThoughts(this))return;
-        if(Dictation.isWorking() || VoiceTake.running() || VoiceTake.updateBusy() || Translate.going()){Toast.makeText(this,"Finish the current recording first.",Toast.LENGTH_SHORT).show();return;}
-        retryDictation=new Dictation(this,new Dictation.Listener(){
-            public void state(String status){}
-            public void partial(String text){}
-            public void level(float level){}
-            public void result(String raw,String text,String warning){
-                Dictation finished=retryDictation;retryDictation=null;if(finished!=null)finished.close();
-                if(retryThought){
-                    long id=Notes.keepThought(MainActivity.this,kept,raw,0,audio);
-                    if(id>0){RetryBuffer.discard(audio);Notes.formatThought(MainActivity.this,id);Toast.makeText(MainActivity.this,"Thought saved.",Toast.LENGTH_SHORT).show();}
-                    else Toast.makeText(MainActivity.this,"Could not save. The recording is still kept for Retry.",Toast.LENGTH_LONG).show();
-                    render();return;
-                }
-                synchronized(Store.class){Store.save(MainActivity.this,raw,text,0);}
-                render();
-                boolean saved=Store.bool(MainActivity.this,"save_history",true);
-                new AlertDialog.Builder(MainActivity.this).setTitle("Retry transcribed").setMessage(text+(warning.isEmpty()?"":"\n\n"+warning)+(saved?"\n\nSaved to History.":"\n\nSave dictations is off, so this is not in History.")).setNegativeButton("Close",null).setPositiveButton("Copy",(d,w)->Ui.copy(MainActivity.this,text)).show();
-            }
-            public void error(String message){Dictation finished=retryDictation;retryDictation=null;if(finished!=null)finished.close();new AlertDialog.Builder(MainActivity.this).setTitle("Retry failed").setMessage(message).setPositiveButton("OK",null).show();render();}
-        },false,retryThought);
-        retryDictation.retry(audio);render();
+    @Override protected void onActivityResult(int request,int result,Intent data){
+        super.onActivityResult(request,result,data);
+        if(request!=EXPORT_RETRY)return;
+        String path=retryExport;retryExport=null;
+        if(result!=RESULT_OK||path==null||data==null||data.getData()==null)return;
+        android.net.Uri destination=data.getData();android.content.Context app=getApplicationContext();
+        new Thread(()->{String message="Audio exported.";try(java.io.InputStream in=new java.io.FileInputStream(path);java.io.OutputStream out=app.getContentResolver().openOutputStream(destination,"wt")){
+            if(out==null)throw new java.io.IOException();byte[] block=new byte[8192];int n;while((n=in.read(block))!=-1)out.write(block,0,n);
+        }catch(Exception failure){message="Export failed. Your original recording was not removed.";}String shown=message;runOnUiThread(()->Toast.makeText(app,shown,Toast.LENGTH_LONG).show());},"recovery-export").start();
     }
     private boolean microphoneAllowed(){return checkSelfPermission(Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED;}
     private boolean keyboardEnabled(){

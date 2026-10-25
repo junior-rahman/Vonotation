@@ -41,6 +41,7 @@ keytool -genkeypair -keystore "$VOICEFLOW_KEYSTORE" -storepass android -keypass 
 keytool -genkeypair -keystore "$VONO_NOTES_KEYSTORE" -storepass android -keypass android -alias voiceflow -keyalg RSA -keysize 2048 -validity 2 -dname 'CN=Disposable Vocading native QA' >> "$task_output/logs/disposable-signing.log" 2>&1
 bash gradlew --no-daemon assembleVonotationPreview lintVonotationPreview assembleNotesPreview lintNotesPreview 2>&1 | tee "$task_output/logs/build-lint.log"
 bash tests/run-pure-tests.sh 2>&1 | tee "$task_output/logs/pure-tests.log"
+python3 tests/run-recovery-tests.py 2>&1 | tee "$task_output/logs/recovery-tests.log"
 for task_product in vonotation notes; do
   mkdir -p "$task_output/$task_product/logs" "$task_output/$task_product/screenshots"
   bash tests/build-visual-fixture.sh "$task_product" 2>&1 | tee "$task_output/$task_product/logs/fixture-build.log"
@@ -124,6 +125,32 @@ PY
   adb pull "/sdcard/Android/media/$task_package/visual-$task_appearance" "$task_output/$task_product/screenshots/"
   done
 done
+# Voitation also exercises the real Activities at enlarged text and an unfolded display size.
+for task_layout in large-text unfolded; do
+  adb shell am force-stop app.voiceflow
+  adb shell pm clear app.voiceflow
+  adb shell cmd uimode night no
+  if [[ "$task_layout" == unfolded ]]; then
+    adb shell wm size 1768x2208
+    adb shell wm density 320
+    adb shell settings put system font_scale 1.3
+  else
+    adb shell settings put system font_scale 1.6
+  fi
+  timeout 150 "$ANDROID_SDK_ROOT/platform-tools/adb" -s "$task_serial" shell am instrument -w -e product vonotation -e appearance light app.voiceflow.visual.fixture/app.voiceflow.VisualPaletteTest > "$task_output/vonotation/logs/instrumentation-$task_layout.txt" 2>&1
+  python3 - "$task_output/vonotation/logs/instrumentation-$task_layout.txt" <<'PY_CHECK'
+from pathlib import Path
+import sys
+text=Path(sys.argv[1]).read_text()
+if 'INSTRUMENTATION_RESULT: result=PASS:' not in text or 'INSTRUMENTATION_RESULT: failure=' in text:
+    print(text)
+    raise SystemExit('Large text / unfolded native fixture failed')
+PY_CHECK
+  adb pull /sdcard/Android/media/app.voiceflow/visual-light "$task_output/vonotation/screenshots/$task_layout"
+done
+adb shell settings put system font_scale 1.0
+adb shell wm size reset
+adb shell wm density reset
 adb logcat -d -v threadtime > "$task_output/logs/logcat-verified-interval.txt"
 python3 - "$task_output" <<'PY'
 import hashlib, json, os, struct, sys, zlib
