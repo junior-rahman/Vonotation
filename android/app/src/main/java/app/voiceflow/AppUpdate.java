@@ -41,7 +41,6 @@ import java.util.concurrent.TimeUnit;
 
 /** User-started, verified APK update. Android always owns the final installation confirmation. */
 final class AppUpdate {
-    private static final String FEED="https://raw.githubusercontent.com/junior-rahman/Vonotation/main/latest.json";
     static final String EXTRA_TOKEN="update_token",EXTRA_SESSION="update_session";
     private static final String IDLE="idle",CHECKING="checking",DOWNLOADING="downloading",VERIFYING="verifying",READY="ready",PERMISSION="permission",INSTALLING="installing",CONFIRM="confirm",ERROR="error";
     private static final ExecutorService WORK=Executors.newSingleThreadExecutor();
@@ -61,7 +60,6 @@ final class AppUpdate {
         button=new WeakReference<>(action);line=new WeakReference<>(status);render(context);
     }
     static void resume(Activity activity){
-        if(AppProduct.isNotes())return;
         foreground=new WeakReference<>(activity);
         if(busy){render(activity);return;}
         Release release=saved(activity);String phase=prefs(activity).getString("phase",IDLE);
@@ -84,7 +82,6 @@ final class AppUpdate {
     }
     static void pause(Activity activity){Activity current=foreground==null?null:foreground.get();if(current==activity)foreground=null;}
     static void start(Activity activity){
-        if(AppProduct.isNotes())return;
         if(busy)return;foreground=new WeakReference<>(activity);
         String phase=prefs(activity).getString("phase",IDLE);
         if(activeSession(activity)||(phase.equals(INSTALLING)&&installerInFlight(activity))){state(activity,INSTALLING,"Installing…","Android is preparing the installation. Please wait a moment.");return;}
@@ -114,8 +111,8 @@ final class AppUpdate {
         if(release==null||!apk(activity).isFile()){state(activity,ERROR,"Update","The saved update is unavailable. Tap Update to download again.");return;}
         if(audioBusy()){deferred(activity);return;}
         if(!canInstall(activity)){
-            state(activity,PERMISSION,"Allow installation","Update verified. Allow Voitation to install it; the update resumes when you return.");
-            if(requestPermission)try{activity.startActivity(new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,Uri.parse("package:"+activity.getPackageName())));}catch(RuntimeException unavailable){state(activity,PERMISSION,"Allow installation","Open Android settings to allow Voitation to install updates, then return.");}
+            state(activity,PERMISSION,"Allow installation","Update verified. Allow "+AppProduct.name()+" to install it; the update resumes when you return.");
+            if(requestPermission)try{activity.startActivity(new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,Uri.parse("package:"+activity.getPackageName())));}catch(RuntimeException unavailable){state(activity,PERMISSION,"Allow installation","Open Android settings to allow "+AppProduct.name()+" to install updates, then return.");}
             return;
         }
         busy=true;Context app=activity.getApplicationContext();state(app,VERIFYING,"Verifying…","Rechecking the saved update…");
@@ -166,7 +163,7 @@ final class AppUpdate {
         if(audioBusy()){CaptureBarrier.releaseInstall();state(activity,CONFIRM,"Continue installation","Finish recording or processing your audio before installing the update.");return;}
         state(activity,CONFIRM,"Continue installation","Complete Android's installation screen. You can return here to continue.");
         try{activity.startActivity(new Intent(confirmation));confirmationLaunched=true;}
-        catch(RuntimeException blocked){confirmationLaunched=false;state(activity,CONFIRM,"Continue installation","Tap Continue installation while Voitation is open to confirm the update.");}
+        catch(RuntimeException blocked){confirmationLaunched=false;state(activity,CONFIRM,"Continue installation","Tap Continue installation while "+AppProduct.name()+" is open to confirm the update.");}
         // Keep the pending Intent and session until a terminal callback; background launch blocks may be silent.
     }
 
@@ -209,7 +206,7 @@ final class AppUpdate {
         if(!UpdatePolicy.integrity(size,release.size,UpdatePolicy.hex(digest.digest()),release.hash))throw new Problem("The update integrity check failed. Download it again.");
         PackageManager pm=context.getPackageManager();int flags=Build.VERSION.SDK_INT>=28?PackageManager.GET_SIGNING_CERTIFICATES:PackageManager.GET_SIGNATURES;
         PackageInfo downloaded=pm.getPackageArchiveInfo(file.getAbsolutePath(),flags),installed=pm.getPackageInfo(context.getPackageName(),flags);
-        if(downloaded==null||!context.getPackageName().equals(downloaded.packageName))throw new Problem("The downloaded file isn't a Voitation update.");
+        if(downloaded==null||!context.getPackageName().equals(downloaded.packageName))throw new Problem("The downloaded file isn't a "+AppProduct.name()+" update.");
         long code=Build.VERSION.SDK_INT>=28?downloaded.getLongVersionCode():downloaded.versionCode;
         if(code!=release.code||!release.name.equals(downloaded.versionName)||code<=mine(context))throw new Problem("The update version doesn't match its release information.");
         if(!UpdatePolicy.sameSigners(signers(installed),signers(downloaded)))throw new Problem("This release uses a different signing key and cannot update the installed app.");
@@ -233,7 +230,7 @@ final class AppUpdate {
         }finally{connection.disconnect();if(!complete)temporary.delete();}
     }
     private static String readFeed() throws Exception {
-        HttpURLConnection connection=open(FEED);long started=SystemClock.elapsedRealtime();
+        HttpURLConnection connection=open(UpdatePolicy.feed(AppProduct.isNotes()));long started=SystemClock.elapsedRealtime();
         try(InputStream input=connection.getInputStream();ByteArrayOutputStream output=new ByteArrayOutputStream()){
             long declared=connection.getContentLengthLong();if(declared>UpdatePolicy.MAX_FEED)throw new Problem("The update information is too large.");byte[] buffer=new byte[4096];int n;
             while((n=input.read(buffer))!=-1){if(output.size()+n>UpdatePolicy.MAX_FEED||SystemClock.elapsedRealtime()-started>30000)throw new Problem("The update information exceeded its limit.");output.write(buffer,0,n);}
@@ -244,7 +241,7 @@ final class AppUpdate {
         for(int redirects=0;redirects<=UpdatePolicy.MAX_REDIRECTS;redirects++){
             if(!UpdatePolicy.secureUrl(address))throw new Problem("The update server used an untrusted address.");
             HttpURLConnection connection=(HttpURLConnection)new URL(address).openConnection();
-            connection.setInstanceFollowRedirects(false);connection.setConnectTimeout(12000);connection.setReadTimeout(30000);connection.setRequestProperty("User-Agent","VonoTation-Updater");connection.setRequestProperty("Accept-Encoding","identity");
+            connection.setInstanceFollowRedirects(false);connection.setConnectTimeout(12000);connection.setReadTimeout(30000);connection.setRequestProperty("User-Agent",AppProduct.name()+"-Updater");connection.setRequestProperty("Accept-Encoding","identity");
             try{
                 int status=connection.getResponseCode();
                 if(status==301||status==302||status==303||status==307||status==308){String location=connection.getHeaderField("Location");if(location==null||redirects==UpdatePolicy.MAX_REDIRECTS)throw new Problem("The update server redirected too many times.");address=new URI(address).resolve(location).toString();connection.disconnect();continue;}
@@ -260,7 +257,7 @@ final class AppUpdate {
         static Release parse(String raw) throws Exception {
             if(raw==null||raw.getBytes(StandardCharsets.UTF_8).length>UpdatePolicy.MAX_FEED)throw new Problem("Invalid update information.");
             JSONTokener parser=new JSONTokener(raw);Object parsed=parser.nextValue();if(!(parsed instanceof JSONObject)||parser.nextClean()!=0)throw new Problem("Invalid update information.");
-            JSONObject value=(JSONObject)parsed;long code=integer(value.get("versionCode")),size=integer(value.get("size"));
+            JSONObject value=(JSONObject)parsed;UpdatePolicy.validatePackage(value.optString("package",""),AppProduct.isNotes());long code=integer(value.get("versionCode")),size=integer(value.get("size"));
             Object name=value.get("versionName"),url=value.get("apk"),hash=value.get("sha256");if(!(name instanceof String)||!(url instanceof String)||!(hash instanceof String))throw new Problem("The update information has invalid fields.");
             UpdatePolicy.validate(code,(String)name,(String)url,(String)hash,size);return new Release((int)code,(String)name,(String)url,(String)hash,size,raw);
         }
@@ -278,7 +275,7 @@ final class AppUpdate {
     private static final class Deferred extends Exception{}
     private static final class Problem extends Exception{Problem(String message){super(message);}}
     private static long mine(Context context){try{PackageInfo info=context.getPackageManager().getPackageInfo(context.getPackageName(),0);return Build.VERSION.SDK_INT>=28?info.getLongVersionCode():info.versionCode;}catch(PackageManager.NameNotFoundException missing){return 0;}}
-    private static String here(Context context){try{return "Voitation "+context.getPackageManager().getPackageInfo(context.getPackageName(),0).versionName;}catch(PackageManager.NameNotFoundException missing){return "Voitation";}}
+    private static String here(Context context){try{return AppProduct.name()+" "+context.getPackageManager().getPackageInfo(context.getPackageName(),0).versionName;}catch(PackageManager.NameNotFoundException missing){return AppProduct.name();}}
     private static void state(Context context,String phase,String title,String detail){prefs(context).edit().putString("phase",phase).putString("title",title).putString("detail",detail).apply();render(context);}
     private static void render(Context context){main(context).post(()->{SharedPreferences p=prefs(context);Button action=button==null?null:button.get();TextView status=line==null?null:line.get();if(action!=null&&action.isAttachedToWindow()){action.setText(p.getString("title","Update"));action.setEnabled(!busy);}if(status!=null&&status.isAttachedToWindow())status.setText(p.getString("detail",here(context)));});}
 }
