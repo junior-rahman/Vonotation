@@ -38,7 +38,7 @@ class CaptureBarrier {static CaptureGate gate=new CaptureGate(); static CaptureG
 class FlowAccessibility {static FlowAccessibility instance;void updateBubble(){}}
 class LanguagePolicy {static boolean needsRomanization(String s){return false;}}
 class Cleaner {static String verbatim(String s){return s;}}
-class Recovery {static boolean keep(Context c,String a,String b,long d,boolean e,boolean f){return true;}}
+class Recovery {static int calls;static boolean inputLost;static boolean keep(Context c,String a,String b,long d,boolean e,boolean f,boolean lost){calls++;inputLost=lost;return true;}}
 class Notes {static long keepThought(Context c,long id,String r,long d){return id;}static void formatThought(Context c,long id){}}
 ''',
 'app/voiceflow/RecoveryAudit.java': '''package app.voiceflow;
@@ -59,8 +59,16 @@ public class RecoveryAudit {
   Listener restored=new Listener();Dictation dr=new Dictation(c,restored);dr.retry(retry);waitFor(()->restored.results>0,true);
   if(!retry.exists())throw new AssertionError("delivery is not a durable save");
   dr.acknowledgeSaved();dr.close();if(retry.exists()||!RetryBuffer.transcript(retry).isEmpty())throw new AssertionError("acknowledgment did not remove source and receipt");
+  CloudApi.response="Recovered detached words";
+  for(boolean lost:new boolean[]{true,false}){
+   File detached=new File(root,"detached-"+lost+".m4a");Files.write(detached.toPath(),new byte[]{1,2,3});int before=Recovery.calls;
+   Dictation detachedCapture=new Dictation(c,new Listener());detachedCapture.retry(detached);
+   if(lost)detachedCapture.finishDetached(1,true);else detachedCapture.finishDetached(1);
+   waitFor(()->Recovery.calls>before,true);
+   if(Recovery.inputLost!=lost)throw new AssertionError("detached input origin was not preserved");
+  }
   File expired=new File(dir,"retry-"+(now-RetryBuffer.KEEP_MS-1000)+".m4a");Files.write(expired.toPath(),new byte[]{1});RetryBuffer.pin(expired);RetryBuffer.prune(c);if(!expired.exists())throw new AssertionError("active retry expired");RetryBuffer.unpin(expired);RetryBuffer.prune(c);if(expired.exists())throw new AssertionError("expired retry retained");
-  System.out.println("PASS: unlimited unexpired queue, cancel-before-delivery, empty response, receipt-only retry, explicit durable acknowledgment and active expiry protection");
+  System.out.println("PASS: unlimited unexpired queue, cancel-before-delivery, empty response, receipt-only retry, explicit durable acknowledgment active expiry protection and detached input-origin preservation");
  }
 }'''
 }
