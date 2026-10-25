@@ -32,7 +32,7 @@ final class Recovery {
         saved=ClipList.remember(context,text)||saved;
         boolean copied=false;try{clipboard.setPrimaryClip(clip);copied=true;}catch(RuntimeException ignored){}
         if(ClipboardFallback.shouldReveal(inputLost,inserted,sensitive,copied)&&FlowAccessibility.instance!=null)
-            FlowAccessibility.instance.revealCopiedDictation(text);
+            FlowAccessibility.instance.queueCopiedDictation(text);
         Toast.makeText(context,copied?"Dictation copied. Your words were kept.":"Your dictation was kept in Voitation.",Toast.LENGTH_SHORT).show();
         return saved;
     }

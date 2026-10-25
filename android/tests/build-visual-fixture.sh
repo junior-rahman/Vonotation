@@ -53,7 +53,10 @@ package, output = sys.argv[1:]
 Path(output).write_text(f'''<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="{package}.visual.fixture">
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35" />
     <instrumentation android:name="app.voiceflow.VisualPaletteTest" android:targetPackage="{package}" android:functionalTest="true" />
-    <application android:label="Disposable native split-app fixture" />
+    <instrumentation android:name="app.voiceflow.RecoveredClipboardTest" android:targetPackage="{package}" android:functionalTest="true" />
+    <application android:label="Disposable native split-app fixture">
+        <activity android:name="app.voiceflow.fixture.ClipboardInputActivity" android:exported="true" android:windowSoftInputMode="adjustResize" />
+    </application>
 </manifest>''')
 PY
 "$build_tools/aapt2" link --manifest "$fixture_dir/AndroidManifest.xml" \
@@ -61,6 +64,8 @@ PY
 "${compiler[@]}" -source 8 -target 8 -encoding UTF-8 \
     -classpath "$android_jar:$app_classes" -d "$fixture_dir/classes" \
     "$project_dir/tests/fixtures/VisualPaletteTest.java" \
+    "$project_dir/tests/fixtures/RecoveredClipboardTest.java" \
+    "$project_dir/tests/fixtures/ClipboardInputActivity.java" \
     "$project_dir/tests/fixtures/RecordingTransferChecks.java" \
     "$project_dir/tests/fixtures/VocadingChecks.java" \
     "$project_dir/tests/fixtures/VocadingAudioChecks.java"
@@ -69,6 +74,8 @@ PY
 while IFS= read -r -d '' generated; do
     case "${generated#"$fixture_dir/classes/"}" in
         app/voiceflow/VisualPaletteTest.class|app/voiceflow/VisualPaletteTest\$*.class) ;;
+        app/voiceflow/RecoveredClipboardTest.class|app/voiceflow/RecoveredClipboardTest\$*.class) ;;
+        app/voiceflow/fixture/ClipboardInputActivity.class|app/voiceflow/fixture/ClipboardInputActivity\$*.class) ;;
         app/voiceflow/RecordingTransferChecks.class|app/voiceflow/RecordingTransferChecks\$*.class) ;;
         app/voiceflow/VocadingChecks.class|app/voiceflow/VocadingChecks\$*.class) ;;
         app/voiceflow/VocadingAudioChecks.class|app/voiceflow/VocadingAudioChecks\$*.class) ;;

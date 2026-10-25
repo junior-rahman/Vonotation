@@ -159,6 +159,19 @@ done
 adb shell settings put system font_scale 1.0
 adb shell wm size reset
 adb shell wm density reset
+# Exercise the production recovery overlay over an external disposable editor.
+adb shell am force-stop app.voiceflow
+adb shell pm clear app.voiceflow
+timeout 120 "$ANDROID_SDK_ROOT/platform-tools/adb" -s "$task_serial" shell am instrument -w app.voiceflow.visual.fixture/app.voiceflow.RecoveredClipboardTest > "$task_output/vonotation/logs/recovered-clipboard.txt" 2>&1
+adb pull /sdcard/Android/data/app.voiceflow/files/clipboard-proof "$task_output/vonotation/" || true
+python3 - "$task_output/vonotation/logs/recovered-clipboard.txt" <<'PY_CLIP'
+from pathlib import Path
+import sys
+text=Path(sys.argv[1]).read_text()
+print(text)
+if 'INSTRUMENTATION_RESULT: result=PASS:' not in text or 'INSTRUMENTATION_RESULT: failure=' in text:
+    raise SystemExit('Recovered clipboard interaction failed')
+PY_CLIP
 adb logcat -d -v threadtime > "$task_output/logs/logcat-verified-interval.txt"
 python3 - "$task_output" <<'PY'
 import hashlib, json, os, struct, sys, zlib
@@ -185,7 +198,7 @@ for product, screens in products.items():
         screenshots[str(path.relative_to(root))] = {'size': len(data), 'sha256': hashlib.sha256(data).hexdigest(), 'width': width, 'height': height}
 logs = (root / 'logs/logcat-verified-interval.txt').read_text(errors='replace')
 if 'FATAL EXCEPTION' in logs and any('Process: ' + package in logs for package in ('app.voiceflow', 'app.vonotation.notes')): raise SystemExit('Target process crash found; inspect logcat')
-receipt = {'commit': os.environ.get('GITHUB_SHA', 'local'), 'checks': {'both_preview_builds': 'passed', 'both_full_lints': 'passed', 'pure_java_suites': 'passed', 'both_products_native_light_dark': 'passed', 'manifest_and_card_isolation': 'passed', 'native_resource_and_rendered_capture_contrast': 'passed', 'legacy_recording_retention': 'passed', 'synthetic_recording_archive_roundtrips': 'passed', 'vocading_edit_pin_trash_restore_share': 'passed', 'vocading_native_audio_seek_speed_pause_resume': 'passed', 'vocading_update_button_product_feed_error_retry': 'passed'}, 'applications': {'vonotation': 'app.voiceflow', 'notes': 'app.vonotation.notes'}, 'screenshots': screenshots, 'qualification': 'Actual split-product native emulator screenshots with synthetic QA data. Cards selected through production saved-state restore. One physical Settings tap per product/theme. Native synthetic PCM playback and emulator microphone pause/resume were exercised; these do not establish real document-picker behavior, microphone quality or call capture. Independent disposable QA certificates are unrelated to release signing. Exported application artifacts are UNSIGNED and are not installable updates.', 'not_tested': ['Physical Android hardware', 'Live provider calls', 'Google sign-in or backup restore', 'Full recording and cross-app dictation flows', 'Live telephony', 'User recording transfer through SAF picker and real-source playback']}
+receipt = {'commit': os.environ.get('GITHUB_SHA', 'local'), 'checks': {'both_preview_builds': 'passed', 'both_full_lints': 'passed', 'pure_java_suites': 'passed', 'both_products_native_light_dark': 'passed', 'manifest_and_card_isolation': 'passed', 'native_resource_and_rendered_capture_contrast': 'passed', 'legacy_recording_retention': 'passed', 'synthetic_recording_archive_roundtrips': 'passed', 'vocading_edit_pin_trash_restore_share': 'passed', 'vocading_native_audio_seek_speed_pause_resume': 'passed', 'vocading_update_button_product_feed_error_retry': 'passed', 'recovered_clipboard_persistent_external_editor_paste': 'passed'}, 'applications': {'vonotation': 'app.voiceflow', 'notes': 'app.vonotation.notes'}, 'screenshots': screenshots, 'qualification': 'Actual split-product native emulator screenshots with synthetic QA data. Cards selected through production saved-state restore. One physical Settings tap per product/theme. Native synthetic PCM playback and emulator microphone pause/resume were exercised; these do not establish real document-picker behavior, microphone quality or call capture. Independent disposable QA certificates are unrelated to release signing. Exported application artifacts are UNSIGNED and are not installable updates.', 'not_tested': ['Physical Android hardware', 'Live provider calls', 'Google sign-in or backup restore', 'Full recording and cross-app dictation flows', 'Live telephony', 'User recording transfer through SAF picker and real-source playback']}
 (root / 'VERIFICATION.json').write_text(json.dumps(receipt, indent=2) + '\n')
 print(json.dumps({'native_screenshots': len(screenshots), 'checks': receipt['checks']}, indent=2))
 PY
