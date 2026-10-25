@@ -75,7 +75,7 @@ public final class FlowKeyboard extends InputMethodService implements Dictation.
         // microphone alive while Android replaces/hides input connections, but
         // never let an old dictation follow a new editor into another field.
         session++;
-        selectionStart=info.initialSelStart;selectionEnd=info.initialSelEnd;inputActive=true;refreshBubble();
+        selectionStart=info.initialSelStart;selectionEnd=info.initialSelEnd;inputActive=true;if(FlowAccessibility.instance!=null)FlowAccessibility.instance.inputActivated();refreshBubble();
         if(requiresTyping(info) && FlowAccessibility.instance==null)handler.post(()->{if(hasInputSession() && requiresTyping(getCurrentInputEditorInfo()))showTypingKeyboard();});
         if(!requiresTyping(info) && FlowAccessibility.instance==null && !setupNoticeShown){setupNoticeShown=true;Toast.makeText(this,"Enable Floating microphone in Voitation Settings to show the keyboard controls.",Toast.LENGTH_LONG).show();}
         if(FlowAccessibility.instance!=null)setupNoticeShown=false;
@@ -90,10 +90,11 @@ public final class FlowKeyboard extends InputMethodService implements Dictation.
         if(info==null || info.inputType==InputType.TYPE_NULL)return true;
         return isPasswordType(info.inputType);
     }
-    /** Email and secret fields use the ordinary keyboard without changing the saved choice. */
+    /** Email, numeric and secret fields use the ordinary keyboard without changing the saved choice. */
     static boolean requiresTyping(EditorInfo info){return isPassword(info) || (info!=null && requiresTyping(info.inputType));}
     static boolean isEmail(int inputType){int variation=inputType&InputType.TYPE_MASK_VARIATION;return (inputType&InputType.TYPE_MASK_CLASS)==InputType.TYPE_CLASS_TEXT && (variation==InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS || variation==InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS);}
-    static boolean requiresTyping(int inputType){return isEmail(inputType) || isPasswordType(inputType);}
+    static boolean requiresTyping(int inputType){int kind=inputType&InputType.TYPE_MASK_CLASS;return kind==InputType.TYPE_CLASS_NUMBER || kind==InputType.TYPE_CLASS_PHONE || isEmail(inputType) || isPasswordType(inputType);}
+    String activeKey(){EditorInfo info=getCurrentInputEditorInfo();return hasActiveEditor()?"ime:"+info.packageName+":"+info.fieldId+":"+session:"";}
     static boolean isPasswordType(int inputType){
         int variation=inputType&InputType.TYPE_MASK_VARIATION,kind=inputType&InputType.TYPE_MASK_CLASS;
         return (kind==InputType.TYPE_CLASS_TEXT && (variation==InputType.TYPE_TEXT_VARIATION_PASSWORD || variation==InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD || variation==InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD)) || (kind==InputType.TYPE_CLASS_NUMBER && variation==InputType.TYPE_NUMBER_VARIATION_PASSWORD);

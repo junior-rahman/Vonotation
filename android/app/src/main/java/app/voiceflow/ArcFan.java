@@ -49,8 +49,8 @@ final class ArcFan {
         if(clipPill!=null&&!clipPill.isPressed()){clipPill.setText(clipboardValue==null?"":ClipboardText.preview(clipboardValue));clipPill.setContentDescription((recovered?"Open copied dictation: ":"Paste latest copy: ")+clipPill.getText());clipPill.setVisibility(clipboardValue!=null&&clipPillBounds!=null?View.VISIBLE:View.GONE);}
     }
     boolean isRecovery(){return recovered;}
-    void openRecovered(float x,float y,String text){
-        recovered=true;clipboardPreview(text);open(x,y,null,0);
+    void openRecovered(float x,float y,String text,Rect caret,int keyboardHeight){
+        recovered=true;clipboardPreview(text);open(x,y,caret,keyboardHeight);
         if(root==null)return;
         tiles[1].setVisibility(View.GONE);tiles[3].setVisibility(View.GONE);ring.setVisibility(View.GONE);
         labels[1].setVisibility(View.GONE);labels[3].setVisibility(View.GONE);
