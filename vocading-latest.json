@@ -1,0 +1,9 @@
+{
+  "versionCode": 2,
+  "versionName": "0.1.1-preview",
+  "apk": "https://github.com/junior-rahman/Vonotation/releases/download/vocading-v0.1.1-preview/Vocading-0.1.1-preview.apk",
+  "sha256": "9c4cfec7a569f12944439f14742e6eedecd913954d0d88196f43d65b4478bfef",
+  "size": 6266578,
+  "package": "app.vonotation.notes",
+  "notes": "Recording status, playback seeking/speed, editing/sharing, search/pins, pause/resume, recoverable deletion and supplied Vocading artwork. Install over your existing Vocading app without uninstalling."
+}

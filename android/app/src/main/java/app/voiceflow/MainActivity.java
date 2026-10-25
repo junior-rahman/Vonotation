@@ -100,9 +100,9 @@ public final class MainActivity extends Activity {
         requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},21);
     }
     private void restoreSet(Bundle state,String key,java.util.Set<String> target){java.util.ArrayList<String> saved=state.getStringArrayList(key);if(saved!=null)target.addAll(saved);}
-    @Override protected void onResume(){super.onResume();foreground=true;RetryCoordinator.observe(retryChanged);DriveBackup.pauseScheduling(this);if(!AppProduct.isNotes()){ClipList.observe(clipboardChanged);ClipboardExpiryJob.schedule(this);Notes.resumeThoughtSummaries(this);}Notes.catchUp(this);if(AppProduct.isNotes())LineWatch.start(this,callConnectionChanged);maybeRequestNotifications();boolean focusBackup=backupReturnFocus;backupReturnFocus=false;render();if(!AppProduct.isNotes())AppUpdate.resume(this);if(focusBackup&&panel.isEmpty()){View row=settingRows.get("backup");if(row!=null)row.post(row::requestFocusFromTouch);}}
+    @Override protected void onResume(){super.onResume();foreground=true;RetryCoordinator.observe(retryChanged);DriveBackup.pauseScheduling(this);if(!AppProduct.isNotes()){ClipList.observe(clipboardChanged);ClipboardExpiryJob.schedule(this);Notes.resumeThoughtSummaries(this);}Notes.catchUp(this);if(AppProduct.isNotes())LineWatch.start(this,callConnectionChanged);maybeRequestNotifications();boolean focusBackup=backupReturnFocus;backupReturnFocus=false;render();AppUpdate.resume(this);if(focusBackup&&panel.isEmpty()){View row=settingRows.get("backup");if(row!=null)row.post(row::requestFocusFromTouch);}}
     @Override public void onWindowFocusChanged(boolean hasFocus){super.onWindowFocusChanged(hasFocus);if(hasFocus){if(!AppProduct.isNotes())ClipList.capture(this);if(settingsVisible&&panel.equals("permissions"))render();}}
-    @Override protected void onPause(){foreground=false;RetryCoordinator.detach(retryChanged);ClipList.forget(clipboardChanged);clipboardCard.stop();LineWatch.detach(callConnectionChanged);Notes.pauseThoughtSummaries();if(!AppProduct.isNotes())AppUpdate.pause(this);saveScrollPosition();rememberDictionaryDraft();stopSummaryWork();super.onPause();}
+    @Override protected void onPause(){foreground=false;RetryCoordinator.detach(retryChanged);ClipList.forget(clipboardChanged);clipboardCard.stop();LineWatch.detach(callConnectionChanged);Notes.pauseThoughtSummaries();AppUpdate.pause(this);saveScrollPosition();rememberDictionaryDraft();stopSummaryWork();super.onPause();}
     @Override protected void onDestroy(){foreground=false;RetryCoordinator.detach(retryChanged);ClipList.forget(clipboardChanged);clipboardCard.stop();LineWatch.detach(callConnectionChanged);Notes.pauseThoughtSummaries();Notes.stop();Translate.stop();scrollGeneration++;stopSummaryWork();summaryWorker.shutdownNow();if(chimeTrack!=null){try{chimeTrack.release();}catch(RuntimeException ignored){}chimeTrack=null;}super.onDestroy();}
     @Override protected void onSaveInstanceState(Bundle state){state.putString("retry_export",retryExport);clipboardCard.save(state);state.putBoolean("clipboard_selected",part==clipboardIndex());saveScrollPosition();rememberDictionaryDraft();state.putInt("history_scroll_y",historyScrollY);state.putInt("settings_scroll_y",settingsScrollY);state.putInt("daybook_part",part);state.putBoolean("settings_visible",settingsVisible);state.putBoolean("backup_return_focus",backupReturnFocus);state.putString("daybook_panel",panel);state.putString("daybook_origin",origin);state.putString("home_tab",homeTab);DraftState.save(this,state);state.putStringArrayList("days_open",new java.util.ArrayList<>(expandedDays));state.putStringArrayList("days_closed",new java.util.ArrayList<>(collapsedDays));state.putStringArrayList("entries_open",new java.util.ArrayList<>(expandedEntries));state.putString("dictionary_heard",heardDraft);state.putString("dictionary_preferred",preferredDraft);super.onSaveInstanceState(state);}
     @Override public void onBackPressed(){if(!panel.isEmpty())backToSettings();else if(settingsVisible){settingsVisible=false;render();}else if(Notes.opened()){Notes.back();render();}else super.onBackPressed();}
@@ -359,17 +359,14 @@ public final class MainActivity extends Activity {
             hint(perms,"Status updates when you return. The bubble is always on.");}Ui.space(perms,10);
         }
         Ui.space(body,16);
-        if(!AppProduct.isNotes()){
         Button update=Daybook.button(this,"Update",true,v->AppUpdate.start(this));
-        update.setContentDescription("Update Voitation");
+        update.setContentDescription("Update "+AppProduct.name());
         LinearLayout.LayoutParams up=new LinearLayout.LayoutParams(-1,Ui.dp(this,48));up.bottomMargin=Ui.dp(this,6);
         body.addView(update,up);
         TextView updateLine=Daybook.text(this,"",12,Daybook.muted(this),false);updateLine.setGravity(Gravity.CENTER);body.addView(updateLine);
         AppUpdate.bind(this,update,updateLine);
-        }
         Ui.space(body,8);
-        String version="";try{version=getPackageManager().getPackageInfo(getPackageName(),0).versionName;}catch(PackageManager.NameNotFoundException ignored){}
-        if(AppProduct.isNotes()){TextView foot=Daybook.text(this,AppProduct.name()+" "+version,11,Daybook.muted(this),false);foot.setGravity(Gravity.CENTER);body.addView(foot);}Ui.space(body,12);
+        Ui.space(body,12);
     }
     private String modelSummary(){
         return modelName(ModelCatalog.TRANSCRIPT_NAMES,ModelCatalog.TRANSCRIPT_IDS,Store.get(this,AppProduct.isNotes()?"notes_transcribe_model":"transcribe_model",AppProduct.isNotes()?"whisper-large-v3":CloudApi.DEFAULT_TRANSCRIBE));
