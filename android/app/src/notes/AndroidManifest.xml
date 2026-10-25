@@ -1,6 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" tools:node="remove" />
     <application>
+        <provider android:name="app.voiceflow.RecordingShare" android:authorities="${applicationId}.recording-share" android:exported="false" android:grantUriPermissions="true" />
         <activity android:name="app.voiceflow.CaptureActivity" tools:node="remove" />
         <activity android:name="app.voiceflow.ClipPeek" tools:node="remove" />
         <service android:name="app.voiceflow.FlowAccessibility" tools:node="remove" />

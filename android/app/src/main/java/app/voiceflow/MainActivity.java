@@ -182,9 +182,11 @@ public final class MainActivity extends Activity {
             cards[i].setBackground(Daybook.shape(this,Daybook.surface(this),28));cards[i].setClipChildren(false);
             LinearLayout face=Ui.column(this);face.setPadding(Ui.dp(this,18),Ui.dp(this,16),Ui.dp(this,18),Ui.dp(this,10));
             String title=id==ProductProfile.VOICE?"Voice notes":id==ProductProfile.CALL?"Call Recordings":id==ProductProfile.DICTATION?"Dictation":id==ProductProfile.THOUGHTS?"Thoughts":"Clipboard";
+            if(AppProduct.isNotes()){TextView heading=Daybook.text(this,title,22,Daybook.ink(this),true);if(AppProduct.isNotes())VocadingIcons.attach(heading,id==ProductProfile.CALL?"call":"voice",Daybook.accent(this));face.addView(heading);Ui.space(face,10);}else{
             LinearLayout heading=Ui.row(this);
             if(!AppProduct.isNotes()){FloatingIcon icon=new FloatingIcon(this,id==ProductProfile.THOUGHTS?"thought":id==ProductProfile.CLIPBOARD?"clipboard":"micKeyboardHidden",Daybook.accent(this));LinearLayout.LayoutParams ip=new LinearLayout.LayoutParams(Ui.dp(this,30),Ui.dp(this,30));ip.rightMargin=Ui.dp(this,9);heading.addView(icon,ip);}
             heading.addView(Daybook.text(this,title,22,Daybook.ink(this),true),new LinearLayout.LayoutParams(0,-2,1));face.addView(heading);Ui.space(face,14);
+            }
             deckScrolls[id]=new ScrollView(this);deckScrolls[id].setFillViewport(true);deckScrolls[id].setVerticalScrollBarEnabled(false);
             deckPages[id]=Ui.column(this);deckScrolls[id].addView(deckPages[id],new ViewGroup.LayoutParams(-1,-2));
             face.addView(deckScrolls[id],new LinearLayout.LayoutParams(-1,0,1));cards[i].addView(face,new android.widget.FrameLayout.LayoutParams(-1,-1));

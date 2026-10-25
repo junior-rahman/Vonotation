@@ -17,26 +17,34 @@ public final class PlayWatch extends Service {
     private static final int ID=48;
 
     private static Context app;
-    static void show(Context context,String title){
-        app=context.getApplicationContext();
-        Intent intent=new Intent(app,PlayWatch.class).putExtra("title",title==null||title.isEmpty()?"Recording":title);
+    private static PlayWatch instance;
+    private static boolean wanted;
+    private static int pendingStarts;
+    private static String latestTitle="Recording";
+    static synchronized void show(Context context,String title){
+        app=context.getApplicationContext();wanted=true;latestTitle=title==null||title.isEmpty()?"Recording":title;
+        Intent intent=new Intent(app,PlayWatch.class).putExtra("show",true);pendingStarts++;
         try{if(Build.VERSION.SDK_INT>=26)app.startForegroundService(intent);else app.startService(intent);}
-        catch(RuntimeException ignored){}
+        catch(RuntimeException ignored){pendingStarts--;wanted=false;}
     }
 
-    static void hide(){
-        if(app==null)return;
-        try{app.stopService(new Intent(app,PlayWatch.class));}
-        catch(RuntimeException ignored){}
+    static synchronized void hide(){
+        wanted=false;
+        // A startForegroundService request must reach startForeground even when
+        // playback is paused before Android creates this service. Do not cancel
+        // a pending service start; onStartCommand promotes it, then stops it.
+        if(instance!=null&&pendingStarts==0){instance.stopForeground(STOP_FOREGROUND_REMOVE);instance.stopSelf();}
     }
+
+    @Override public void onCreate(){super.onCreate();instance=this;}
+    @Override public void onDestroy(){if(instance==this)instance=null;super.onDestroy();}
 
     @Override public IBinder onBind(Intent intent){return null;}
 
     // Both merged product manifests declare PlayWatch as mediaPlayback; variant lint cannot resolve it.
     @android.annotation.SuppressLint("ForegroundServiceType")
     @Override public int onStartCommand(Intent intent,int flags,int startId){
-        if(intent!=null && STOP.equals(intent.getAction())){Notes.stopFromNotice();stopForeground(STOP_FOREGROUND_REMOVE);stopSelf();return START_NOT_STICKY;}
-        String title=intent==null?"Recording":intent.getStringExtra("title");
+        String title=latestTitle;
         if(title==null || title.isEmpty())title="Recording";
         NotificationManager notifications=(NotificationManager)getSystemService(NOTIFICATION_SERVICE);
         notifications.createNotificationChannel(new NotificationChannel("playback","Playback",NotificationManager.IMPORTANCE_DEFAULT));
@@ -57,7 +65,13 @@ public final class PlayWatch extends Service {
             if(Build.VERSION.SDK_INT>=34)startForeground(ID,notice,ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
             else startForeground(ID,notice);
         }catch(RuntimeException error){
-            notifications.notify(ID,notice);
+            synchronized(PlayWatch.class){if(intent!=null&&intent.getBooleanExtra("show",false))pendingStarts=Math.max(0,pendingStarts-1);wanted=false;}
+            stopSelf(startId);Notes.stopFromNotice();return START_NOT_STICKY;
+        }
+        synchronized(PlayWatch.class){
+            if(intent!=null && intent.getBooleanExtra("show",false))pendingStarts=Math.max(0,pendingStarts-1);
+            if(intent!=null && STOP.equals(intent.getAction())){wanted=false;Notes.stopFromNotice();}
+            if(!wanted&&pendingStarts==0){stopForeground(STOP_FOREGROUND_REMOVE);stopSelf(startId);}
         }
         return START_NOT_STICKY;
     }

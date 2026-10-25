@@ -76,6 +76,7 @@ public final class VisualPaletteTest extends Instrumentation {
             } : null);
             checks+=RecordingTransferChecks.run(context,AppProduct.isNotes());
             verifyRecordingGrowth();
+            if(AppProduct.isNotes())checks+=VocadingChecks.run(context);
             if(!AppProduct.isNotes())verifyUndoStorage();
             seed(preferences);
             verifyProductManifest();
@@ -95,6 +96,7 @@ public final class VisualPaletteTest extends Instrumentation {
                 for(String heading:excluded)require(findText(heading)==null,"Excluded card leaked into the product: "+heading);
                 if (pages[i] == 4) require(findText(THOUGHT_TITLE) != null, "Synthetic Thought did not appear in the production timeline");
                 if (pages[i] == 5) require(findText(ClipboardText.preview(CLIP)) != null, "Synthetic Clipboard copy did not appear in the production timeline");
+                if(AppProduct.isNotes()&&i==0){checks+=VocadingAudioChecks.run(this,activity);runOnMainSync(Notes::recordingChanged);waitForIdleSync();}
                 capture(names[i]);
                 verifyLegacyRetention();
                 if (i == 0) {
@@ -117,7 +119,7 @@ public final class VisualPaletteTest extends Instrumentation {
             if(!AppProduct.isNotes())verifyPolishScreens();
             require(requests.get() == 0, "Unexpected external request attempted");
             result.putInt("executed_checks", checks);
-            int screenshotCount=pages.length+1+(AppProduct.isNotes()?0:7);
+            int screenshotCount=pages.length+1+(AppProduct.isNotes()?2:7);
             result.putInt("native_screenshots", screenshotCount);
             result.putString("product", requestedProduct);
             result.putString("appearance", appearance);
