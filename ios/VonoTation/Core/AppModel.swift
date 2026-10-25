@@ -7,9 +7,7 @@ import Network
 @MainActor
 final class AppModel: ObservableObject {
     @Published private(set) var notes: [VonoNote] = []
-    @Published private(set) var clips: [ClipItem] = [] { didSet { scheduleExpiry() } }
-    @Published private(set) var deleted: [DeletedContent] = [] { didSet { scheduleExpiry() } }
-    private var expiryTask: Task<Void, Never>?
+    @Published private(set) var clips: [ClipItem] = []
     @Published private(set) var recaps: [DayRecap] = []
     @Published var settings = AppSettings() {
         didSet {
@@ -82,13 +80,13 @@ final class AppModel: ObservableObject {
         network.start(queue: DispatchQueue(label: "app.voiceflow.network"))
         Task { await load() }
     }
-    deinit { network.cancel(); expiryTask?.cancel() }
+    deinit { network.cancel() }
 
     private func load() async {
         do {
             let saved = try await store.load()
             applyingSnapshot = true
-            settings = saved.settings; notes = saved.notes; clips = saved.clips; recaps = saved.recaps; deleted = saved.deleted ?? []
+            settings = saved.settings; notes = saved.notes; clips = saved.clips; recaps = saved.recaps
             applyingSnapshot = false
             let journal = try await store.loadJournal()
             if let journal = journal, let source = store.audioURL(fileName: journal.audioFileName), FileManager.default.fileExists(atPath: source.path) {
@@ -108,7 +106,7 @@ final class AppModel: ObservableObject {
             #if DEBUG
             if testFixtures && notes.isEmpty { seedUITestFixtures() }
             #endif
-            isLoaded = true; refreshExpiry()
+            isLoaded = true
             refreshKeyState()
             try await persistNow()
             if let journal = journal { try await store.clearJournal(expectedID: journal.id) }
@@ -377,20 +375,13 @@ final class AppModel: ObservableObject {
         }
         if session?.id == note.id { cancelRecording(); return true }
         jobs[note.id]?.cancel(); jobs.removeValue(forKey: note.id); jobTokens.removeValue(forKey: note.id)
-        if product == .vonotation {
-            var recoverable = saved
-            recoverable.revision += 1
-            if recoverable.state == .processing { recoverable.state = .pending }
-            deleted.insert(DeletedContent(note: recoverable), at: 0)
-            statusMessage = "Deleted. Undo is available for 24 hours in Settings → Recently deleted."
-        }
         let source = notes.first(where: { $0.id == note.id })?.audioFileName
         notes.removeAll { $0.id == note.id }; invalidateRecaps()
         isProcessing = !jobs.isEmpty || !recapJobs.isEmpty
         Task {
             do {
                 try await persistNow()
-                if product == .notes, let name = source, let source = store.audioURL(fileName: name) { try? FileManager.default.removeItem(at: source) }
+                if let name = source, let source = store.audioURL(fileName: name) { try? FileManager.default.removeItem(at: source) }
             } catch { errorMessage = "The deletion could not be saved. The source file was kept." }
         }
         return true
@@ -416,62 +407,12 @@ final class AppModel: ObservableObject {
     func deleteClip(_ clip: ClipItem) {
         guard product.supportsClipboard else { return }
         guard !isBackingUp else { return }
-        guard let current = clips.first(where: { $0.id == clip.id }), current.expiresAt > Date() else { refreshExpiry(); return }
-        deleted.insert(DeletedContent(clip: current), at: 0)
         clips.removeAll { $0.id == clip.id }; persistSoon()
-        statusMessage = "Deleted. Undo is available in Settings → Recently deleted."
-    }
-    func copyClip(_ id: UUID) {
-        guard let clip = clips.first(where: { $0.id == id }), clip.expiresAt > Date() else { refreshExpiry(); return }
-        // Copy is not a new capture and must not extend the original expiry.
-        UIPasteboard.general.setItems([[UIPasteboard.typeAutomatic: clip.text]], options: [.localOnly: true, .expirationDate: clip.expiresAt])
-    }
-    func restoreDeleted(_ id: UUID) {
-        guard isLoaded, !isBackingUp, let item = deleted.first(where: { $0.id == id }), item.expiresAt > Date() else { refreshExpiry(); return }
-        if let note = item.note, notes.contains(where: { $0.id == note.id }) {
-            errorMessage = "An item with this identity already exists. The deleted copy was kept."; return
-        }
-        if let clip = item.clip, clips.contains(where: { $0.id == clip.id }) {
-            errorMessage = "This clipboard item is already present. The deleted copy was kept."; return
-        }
-        if var note = item.note {
-            note.revision += 1; note.mayFilterShortThought = false
-            notes.append(note); notes.sort { $0.createdAt > $1.createdAt }; invalidateRecaps()
-        }
-        if let clip = item.clip, !clips.contains(where: { $0.id == clip.id }) {
-            clips.append(clip); clips.sort { $0.createdAt > $1.createdAt }
-        }
-        deleted.removeAll { $0.id == id }; persistSoon()
-        statusMessage = "Restored."
-    }
-    private func scheduleExpiry() {
-        expiryTask?.cancel()
-        guard isLoaded, let next = (clips.map(\.expiresAt) + deleted.map(\.expiresAt)).min() else { return }
-        let delay = max(0.05, min(3600, next.timeIntervalSinceNow))
-        expiryTask = Task { [weak self] in
-            do { try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000)) } catch { return }
-            self?.refreshExpiry()
-        }
     }
     func refreshExpiry() {
         guard isLoaded, !isBackingUp else { return }
-        let now = Date(), retained = ClipboardPolicy.retained(clips)
-        let expired = deleted.filter { $0.expiresAt <= now }
-        if retained != clips || !expired.isEmpty {
-            clips = retained; deleted.removeAll { $0.expiresAt <= now }
-            Task {
-                do {
-                    try await persistNow()
-                    for item in expired {
-                        if let name = item.note?.audioFileName,
-                           !notes.contains(where: { $0.audioFileName == name }),
-                           !deleted.contains(where: { $0.note?.audioFileName == name }),
-                           let url = store.audioURL(fileName: name) { try? FileManager.default.removeItem(at: url) }
-                    }
-                } catch { errorMessage = "Expiry could not be saved. Source audio was kept." }
-            }
-        }
-        scheduleExpiry()
+        let retained = ClipboardPolicy.retained(clips)
+        if retained != clips { clips = retained; persistSoon() }
     }
     func saveAPIKey(_ key: String) {
         guard isLoaded, !isBackingUp else { return }
@@ -572,7 +513,7 @@ final class AppModel: ObservableObject {
             candidate.notes.append(legacy)
         }
         candidate.notes.sort { $0.createdAt > $1.createdAt }
-        candidate.deleted = deleted; candidate.clips = ClipboardPolicy.retained(clips); candidate.settings = imported.settings; candidate.recaps = []
+        candidate.clips = ClipboardPolicy.retained(clips); candidate.settings = imported.settings; candidate.recaps = []
         let endpointChanged = Self.normalizedEndpoint(settings.endpoint) != Self.normalizedEndpoint(imported.settings.endpoint)
         // One atomic commit precedes publishing restored state. Failure keeps current UI/store.
         generation += 1
@@ -601,7 +542,7 @@ final class AppModel: ObservableObject {
         let waiting = notes.filter { product.supports($0.kind) && $0.state == .pending && $0.id != session?.id && !($0.error?.hasPrefix("Recording was interrupted") ?? false) }
         for note in waiting { Task { await retry(note) } }
     }
-    private func snapshot() -> AppSnapshot { AppSnapshot(notes: notes, clips: clips, recaps: recaps, settings: settings, deleted: deleted) }
+    private func snapshot() -> AppSnapshot { AppSnapshot(notes: notes, clips: clips, recaps: recaps, settings: settings) }
     private func persistNow() async throws {
         guard isLoaded else { return }
         generation += 1

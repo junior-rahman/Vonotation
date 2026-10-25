@@ -76,23 +76,12 @@ struct AppSettings: Codable, Equatable {
 
 struct ThoughtSummary { let title: String; let summary: String }
 
-struct DeletedContent: Identifiable, Codable, Equatable {
-    var id = UUID()
-    var deletedAt = Date()
-    var note: VonoNote?
-    var clip: ClipItem?
-    var expiresAt: Date { min(deletedAt.addingTimeInterval(86400), clip?.expiresAt ?? .distantFuture) }
-    var title: String { note?.title ?? clip?.text ?? "Deleted item" }
-}
-
 struct AppSnapshot: Codable, Equatable {
     var formatVersion = 1
     var notes: [VonoNote] = []
     var clips: [ClipItem] = []
     var recaps: [DayRecap] = []
     var settings = AppSettings()
-    // Optional for compatibility with all existing version-1 stores. Never exported in backups.
-    var deleted: [DeletedContent]?
 }
 
 enum VonoError: LocalizedError {

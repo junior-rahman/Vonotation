@@ -84,7 +84,7 @@ def render():
                 if host == "VonoNotes": settings["SWIFT_ACTIVE_COMPILATION_CONDITIONS"] = ("DEBUG " if config == "Debug" else "") + "VONO_NOTES $(inherited)"
                 settings.update({"INFOPLIST_FILE": "VonoTation/Info.plist", "GENERATE_INFOPLIST_FILE": "NO", "SUPPORTS_MACCATALYST": "NO"})
                 if (ROOT / "VonoTation/Assets.xcassets/AppIcon.appiconset").is_dir():
-                    settings["ASSETCATALOG_COMPILER_APPICON_NAME"] = "AppIcon" if host == "VonoNotes" else "VoitationIcon"
+                    settings["ASSETCATALOG_COMPILER_APPICON_NAME"] = "AppIcon"
             else:
                 settings.update({"GENERATE_INFOPLIST_FILE": "YES", "SKIP_INSTALL": "YES"})
                 if target.endswith("Tests") and not target.endswith("UITests"):
