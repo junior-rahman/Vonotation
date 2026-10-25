@@ -81,7 +81,7 @@ public final class CaptureActivity extends Activity implements Dictation.Listene
     private void cancelProcessing() {
         cancelled=true;
         if(dictation!=null){dictation.cancel();dictation=null;}
-        started=false; finishedResult=false; wave.setActive(false); status.setText("Cancelled"); notice.setText("Nothing was inserted. The recording was discarded."); notice.setVisibility(android.view.View.VISIBLE);
+        started=false; finishedResult=false; wave.setActive(false); status.setText("Cancelled"); notice.setText("Processing stopped. Any saved recovery audio is available in Voitation."); notice.setVisibility(android.view.View.VISIBLE);
         primary.setText("Try again"); primary.setEnabled(true); secondary.setText("Close"); secondary.setOnClickListener(v->finish());
     }
     @Override public void partial(String text) { editor.setText(text); editor.setSelection(editor.length()); }
@@ -98,7 +98,7 @@ public final class CaptureActivity extends Activity implements Dictation.Listene
             subtitle.setText(delivered?"Thoughts · "+Cleaner.words(raw)+" words":"Could not save yet. Keep this card open and try Save thought.");
             primary.setText(delivered?"Save changes":"Save thought");
             if(delivered){if(dictation!=null)dictation.acknowledgeSaved();Notes.formatThought(getApplicationContext(),thoughtId);}
-        } else {status.setText("Your words, ready."); subtitle.setText("Review or edit · "+Cleaner.words(text)+" words");primary.setText(destination.equals("app")?"Keep text":"Insert text");if(interrupted){Recovery.keep(this,raw,text,duration,false);delivered=true;}}
+        } else {status.setText("Your words, ready."); subtitle.setText("Review or edit · "+Cleaner.words(text)+" words");primary.setText(destination.equals("app")?"Keep text":"Insert text");if(interrupted){delivered=Recovery.keep(this,raw,text,duration,false);if(delivered&&dictation!=null)dictation.acknowledgeSaved();}}
         primary.setEnabled(true); secondary.setText("Close");
         if(!warning.isEmpty()) { notice.setText(warning); notice.setVisibility(android.view.View.VISIBLE); }
     }
@@ -118,6 +118,7 @@ public final class CaptureActivity extends Activity implements Dictation.Listene
             if(QuickThoughtPolicy.hasUserEdits(raw,text)){
                 if(!Notes.editThought(this,thoughtId,text)){notice.setText("Could not save your changes. Your words are still here. Try again.");notice.setVisibility(android.view.View.VISIBLE);return;}
             }else if(newlySaved)Notes.formatThought(getApplicationContext(),thoughtId);
+            if(dictation!=null)dictation.acknowledgeSaved();
             // An untouched raw editor must not overwrite organized text or supersede its in-flight worker.
             finish();return;
         }
@@ -132,12 +133,12 @@ public final class CaptureActivity extends Activity implements Dictation.Listene
                 final Dictation finishing=dictation;
                 dictation.finishDetached(new Dictation.Listener(){
                     public void state(String value){}public void partial(String value){}public void level(float value){}
-                    public void result(String source,String text,String warning){long id=Notes.keepThought(app,System.currentTimeMillis(),source,elapsed);if(id>0){Notes.formatThought(app,id);android.widget.Toast.makeText(app,"Thought saved.",android.widget.Toast.LENGTH_SHORT).show();}else android.widget.Toast.makeText(app,"Could not save your thought.",android.widget.Toast.LENGTH_LONG).show();finishing.close();}
+                    public void result(String source,String text,String warning){long id=Notes.keepThought(app,System.currentTimeMillis(),source,elapsed);if(id>0){finishing.acknowledgeSaved();Notes.formatThought(app,id);android.widget.Toast.makeText(app,"Thought saved.",android.widget.Toast.LENGTH_SHORT).show();}else android.widget.Toast.makeText(app,"Could not save your thought.",android.widget.Toast.LENGTH_LONG).show();finishing.close();}
                     public void error(String message){android.widget.Toast.makeText(app,message,android.widget.Toast.LENGTH_LONG).show();finishing.close();}
                 });
             }else if(started)dictation.finishDetached(android.os.SystemClock.elapsedRealtime()-startedAt);else dictation.close();
         }
-        if(finishedResult && !delivered && !thought)Recovery.keep(this,raw,editor.getText().toString(),duration,false);
+        if(finishedResult && !delivered && !thought && Recovery.keep(this,raw,editor.getText().toString(),duration,false)&&dictation!=null)dictation.acknowledgeSaved();
         if(FlowAccessibility.instance!=null) FlowAccessibility.instance.updateBubble(); super.onDestroy();
     }
     @Override public void onConfigurationChanged(android.content.res.Configuration configuration) { super.onConfigurationChanged(configuration); getWindow().setLayout(Math.min(getResources().getDisplayMetrics().widthPixels,Ui.dp(this,600)),WindowManager.LayoutParams.WRAP_CONTENT); }

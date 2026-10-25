@@ -20,6 +20,8 @@ import org.json.JSONObject;
 public final class SavedContentActivity extends Activity {
     private final Handler main=new Handler(Looper.getMainLooper());
     private final ExecutorService worker=Executors.newSingleThreadExecutor();
+    private AlertDialog opened;
+    private final Runnable expiry=()->{if(opened!=null)opened.dismiss();load();};
     private EditText query;
     private LinearLayout results;
     private boolean deleted;
@@ -41,7 +43,7 @@ public final class SavedContentActivity extends Activity {
     @Override protected void onDestroy(){generation++;main.removeCallbacksAndMessages(null);worker.shutdownNow();super.onDestroy();}
     private static boolean matches(String text,String term){return text.toLowerCase(Locale.ROOT).contains(term);}
     private void load(){final int owner=++generation;String term=query.getText().toString().trim().toLowerCase(Locale.ROOT);results.removeAllViews();results.addView(Daybook.text(this,"Searching…",13,Daybook.muted(this),false));
-        worker.execute(()->{List<Hit> hits=new ArrayList<>();String failure=null;
+        worker.execute(()->{List<Hit> hits=new ArrayList<>();String failure=null;long expires=0;
             try{
                 if(deleted){JSONArray undo=DeletionUndo.list(this);for(int i=undo.length()-1;i>=0;i--){JSONObject row=undo.getJSONObject(i),entry=row.getJSONObject("entry");String text=entry.optString("title")+"\n"+entry.optString("text")+"\n"+entry.optString("raw");if(matches(text,term))hits.add(new Hit(row.optString("kind"),row.optLong("id"),entry.optString("title",entry.optString("text")),text));}
                     for(ClipboardArchive.Item item:ClipboardArchive.get(this).deleted(System.currentTimeMillis()))if(matches(item.preview,term))hits.add(new Hit("clipboard",item.id,item.preview,""));
@@ -54,8 +56,9 @@ public final class SavedContentActivity extends Activity {
                         ClipboardArchive.Item last=page.get(page.size()-1);before=last.copiedAt;id=last.id;
                     }
                 }
+                expires=ClipboardArchive.get(this).nextVisibleExpiry(System.currentTimeMillis());
             }catch(Exception unavailable){failure="Search could not read saved data. Your items were not changed.";}
-            final String error=failure;main.post(()->{if(owner!=generation||isDestroyed())return;results.removeAllViews();if(error!=null){results.addView(Daybook.text(this,error,13,Daybook.coral(this),false));return;}
+            final String error=failure;final long nextExpiry=expires;main.post(()->{if(owner!=generation||isDestroyed())return;results.removeAllViews();main.removeCallbacks(expiry);if(nextExpiry>0)main.postDelayed(expiry,Math.max(1,nextExpiry-System.currentTimeMillis()));if(error!=null){results.addView(Daybook.text(this,error,13,Daybook.coral(this),false));return;}
                 results.addView(Daybook.text(this,hits.isEmpty()?"No matching items.":hits.size()>=100?"First 100 matches. Refine your search for more.":hits.size()+" matching items",12,Daybook.muted(this),false));
                 for(Hit hit:hits){String label=hit.title.trim();if(label.isEmpty())label="Untitled";int end=label.offsetByCodePoints(0,Math.min(100,label.codePointCount(0,label.length())));label=label.substring(0,end);Button row=Daybook.button(this,hit.kind+" · "+label,false,v->{if(deleted){boolean ok=DeletionUndo.restore(this,hit.kind,hit.id);Toast.makeText(this,ok?"Restored.":"Could not restore; it may have expired.",Toast.LENGTH_SHORT).show();load();}else open(hit);});row.setContentDescription((deleted?"Undo delete: ":"Open ")+hit.kind+" "+label);results.addView(row,new LinearLayout.LayoutParams(-1,-2));}
             });
@@ -63,9 +66,9 @@ public final class SavedContentActivity extends Activity {
     }
     private String currentText(Hit hit){
         if(hit.kind.equals("clipboard"))return ClipList.text(this,hit.id);
-        try{JSONArray entries=new JSONArray(Store.get(this,hit.kind.equals("dictation")?"history":"notes","[]"));for(int i=0;i<entries.length();i++){JSONObject item=entries.getJSONObject(i);if(item.optLong("id")==hit.id)return item.optString("text",item.optString("raw"));}}catch(Exception ignored){}return null;
+        try{JSONArray entries=new JSONArray(Store.get(this,hit.kind.equals("dictation")?"history":"notes","[]"));for(int i=0;i<entries.length();i++){JSONObject item=entries.getJSONObject(i);if(item.optLong("id")==hit.id)return item.optString("text").isEmpty()?item.optString("raw"):item.optString("text");}}catch(Exception ignored){}return null;
     }
     private void open(Hit hit){String text=currentText(hit);if(text==null){Toast.makeText(this,"This item was deleted or expired.",Toast.LENGTH_SHORT).show();load();return;}
-        new AlertDialog.Builder(this).setTitle(hit.kind).setMessage(text).setNegativeButton("Close",null).setPositiveButton("Copy",(d,w)->{String current=currentText(hit);if(current!=null)Ui.copy(this,current);else Toast.makeText(this,"This item expired or was deleted.",Toast.LENGTH_SHORT).show();}).show();
+        opened=new AlertDialog.Builder(this).setTitle(hit.kind).setMessage(text).setNegativeButton("Close",null).setPositiveButton("Copy",(d,w)->{String current=currentText(hit);if(current!=null)Ui.copy(this,current);else Toast.makeText(this,"This item expired or was deleted.",Toast.LENGTH_SHORT).show();}).show();
     }
 }

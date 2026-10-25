@@ -156,7 +156,8 @@ final class Dictation {
                 try{
                     if(closed || recorderFailed)return;
                     if(recorder==null || !recorderStarted)throw new IllegalStateException();
-                    recorder.stop();releaseRecorder();finalized=true;
+                    try{recorder.stop();}catch(RuntimeException stoppedAtLimit){if(!sizeLimited||file==null||file.length()==0)throw stoppedAtLimit;}
+                    releaseRecorder();finalized=true;
                     if(closed)return;
                     File source=file;
                     if(!sensitive){

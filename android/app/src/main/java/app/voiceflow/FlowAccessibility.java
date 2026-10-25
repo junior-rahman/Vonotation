@@ -1152,7 +1152,7 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
     @Override public void onDestroy() {
         if(thoughtCapture!=null){long id=thoughtCapture.id;thoughtCapture.detach();thoughtCapture=null;VoiceTake.finishThought(id);thoughtSession=false;busy=false;}
         releaseTypingKeyboard();Store.prefs(this).unregisterOnSharedPreferenceChangeListener(this);if(dictation!=null){if(!pendingRaw.isEmpty()){
-            Recovery.keep(this,pendingRaw,pendingText,android.os.SystemClock.elapsedRealtime()-startedAt,pendingAcknowledged(),target!=null && target.sensitive);
+            if(Recovery.keep(this,pendingRaw,pendingText,android.os.SystemClock.elapsedRealtime()-startedAt,pendingAcknowledged(),target!=null && target.sensitive))dictation.acknowledgeSaved();
             if(!pendingWarning.isEmpty())Toast.makeText(this,pendingWarning,Toast.LENGTH_LONG).show();dictation.close();
         }else if(busy)dictation.finishDetached(android.os.SystemClock.elapsedRealtime()-startedAt);else dictation.close();dictation=null;}
         pendingRaw="";pendingText="";pendingWarning="";pendingWriteAccepted=false;lastPartial="";if(target!=null && target.sensitiveTarget!=null)target.sensitiveTarget.release();

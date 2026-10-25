@@ -31,7 +31,7 @@ final class RetryBuffer {
         File target; do { target=new File(dir(c),(thought?"retry-thought-":"retry-")+(id++)+".m4a"); } while(target.exists());
         boolean moved=audio.renameTo(target);
         if(!moved){
-            try(InputStream in=new FileInputStream(audio);OutputStream out=new FileOutputStream(target)){byte[] b=new byte[8192];int n;while((n=in.read(b))!=-1)out.write(b,0,n);moved=true;}
+            try(InputStream in=new FileInputStream(audio);FileOutputStream out=new FileOutputStream(target)){byte[] b=new byte[8192];int n;while((n=in.read(b))!=-1)out.write(b,0,n);out.getFD().sync();if(target.length()!=audio.length())throw new java.io.IOException("Incomplete recovery copy");moved=true;}
             catch(Exception failed){target.delete();return null;}
             audio.delete();
         }
