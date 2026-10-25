@@ -57,7 +57,8 @@ final class VocadingAudioChecks {
         }
     }
     private static void screenshot(Instrumentation runner,String name)throws Exception{main(runner,Notes::recordingChanged);runner.waitForIdleSync();method(VisualPaletteTest.class,"capture",String.class).invoke(runner,name);
-        main(runner,()->{android.view.View finish=(android.view.View)method(VisualPaletteTest.class,"findText",String.class).invoke(runner,"Finish");android.graphics.Rect visible=new android.graphics.Rect();require(finish!=null&&finish.getGlobalVisibleRect(visible)&&visible.width()==finish.getWidth(),"Finish control is clipped");});}
+        android.view.View finish=(android.view.View)method(VisualPaletteTest.class,"findText",String.class).invoke(runner,"Finish");
+        main(runner,()->{android.graphics.Rect visible=new android.graphics.Rect();require(finish!=null&&finish.getGlobalVisibleRect(visible)&&visible.width()==finish.getWidth(),"Finish control is clipped");});}
     private interface Action{void run()throws Exception;}
     private interface Condition{boolean get()throws Exception;}
     private static void main(Instrumentation runner,Action action)throws Exception{Throwable[] error={null};runner.runOnMainSync(()->{try{action.run();}catch(Throwable e){error[0]=e;}});if(error[0]!=null)throw new Exception("Main-thread audio check failed",error[0]);}
