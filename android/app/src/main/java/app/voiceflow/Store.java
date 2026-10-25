@@ -36,14 +36,16 @@ final class Store {
     static JSONArray history(Context c) {
         try { return new JSONArray(get(c, "history", "[]")); } catch (Exception e) { return new JSONArray(); }
     }
-    static synchronized void save(Context c, String raw, String text, long duration) {
-        if (text.trim().isEmpty() || !bool(c, "save_history", true)) return;
+    static synchronized boolean save(Context c, String raw, String text, long duration) {
+        if (text.trim().isEmpty() || !bool(c, "save_history", true)) return false;
         try {
             JSONArray old = history(c), next = new JSONArray();
             next.put(new JSONObject().put("id", nextId(old,System.currentTimeMillis())).put("text", text).put("raw", raw).put("duration", duration).put("words", Cleaner.words(text)));
             for (int i = 0; i < Math.min(old.length(), 99); i++) next.put(old.get(i));
-            prefs(c).edit().putString("history", next.toString()).apply();
+            if(prefs(c).edit().putString("history", next.toString()).commit())return true;
+            prefs(c).edit().putString("history",old.toString()).commit();
         } catch (Exception ignored) {}
+        return false;
     }
     static long nextId(JSONArray history,long now){
         java.util.HashSet<Long> used=new java.util.HashSet<>();

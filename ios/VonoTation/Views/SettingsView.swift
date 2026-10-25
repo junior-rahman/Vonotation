@@ -10,6 +10,7 @@ struct SettingsView: View {
     @State private var showBackup = false
     @State private var recapsConsent = false
     @State private var showPrevious = false
+    @State private var showDeleted = false
 
     var body: some View {
         NavigationStack {
@@ -70,6 +71,10 @@ struct SettingsView: View {
                             }.accessibilityIdentifier("settings.dailyRecaps")
                             }
                         }
+                        if model.product == .vonotation {
+                            Button("Recently deleted · Undo for 24 hours") { showDeleted = true }
+                                .buttonStyle(DaybookButtonStyle()).accessibilityIdentifier("settings.deleted")
+                        }
                         if !model.previousNotes.isEmpty {
                             DaybookCard {
                                 Text("Previous recordings").font(.headline)
@@ -107,6 +112,7 @@ struct SettingsView: View {
             .navigationTitle("Settings").navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(Daybook.paper, for: .navigationBar).toolbarBackground(.visible, for: .navigationBar)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { key = ""; dismiss() }.accessibilityIdentifier("settings.done") } }
+            .sheet(isPresented: $showDeleted) { SavedContentView(showDeleted: true).environmentObject(model) }
             .safeAreaInset(edge: .bottom) { if model.isRecording { ActiveRecordingStrip().padding(.horizontal, 16).background(Daybook.paper) } }
             .sheet(isPresented: $showBackup) { BackupSettingsView().environmentObject(model) }
             .sheet(isPresented: $showPrevious) { PreviousRecordingsView().environmentObject(model) }
@@ -187,7 +193,7 @@ struct ActiveRecordingStrip: View {
                 Button {
                     Daybook.feedback(model.settings.haptics, strong: true)
                     Task { await model.finishRecording() }
-                } label: { Label("Finish", systemImage: "stop.fill").frame(maxWidth: .infinity) }
+                } label: { Label("Finish", systemImage: model.product == .vonotation ? "checkmark.circle" : "stop.fill").frame(maxWidth: .infinity) }
                     .buttonStyle(DaybookButtonStyle(primary: true)).accessibilityIdentifier("record.finish")
             }
         }

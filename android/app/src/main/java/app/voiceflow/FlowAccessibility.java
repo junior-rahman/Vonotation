@@ -531,7 +531,7 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
         LinearLayout rail=Ui.column(this);rail.setClipChildren(false);rail.setClipToPadding(false);bubble.addView(rail,new LinearLayout.LayoutParams(d,-2));
         if(active){
             boolean processingNow=working();
-            View finish=iconControl(processingNow?"cancel":"finish",processingNow?(thoughtSession?"Cancel thought processing. The recording will be discarded.":"Cancel processing. Nothing will be inserted."):keyboardMode?"Finish keyboard dictation":thoughtSession?"Finish and save quick thought":"Finish dictation",true);finish.setTooltipText(processingNow?"Cancel":thoughtSession?"Finish and save thought":"Finish dictation");
+            View finish=iconControl(processingNow?"cancel":"finish",processingNow?(thoughtSession?"Cancel thought processing. Your saved recovery audio remains available.":"Cancel processing. Nothing will be inserted."):keyboardMode?"Finish keyboard dictation":thoughtSession?"Finish and save quick thought":"Finish dictation",true);finish.setTooltipText(processingNow?"Cancel":thoughtSession?"Finish and save thought":"Finish dictation");
             finish.setOnClickListener(v->{Daybook.feedback(v);if(working()){if(busy)cancelProcessing();else if(FlowKeyboard.instance!=null)FlowKeyboard.instance.cancelDictation();}else if(thoughtSession)finishThought();else if(!busy && FlowKeyboard.instance!=null && FlowKeyboard.instance.isRecording())FlowKeyboard.instance.floatingMic();else if(dictation!=null)dictation.stop();updateBubble();});rail.addView(finish,new LinearLayout.LayoutParams(d,d));
         }else{
             if(problem!=null){
@@ -1091,7 +1091,7 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
         boolean inserted=insertLive(text);pendingWriteAccepted|=inserted;
         if(inserted && target!=null && target.port!=null)inserted=target.nativeText.matches(target.port.read());
         if(!inserted && !insertionLost && attempt<14){handler.postDelayed(()->finishResult(raw,text,warning,attempt+1,owner),150);return;}
-        Recovery.keep(this,raw,text,android.os.SystemClock.elapsedRealtime()-startedAt,inserted);endRecording();
+        if(Recovery.keep(this,raw,text,android.os.SystemClock.elapsedRealtime()-startedAt,inserted)&&dictation!=null)dictation.acknowledgeSaved();endRecording();
         if(!warning.isEmpty())Toast.makeText(this,warning,Toast.LENGTH_LONG).show();
     }
     @Override public void error(String message) {
@@ -1166,12 +1166,8 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
         void setLevel(float value) { level=Math.max(0,Math.min(1,value)); invalidate(); }
         @Override protected void onDraw(Canvas canvas) {
             boolean moving=ValueAnimator.areAnimatorsEnabled() && recording() && !working();
-            paint.setColor(Daybook.action(FlowAccessibility.this)); float gap=bdp(8),width=bdp(4),center=getWidth()/2f;
-            for(int i=0;i<5;i++) {
-                float h=bdp(barHeights[i]);
-                if(moving) h*=.5f+level*.5f*(float)(.6+.4*Math.abs(Math.sin(android.os.SystemClock.uptimeMillis()/140.0+i)));
-                float x=center+(i-2)*gap-width/2;canvas.drawRoundRect(x,(getHeight()-h)/2,x+width,(getHeight()+h)/2,width/2,width/2,paint);
-            }
+            float size=Math.min(getWidth(),getHeight());canvas.save();canvas.translate((getWidth()-size)/2,(getHeight()-size)/2);canvas.scale(size/48,size/48);
+            VoitationGlyph.draw(canvas,paint,Daybook.action(FlowAccessibility.this),working()?currentStage():"Listening",level);canvas.restore();
             if(moving && isAttachedToWindow()) postInvalidateDelayed(70);
         }
     }

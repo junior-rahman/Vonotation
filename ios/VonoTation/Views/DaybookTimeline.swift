@@ -211,7 +211,7 @@ struct ClipboardTimelineRow: View {
                     Text("Expires \(clip.expiresAt.formatted(date: .abbreviated, time: .shortened))")
                         .font(.caption).foregroundStyle(Daybook.muted)
                     HStack(spacing: 8) {
-                        Button { model.copyText(clip.text); Daybook.feedback(model.settings.haptics) } label: { Label("Copy", systemImage: "doc.on.doc") }
+                        Button { model.copyClip(clip.id); Daybook.feedback(model.settings.haptics) } label: { Label("Copy", systemImage: "doc.on.doc") }
                             .buttonStyle(DaybookButtonStyle())
                         ShareLink(item: clip.text) { Image(systemName: "square.and.arrow.up").frame(minWidth: 24) }
                             .buttonStyle(DaybookButtonStyle()).accessibilityLabel("Share clipboard text")

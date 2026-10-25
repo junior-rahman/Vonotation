@@ -41,6 +41,7 @@ keytool -genkeypair -keystore "$VOICEFLOW_KEYSTORE" -storepass android -keypass 
 keytool -genkeypair -keystore "$VONO_NOTES_KEYSTORE" -storepass android -keypass android -alias voiceflow -keyalg RSA -keysize 2048 -validity 2 -dname 'CN=Disposable Vocading native QA' >> "$task_output/logs/disposable-signing.log" 2>&1
 bash gradlew --no-daemon assembleVonotationPreview lintVonotationPreview assembleNotesPreview lintNotesPreview 2>&1 | tee "$task_output/logs/build-lint.log"
 bash tests/run-pure-tests.sh 2>&1 | tee "$task_output/logs/pure-tests.log"
+python3 tests/run-recovery-tests.py 2>&1 | tee "$task_output/logs/recovery-tests.log"
 for task_product in vonotation notes; do
   mkdir -p "$task_output/$task_product/logs" "$task_output/$task_product/screenshots"
   bash tests/build-visual-fixture.sh "$task_product" 2>&1 | tee "$task_output/$task_product/logs/fixture-build.log"

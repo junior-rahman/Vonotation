@@ -635,6 +635,10 @@ final class Notes {
         finally{try{r.release();}catch(Exception ignored){}}
     }
 
+    static void purgeUndoAudio(Context context,JSONObject deleted){
+        java.util.HashSet<String> retained=new java.util.HashSet<>();JSONArray live=all(context);for(int i=0;i<live.length();i++){JSONObject entry=live.optJSONObject(i);if(entry!=null)for(File file:filesOf(context,entry))retained.add(file.getAbsolutePath());}
+        for(File file:filesOf(context,deleted))if(!retained.contains(file.getAbsolutePath()))file.delete();
+    }
     private static JSONArray all(Context context){try{return new JSONArray(Store.get(context,"notes","[]"));}catch(Exception e){return new JSONArray();}}
 
     private static JSONObject find(Context context,long id) {
@@ -853,7 +857,7 @@ final class Notes {
         try { return new CloudApi(context).noteSummary(text); } catch(Exception ignored) { return ""; }
     }
 
-    private static List<File> filesOf(Context context,JSONObject note) {
+    static List<File> filesOf(Context context,JSONObject note) {
         List<File> files=new ArrayList<>();
         JSONArray parts=note.optJSONArray("parts");
         if(parts!=null)for(int i=0;i<parts.length();i++)addFile(files,context,parts.optString(i));
@@ -1272,7 +1276,7 @@ final class Notes {
             dialog.setOnShowListener(d->dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener(view->{if(editThought(activity,note.optLong("id"),input.getText().toString())){dialog.dismiss();refresh.run();}else input.setError("Add some text, or reopen this thought.");}));dialog.show();
         }));
         if(!filesOf(activity,note).isEmpty()&&!recording)actions.addView(quiet(activity,thoughtSourceShown==id?"Hide audio":"Source audio",v->{if(thoughtSourceShown==id){thoughtSourceShown=-1;stopPlayback();}else thoughtSourceShown=id;refresh.run();}));
-        actions.addView(quiet(activity,"Delete",v->new android.app.AlertDialog.Builder(activity).setTitle("Delete this thought?").setMessage("Removes the thought, its original transcript and source audio from this phone.").setNegativeButton("Keep",null).setPositiveButton("Delete",(d,w)->{remove(activity,id);back();refresh.run();}).show()));
+        actions.addView(quiet(activity,"Delete",v->new android.app.AlertDialog.Builder(activity).setTitle("Delete this thought?").setMessage("Moves this thought and its source audio to Recently deleted for 24 hours.").setNegativeButton("Keep",null).setPositiveButton("Delete",(d,w)->{stopPlayback();if(DeletionUndo.delete(activity,"thought",id)){back();refresh.run();DeletionUndo.offer(activity,"thought",id,refresh);}else toast(activity,"Could not delete. Your thought was kept.");}).show()));
         body.addView(actions);
         if(!recording&&!coming&&(note.optString("raw").isEmpty()||note.optBoolean("partial_transcript"))&&!filesOf(activity,note).isEmpty())body.addView(quiet(activity,"Retry transcription",v->{retryThought(activity,id);refresh.run();}));
         if(thoughtSourceShown==id&&!recording){Ui.space(body,12);thoughtSourcePlayer(activity,body,note,refresh);}

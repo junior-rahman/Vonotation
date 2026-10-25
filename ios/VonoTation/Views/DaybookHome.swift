@@ -46,6 +46,7 @@ struct DaybookHome: View {
     @State private var page: DaybookPage = AppProduct.current == .notes ? .voiceNotes : .dictations
     @State private var showSettings = false
     @State private var importAudio = false
+    @State private var showSearch = false
 
     private var pages: [DaybookPage] {
         let supported: [DaybookPage] = model.product == .notes ? [.voiceNotes, .calls] : [.dictations, .thoughts, .clipboard]
@@ -85,6 +86,7 @@ struct DaybookHome: View {
             .sheet(isPresented: $showSettings) {
                 SettingsView().environmentObject(model)
             }
+            .sheet(isPresented: $showSearch) { SavedContentView().environmentObject(model) }
             .fileImporter(isPresented: $importAudio, allowedContentTypes: [.audio], allowsMultipleSelection: false) { result in
                 guard case .success(let urls) = result, let url = urls.first else { return }
                 let kind: NoteKind = page == .calls ? .call : page.kind ?? .voiceNote
@@ -263,8 +265,11 @@ struct DaybookHome: View {
                 Daybook.feedback(model.settings.haptics, strong: true)
                 Task { await model.startRecording(kind: kind) }
             } label: {
-                Label(page == .dictations ? "Dictate" : page == .translate ? "Record translation" : "Record", systemImage: "waveform")
-                    .frame(minWidth: 130)
+                HStack {
+                    if model.product == .vonotation { DaybookMark(size: 24, color: Daybook.actionInk) }
+                    else { Image(systemName: "waveform") }
+                    Text(page == .dictations ? "Dictate" : page == .translate ? "Record translation" : "Record")
+                }.frame(minWidth: 130)
             }
             .buttonStyle(DaybookButtonStyle(primary: true))
             .disabled(model.isBackingUp)
@@ -278,6 +283,10 @@ struct DaybookHome: View {
             DaybookMark()
             Text(model.product.displayName).font(.headline)
             Spacer()
+            if model.product == .vonotation {
+                Button { showSearch = true } label: { Image(systemName: "magnifyingglass").frame(width: 44, height: 44) }
+                    .accessibilityLabel("Search saved text").accessibilityIdentifier("nav.search")
+            }
             Button { Daybook.feedback(model.settings.haptics); showSettings = true } label: {
                 Image(systemName: "slider.horizontal.3").font(.title3).frame(width: 44, height: 44)
                     .background(Daybook.surface, in: RoundedRectangle(cornerRadius: 14))

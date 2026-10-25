@@ -95,6 +95,16 @@ struct DaybookMark: View {
     var color: Color = Daybook.brand
     var body: some View {
         Canvas { context, size in
+            if AppProduct.current == .vonotation {
+                let unit = min(size.width, size.height) / 48
+                context.scaleBy(x: unit, y: unit)
+                for i in 0..<7 {
+                    let depth = CGFloat(3 - abs(i - 3)), x = 8 + CGFloat(i) * 5.33
+                    var bar = Path(); bar.move(to: CGPoint(x: x, y: 10 + depth * 4)); bar.addLine(to: CGPoint(x: x, y: 22 + depth * 5))
+                    context.stroke(bar, with: .color(color), style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                }
+                return
+            }
             let scale = min(size.width / 30, size.height / 31)
             context.scaleBy(x: scale, y: scale)
             context.translateBy(x: 15, y: 15)

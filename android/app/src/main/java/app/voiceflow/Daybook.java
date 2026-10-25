@@ -111,6 +111,7 @@ final class Daybook {
         private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);
         Mark(Context c) { super(c);paint.setColor(brand(c));setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO); }
         @Override protected void onDraw(Canvas canvas) {
+            if(!AppProduct.isNotes()){float unit=Math.min(getWidth(),getHeight())/48f;canvas.save();canvas.translate((getWidth()-48*unit)/2,(getHeight()-48*unit)/2);canvas.scale(unit,unit);VoitationGlyph.wave(canvas,paint,false);canvas.restore();return;}
             float unit=Math.min(getWidth()/30f,getHeight()/31f);canvas.save();canvas.translate((getWidth()-30*unit)/2,(getHeight()-31*unit)/2);canvas.scale(unit,unit);canvas.rotate(13,15,15);
             canvas.drawRoundRect(2,10,6,21,2,2,paint);canvas.drawRoundRect(9,4,13,27,2,2,paint);canvas.drawRoundRect(16,6,20,24,2,2,paint);canvas.drawRoundRect(23,11,27,19,2,2,paint);
             canvas.rotate(-45,19,28);canvas.drawRoundRect(15,26,24,30,2,2,paint);canvas.restore();
@@ -122,8 +123,9 @@ final class Daybook {
         @Override protected void onDraw(Canvas canvas) {
             float size=Ui.dp(getContext(),19),left=(getWidth()-size)/2,top=(getHeight()-size)/2,unit=size/24;
             canvas.save();canvas.translate(left,top);canvas.scale(unit,unit);paint.setStrokeWidth(1.8f);
-            canvas.drawLine(3,6,9,6,paint);canvas.drawLine(15,6,21,6,paint);canvas.drawCircle(12,6,3,paint);
-            canvas.drawLine(3,18,5,18,paint);canvas.drawLine(11,18,21,18,paint);canvas.drawCircle(8,18,3,paint);canvas.restore();
+            canvas.drawLine(3,5,7,5,paint);canvas.drawLine(13,5,21,5,paint);canvas.drawCircle(10,5,2.5f,paint);
+            canvas.drawLine(3,12,12,12,paint);canvas.drawLine(18,12,21,12,paint);canvas.drawCircle(15,12,2.5f,paint);
+            canvas.drawLine(3,19,5,19,paint);canvas.drawLine(11,19,21,19,paint);canvas.drawCircle(8,19,2.5f,paint);canvas.restore();
         }
     }
     static final class Rail extends View {
