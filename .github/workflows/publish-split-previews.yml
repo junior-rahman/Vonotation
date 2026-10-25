@@ -1,0 +1,34 @@
+name: Publish verified split previews
+
+on:
+  push:
+    branches: [release/split-verified-previews]
+    paths:
+      - 'release-assets/**'
+      - '.github/workflows/publish-split-previews.yml'
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: split-verified-previews-publication
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.repository_id == '1416658953' && github.repository == 'junior-rahman/Vonotation' && github.ref == 'refs/heads/release/split-verified-previews'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Verify and publish the compatible Voitation Android preview
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 release-assets/publish_voitation.py
+      - name: Verify and publish both iOS Simulator previews
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 release-assets/publish_split_ios.py

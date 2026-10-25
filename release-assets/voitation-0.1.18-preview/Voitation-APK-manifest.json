@@ -1,0 +1,13 @@
+{
+  "app": "Voitation",
+  "package": "app.voiceflow",
+  "versionName": "0.1.18-split-preview",
+  "versionCode": 90,
+  "size": 6240969,
+  "sha256": "1facc7cf489b1531817683d753256d4ca0f5f9bee96c31a395f935b701459f9c",
+  "signerSha256": "5dca2219fbe89fb885b24c904fd4c57d3b58930922d21d455fc10d7a35f7568a",
+  "sourceCommit": "7d2c26aa8ce8d72b370138f5b1632093754e29c9",
+  "androidRun": 40154153363,
+  "payloadMatchesNativeArtifact": true,
+  "physicalDeviceInstallTested": false
+}
