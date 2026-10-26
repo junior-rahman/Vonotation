@@ -27,8 +27,8 @@ android {
         vonotation {
             dimension 'product'
             applicationId 'app.voiceflow'
-            versionCode 94
-            versionName '0.1.22-preview'
+            versionCode 95
+            versionName '0.1.23-preview'
             if (System.getenv('VONO_UNSIGNED_BUILDS') != 'true') signingConfig signingConfigs.preview
         }
         notes {

@@ -64,6 +64,7 @@ PY
 "${compiler[@]}" -source 8 -target 8 -encoding UTF-8 \
     -classpath "$android_jar:$app_classes" -d "$fixture_dir/classes" \
     "$project_dir/tests/fixtures/VisualPaletteTest.java" \
+    "$project_dir/tests/fixtures/ThoughtAudioShareChecks.java" \
     "$project_dir/tests/fixtures/RecoveredClipboardTest.java" \
     "$project_dir/tests/fixtures/ClipboardInputActivity.java" \
     "$project_dir/tests/fixtures/RecordingTransferChecks.java" \
@@ -74,6 +75,7 @@ PY
 while IFS= read -r -d '' generated; do
     case "${generated#"$fixture_dir/classes/"}" in
         app/voiceflow/VisualPaletteTest.class|app/voiceflow/VisualPaletteTest\$*.class) ;;
+        app/voiceflow/ThoughtAudioShareChecks.class|app/voiceflow/ThoughtAudioShareChecks\$*.class) ;;
         app/voiceflow/RecoveredClipboardTest.class|app/voiceflow/RecoveredClipboardTest\$*.class) ;;
         app/voiceflow/fixture/ClipboardInputActivity.class|app/voiceflow/fixture/ClipboardInputActivity\$*.class) ;;
         app/voiceflow/RecordingTransferChecks.class|app/voiceflow/RecordingTransferChecks\$*.class) ;;

@@ -345,10 +345,14 @@ final class Notes {
         if(note.optBoolean("recording")){toast(activity,"Finish recording before sharing.");return;}
         toast(activity,"Preparing source audio…");Context app=activity.getApplicationContext();long id=note.optLong("id");
         mediaWork.execute(()->{try{List<File> sources;
-            synchronized(Store.class){JSONObject current=find(app,id);if(!ownsNote(current))throw new java.io.IOException("The recording is no longer available.");List<File> files=filesOf(app,current);JSONArray declared=current.optJSONArray("parts");if(declared!=null&&declared.length()>files.size())throw new java.io.IOException("A source segment is missing. No incomplete copy was shared.");sources=new ArrayList<>(files);}
+            synchronized(Store.class){JSONObject current=find(app,id);if(!ownsNote(current))throw new java.io.IOException("The recording is no longer available.");if(current.optBoolean("recording"))throw new java.io.IOException("Finish recording before sharing.");List<File> files=filesOf(app,current);JSONArray declared=current.optJSONArray("parts");if(declared!=null&&declared.length()>files.size())throw new java.io.IOException("A source segment is missing. No incomplete copy was shared.");sources=new ArrayList<>(files);}
             android.net.Uri uri=RecordingShare.prepare(app,sources);
             synchronized(Store.class){if(!ownsNote(find(app,id)))throw new java.io.IOException("The recording is no longer available.");}
-            activity.runOnUiThread(()->{if(activity.isDestroyed()||activity.isFinishing())return;android.content.Intent send=new android.content.Intent(android.content.Intent.ACTION_SEND).setType(uri.getLastPathSegment().endsWith(".zip")?"application/zip":"audio/mp4").putExtra(android.content.Intent.EXTRA_STREAM,uri).addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION);send.setClipData(android.content.ClipData.newRawUri("Source audio",uri));activity.startActivity(android.content.Intent.createChooser(send,"Share source audio"));});
+            activity.runOnUiThread(()->{if(activity.isDestroyed()||activity.isFinishing())return;
+                synchronized(Store.class){JSONObject current=find(app,id);if(!ownsNote(current)||current.optBoolean("recording")){toast(activity,"The recording is no longer available to share.");return;}}
+                android.content.Intent send=new android.content.Intent(android.content.Intent.ACTION_SEND).setType(uri.getLastPathSegment().endsWith(".zip")?"application/zip":"audio/mp4").putExtra(android.content.Intent.EXTRA_STREAM,uri).addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION);send.setClipData(android.content.ClipData.newRawUri("Source audio",uri));
+                try{activity.startActivity(android.content.Intent.createChooser(send,"Share audio"));}catch(android.content.ActivityNotFoundException|SecurityException unavailable){toast(activity,"Could not open sharing. Your audio is still saved.");}
+            });
         }catch(Exception error){toast(app,error.getMessage()==null?"Could not prepare source audio.":error.getMessage());}});
     }
 
@@ -1399,6 +1403,11 @@ final class Notes {
         if(!filesOf(activity,note).isEmpty()&&!recording)actions.addView(quiet(activity,thoughtSourceShown==id?"Hide audio":"Source audio",v->{if(thoughtSourceShown==id){thoughtSourceShown=-1;stopPlayback();}else thoughtSourceShown=id;refresh.run();}));
         actions.addView(quiet(activity,"Delete",v->new android.app.AlertDialog.Builder(activity).setTitle("Delete this thought?").setMessage("Moves this thought and its source audio to Recently deleted for 24 hours.").setNegativeButton("Keep",null).setPositiveButton("Delete",(d,w)->{stopPlayback();if(DeletionUndo.delete(activity,"thought",id)){back();refresh.run();DeletionUndo.offer(activity,"thought",id,refresh);}else toast(activity,"Could not delete. Your thought was kept.");}).show()));
         body.addView(actions);
+        if(!recording&&!filesOf(activity,note).isEmpty()){
+            Ui.space(body,8);
+            body.addView(Daybook.button(activity,"Share audio",false,v->shareAudio(activity,note)),new LinearLayout.LayoutParams(-1,-2));
+            if(filesOf(activity,note).size()>1){Ui.space(body,4);body.addView(Daybook.text(activity,"Shares all audio parts in order as a ZIP file.",12,Daybook.muted(activity),false));}
+        }
         if(!recording&&!coming&&(note.optString("raw").isEmpty()||note.optBoolean("partial_transcript"))&&!filesOf(activity,note).isEmpty())body.addView(quiet(activity,"Retry transcription",v->{retryThought(activity,id);refresh.run();}));
         if(thoughtSourceShown==id&&!recording){Ui.space(body,12);thoughtSourcePlayer(activity,body,note,refresh);}
     }

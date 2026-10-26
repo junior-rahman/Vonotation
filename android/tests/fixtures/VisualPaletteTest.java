@@ -111,6 +111,7 @@ public final class VisualPaletteTest extends Instrumentation {
                 if(AppProduct.isNotes()&&i==0){checks+=VocadingAudioChecks.run(this,activity);runOnMainSync(Notes::recordingChanged);waitForIdleSync();}
                 capture(names[i]);
                 verifyLegacyRetention();
+                if(pages[i]==4){checks+=ThoughtAudioShareChecks.run(this,activity);waitForIdleSync();capture("thought-share");}
                 if (i == 0) {
                     View settings = findDescription("Settings");
                     tap(settings); waitForIdleSync(); SystemClock.sleep(300);
@@ -133,7 +134,7 @@ public final class VisualPaletteTest extends Instrumentation {
             require(requests.get() == 0, "Unexpected external request attempted");
             require(updateRequests.get()==(AppProduct.isNotes()?3:0),"Unexpected update feed requests");
             result.putInt("executed_checks", checks);
-            int screenshotCount=pages.length+1+(AppProduct.isNotes()?3:7);
+            int screenshotCount=pages.length+1+(AppProduct.isNotes()?3:8);
             result.putInt("native_screenshots", screenshotCount);
             result.putString("product", requestedProduct);
             result.putString("appearance", appearance);
