@@ -1,9 +1,9 @@
 {
-  "versionCode": 93,
-  "versionName": "0.1.21-preview",
-  "apk": "https://github.com/junior-rahman/Vonotation/releases/download/v0.1.21-preview/Voitation-0.1.21-preview.apk",
-  "sha256": "fdadd68a74e49ccb3819fc40f949e8f7f59f3ea82be8760743a4b1e6d0006423",
-  "size": 6275081,
+  "versionCode": 95,
+  "versionName": "0.1.23-preview",
+  "apk": "https://github.com/junior-rahman/Vonotation/releases/download/v0.1.23-preview/Voitation-0.1.23-preview.apk",
+  "sha256": "184f01dd54e32e6b7e43d600b0c5591a42ca5b499caae272eb2032420d890329",
+  "size": 6279177,
   "package": "app.voiceflow",
-  "notes": "Clipboard preview now waits until an input becomes active again after a transcription loses its original field. PIN, number, decimal and phone-number fields request the typing keyboard. Retains Sand & Cocoa and the approved artwork. Android builds, lint, 43 Java suites and native input, clipboard, privacy, recovery and layout checks passed. Original signing identity retained; install over the existing app. Physical cross-app keyboard/focus behavior remains for phone testing. iOS and backup/OAuth remain paused."
+  "notes": "Share audio from Quick Thoughts, including original M4A and multipart ZIP sharing. Includes clipboard preview and keyboard fixes, Sand & Cocoa, and approved artwork. Android builds, lint and native sharing checks passed. Physical phone installation and sharing to third-party apps still need testing. Backup and iOS remain paused."
 }
