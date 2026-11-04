@@ -31,6 +31,7 @@ final class Dictation {
     private final Context context;
     private final boolean sensitive;
     private final boolean thought;
+    private final boolean incognito;
     private Listener listener;
     private final Handler handler=new Handler(Looper.getMainLooper());
     private final ExecutorService executor=Executors.newSingleThreadExecutor();
@@ -51,7 +52,9 @@ final class Dictation {
     private String committed="", partial="";
     Dictation(Context c,Listener listener) { this(c,listener,false); }
     Dictation(Context c,Listener listener,boolean sensitive) { this(c,listener,sensitive,false); }
-    Dictation(Context c,Listener listener,boolean sensitive,boolean thought) { context=c; this.listener=listener;this.sensitive=sensitive;this.thought=thought;awake=new RecordingAwake(c); }
+    Dictation(Context c,Listener listener,boolean sensitive,boolean thought) { this(c,listener,sensitive,thought,false); }
+    /** incognito: see Recovery.keep; a detached result keeps the same no-durable-copy rule. */
+    Dictation(Context c,Listener listener,boolean sensitive,boolean thought,boolean incognito) { context=c; this.listener=listener;this.sensitive=sensitive;this.thought=thought;this.incognito=incognito;awake=new RecordingAwake(c); }
     boolean isFinishing(){return stopping || processing;}
     boolean isCapturing(){return active&&!stopping&&!processing&&!closed;}
     void start() {
@@ -277,12 +280,12 @@ final class Dictation {
         listener=new Listener(){
             public void state(String value){}public void partial(String value){}public void level(float value){}
             public void result(String raw,String text,String warning){
-                if(thought){if(saveThought(app,raw,duration))acknowledgeSaved();}else if(Recovery.keep(app,raw,text,duration,false,sensitive,inputLost))acknowledgeSaved();
+                if(thought){if(saveThought(app,raw,duration))acknowledgeSaved();}else if(Recovery.keep(app,raw,text,duration,false,sensitive,inputLost,incognito))acknowledgeSaved();
                 close();
             }
             public void error(String message){
                 String raw=join(committed,partial);
-                if(!raw.trim().isEmpty()){if(thought)saveThought(app,raw,duration);else Recovery.keep(app,raw,sensitive?raw:Store.clean(app,raw),duration,false,sensitive,inputLost);}
+                if(!raw.trim().isEmpty()){if(thought)saveThought(app,raw,duration);else Recovery.keep(app,raw,sensitive?raw:Store.clean(app,raw),duration,false,sensitive,inputLost,incognito);}
                 else android.widget.Toast.makeText(app,message,android.widget.Toast.LENGTH_LONG).show();
                 close();
             }

@@ -1,7 +1,20 @@
 #!/usr/bin/env bash
-# Both split applications: real Android SDK/emulator checks. No release credentials.
+# Split applications: real Android SDK/emulator checks. No release credentials.
+# VONO_PRODUCTS selects the Gradle product flavors to verify (default: both); a single-product
+# repository sets just its own flavor.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+read -r -a task_products <<< "${VONO_PRODUCTS:-vonotation notes}"
+[[ ${#task_products[@]} -ge 1 ]] || { echo 'VONO_PRODUCTS must name at least one product' >&2; exit 2; }
+for task_product in "${task_products[@]}"; do
+  case "$task_product" in vonotation|notes) ;; *) echo "Unknown product in VONO_PRODUCTS: $task_product" >&2; exit 2 ;; esac
+done
+has_product() { local wanted="$1" item; for item in "${task_products[@]}"; do [[ "$item" == "$wanted" ]] && return 0; done; return 1; }
+task_gradle=()
+for task_product in "${task_products[@]}"; do
+  if [[ "$task_product" == notes ]]; then task_gradle+=(assembleNotesPreview lintNotesPreview); else task_gradle+=(assembleVonotationPreview lintVonotationPreview); fi
+done
+export VONO_PRODUCTS="${task_products[*]}"
 task_root="$PWD"
 task_output="$task_root/build/visual-ci"
 rm -rf "$task_output"
@@ -39,26 +52,26 @@ sdkmanager --version > "$task_output/sdkmanager-version.txt"
 sdkmanager 'platforms;android-35' 'build-tools;35.0.0' 'emulator' 'system-images;android-35;default;x86_64' 2>&1 | tee "$task_output/logs/sdk-install.log"
 keytool -genkeypair -keystore "$VOICEFLOW_KEYSTORE" -storepass android -keypass android -alias voiceflow -keyalg RSA -keysize 2048 -validity 2 -dname 'CN=Disposable native palette QA' > "$task_output/logs/disposable-signing.log" 2>&1
 keytool -genkeypair -keystore "$VONO_NOTES_KEYSTORE" -storepass android -keypass android -alias voiceflow -keyalg RSA -keysize 2048 -validity 2 -dname 'CN=Disposable Vocading native QA' >> "$task_output/logs/disposable-signing.log" 2>&1
-bash gradlew --no-daemon assembleVonotationPreview lintVonotationPreview assembleNotesPreview lintNotesPreview 2>&1 | tee "$task_output/logs/build-lint.log"
+bash gradlew --no-daemon "${task_gradle[@]}" 2>&1 | tee "$task_output/logs/build-lint.log"
 bash tests/run-pure-tests.sh 2>&1 | tee "$task_output/logs/pure-tests.log"
 python3 tests/run-recovery-tests.py 2>&1 | tee "$task_output/logs/recovery-tests.log"
-for task_product in vonotation notes; do
+for task_product in "${task_products[@]}"; do
   mkdir -p "$task_output/$task_product/logs" "$task_output/$task_product/screenshots"
   bash tests/build-visual-fixture.sh "$task_product" 2>&1 | tee "$task_output/$task_product/logs/fixture-build.log"
   task_apk="app/build/outputs/apk/$task_product/preview/app-$task_product-preview.apk"
   "$ANDROID_SDK_ROOT/build-tools/35.0.0/apksigner" verify --print-certs "$task_apk" > "$task_output/$task_product/test-apk-certificate.txt"
   sha256sum "$task_apk" "build/tests/visual/$task_product/$task_product-visual-fixture.apk" > "$task_output/$task_product/test-apk-sha256.txt"
 done
-python3 - "$task_output" <<'PY'
+python3 - "$task_output" "${task_products[@]}" <<'PY'
 from pathlib import Path
 import re,sys
 root=Path(sys.argv[1]); certificates=[]
-for product in ('vonotation','notes'):
+for product in sys.argv[2:]:
     text=(root/product/'test-apk-certificate.txt').read_text()
     digest=re.search(r'Signer #1 certificate SHA-256 digest: ([0-9a-f]+)',text)
     if not digest: raise SystemExit('Missing QA signer identity for '+product)
     certificates.append(digest.group(1))
-if certificates[0]==certificates[1]: raise SystemExit('Split apps must have independent QA signer fixtures')
+if len(set(certificates))!=len(certificates): raise SystemExit('Split apps must have independent QA signer fixtures')
 PY
 [[ -e /dev/kvm ]] || { printf '%s\n' 'Native Android verification requires KVM on the hosted runner.' >&2; exit 2; }
 [[ -r /dev/kvm && -w /dev/kvm ]] || sudo chmod 666 /dev/kvm
@@ -90,6 +103,25 @@ for task_attempt in $(seq 1 90); do
   sleep 2
 done
 [[ "$task_booted" == true ]] || { printf '%s\n' 'Native emulator boot timed out.' >&2; exit 1; }
+# A cold software-rendered emulator can leave the system launcher (Quickstep) too busy to answer its first input;
+# its "isn't responding" dialog then covers the app under test. Hide system error dialogs before any input, so
+# Android restarts a hung system app instead, and close any such dialog before each native run. Our own apps stay
+# strict: a crash or ANR in them still fails the run (clear_system_anr and the logcat check below).
+adb shell settings put global hide_error_dialogs 1
+clear_system_anr() {
+  local focus package
+  for _ in $(seq 1 30); do
+    focus="$(adb shell dumpsys window 2>/dev/null | grep -m1 'mCurrentFocus' || true)"
+    [[ "$focus" == *"Not Responding"* ]] || return 0
+    package="$(sed -n 's/.*Not Responding: \([A-Za-z0-9_.]*\).*/\1/p' <<< "$focus")"
+    case "$package" in app.voiceflow*|app.vonotation.notes*) printf '%s\n' "Target app is not responding: $focus" >&2; return 1 ;; esac
+    printf '%s\n' "Closing system ANR dialog: $focus" | tee -a "$task_output/logs/system-anr.log"
+    if [[ -n "$package" ]]; then adb shell am force-stop "$package"; else adb shell input keyevent KEYCODE_BACK; fi
+    sleep 2
+  done
+  printf '%s\n' 'A system ANR dialog would not clear.' >&2
+  return 1
+}
 adb shell input keyevent 82
 adb shell settings put global window_animation_scale 0
 adb shell settings put global transition_animation_scale 0
@@ -97,7 +129,7 @@ adb shell settings put global animator_duration_scale 0
 adb shell getprop > "$task_output/emulator-properties.txt"
 adb shell wm size > "$task_output/emulator-display.txt"
 adb shell wm density >> "$task_output/emulator-display.txt"
-for task_product in vonotation notes; do
+for task_product in "${task_products[@]}"; do
   if [[ "$task_product" == notes ]]; then task_package=app.vonotation.notes; else task_package=app.voiceflow; fi
   adb install --no-incremental "app/build/outputs/apk/$task_product/preview/app-$task_product-preview.apk"
   adb install --no-incremental "build/tests/visual/$task_product/$task_product-visual-fixture.apk"
@@ -108,7 +140,7 @@ for task_product in vonotation notes; do
   adb shell dumpsys package "$task_package" > "$task_output/$task_product/installed-package.txt"
 done
 adb logcat -c
-for task_product in vonotation notes; do
+for task_product in "${task_products[@]}"; do
   if [[ "$task_product" == notes ]]; then task_package=app.vonotation.notes; else task_package=app.voiceflow; fi
   for task_appearance in light dark; do
   # A brand-new target app data directory each time; no user data or credentials exist.
@@ -120,6 +152,7 @@ for task_product in vonotation notes; do
   fi
   if [[ "$task_appearance" == dark ]]; then adb shell cmd uimode night yes; else adb shell cmd uimode night no; fi
   adb shell cmd uimode night > "$task_output/$task_product/uimode-$task_appearance.txt"
+  clear_system_anr
   timeout 120 "$ANDROID_SDK_ROOT/platform-tools/adb" -s "$task_serial" shell am instrument -w -e product "$task_product" -e appearance "$task_appearance" "$task_package.visual.fixture/app.voiceflow.VisualPaletteTest" > "$task_output/$task_product/logs/instrumentation-$task_appearance.txt" 2>&1
   python3 - "$task_output/$task_product/logs/instrumentation-$task_appearance.txt" <<'PY'
 from pathlib import Path
@@ -133,6 +166,7 @@ PY
   adb pull "/sdcard/Android/media/$task_package/visual-$task_appearance" "$task_output/$task_product/screenshots/"
   done
 done
+if has_product vonotation; then
 # Voitation also exercises the real Activities at enlarged text and an unfolded display size.
 for task_layout in large-text unfolded; do
   adb shell am force-stop app.voiceflow
@@ -145,6 +179,7 @@ for task_layout in large-text unfolded; do
   else
     adb shell settings put system font_scale 1.6
   fi
+  clear_system_anr
   timeout 150 "$ANDROID_SDK_ROOT/platform-tools/adb" -s "$task_serial" shell am instrument -w -e product vonotation -e appearance light app.voiceflow.visual.fixture/app.voiceflow.VisualPaletteTest > "$task_output/vonotation/logs/instrumentation-$task_layout.txt" 2>&1
   python3 - "$task_output/vonotation/logs/instrumentation-$task_layout.txt" <<'PY_CHECK'
 from pathlib import Path
@@ -159,12 +194,29 @@ done
 adb shell settings put system font_scale 1.0
 adb shell wm size reset
 adb shell wm density reset
+# Exercise the production recovery overlay over an external disposable editor.
+adb shell am force-stop app.voiceflow
+adb shell pm clear app.voiceflow
+clear_system_anr
+timeout 120 "$ANDROID_SDK_ROOT/platform-tools/adb" -s "$task_serial" shell am instrument -w app.voiceflow.visual.fixture/app.voiceflow.RecoveredClipboardTest > "$task_output/vonotation/logs/recovered-clipboard.txt" 2>&1
+adb pull /sdcard/Android/data/app.voiceflow/files/clipboard-proof "$task_output/vonotation/" || true
+python3 - "$task_output/vonotation/logs/recovered-clipboard.txt" <<'PY_CLIP'
+from pathlib import Path
+import sys
+text=Path(sys.argv[1]).read_text()
+print(text)
+if 'INSTRUMENTATION_RESULT: result=PASS:' not in text or 'INSTRUMENTATION_RESULT: failure=' in text:
+    raise SystemExit('Recovered clipboard interaction failed')
+PY_CLIP
+fi
 adb logcat -d -v threadtime > "$task_output/logs/logcat-verified-interval.txt"
-python3 - "$task_output" <<'PY'
+python3 - "$task_output" "${task_products[@]}" <<'PY'
 import hashlib, json, os, struct, sys, zlib
 from pathlib import Path
-root = Path(sys.argv[1]); screenshots = {}
-products = {'vonotation': ('dictations', 'thoughts', 'clipboard', 'settings', 'settings-size', 'settings-cleanup', 'settings-dictionary', 'settings-permissions', 'search', 'recently-deleted', 'artwork-states'), 'notes': ('voice-notes', 'calls', 'settings', 'settings-update', 'recording-active', 'recording-paused')}
+root = Path(sys.argv[1]); selected = sys.argv[2:]; screenshots = {}
+all_screens = {'vonotation': ('dictations', 'thoughts', 'thought-share', 'clipboard', 'settings', 'settings-size', 'settings-cleanup', 'settings-dictionary', 'settings-permissions', 'search', 'recently-deleted', 'artwork-states'), 'notes': ('voice-notes', 'calls', 'settings', 'settings-update', 'recording-active', 'recording-paused')}
+packages = {'vonotation': 'app.voiceflow', 'notes': 'app.vonotation.notes'}
+products = {product: all_screens[product] for product in selected}
 for product, screens in products.items():
   for appearance in ('light', 'dark'):
     for screen in screens:
@@ -184,13 +236,19 @@ for product, screens in products.items():
         if width < 300 or height < 500: raise SystemExit('Native screenshot dimensions too small')
         screenshots[str(path.relative_to(root))] = {'size': len(data), 'sha256': hashlib.sha256(data).hexdigest(), 'width': width, 'height': height}
 logs = (root / 'logs/logcat-verified-interval.txt').read_text(errors='replace')
-if 'FATAL EXCEPTION' in logs and any('Process: ' + package in logs for package in ('app.voiceflow', 'app.vonotation.notes')): raise SystemExit('Target process crash found; inspect logcat')
-receipt = {'commit': os.environ.get('GITHUB_SHA', 'local'), 'checks': {'both_preview_builds': 'passed', 'both_full_lints': 'passed', 'pure_java_suites': 'passed', 'both_products_native_light_dark': 'passed', 'manifest_and_card_isolation': 'passed', 'native_resource_and_rendered_capture_contrast': 'passed', 'legacy_recording_retention': 'passed', 'synthetic_recording_archive_roundtrips': 'passed', 'vocading_edit_pin_trash_restore_share': 'passed', 'vocading_native_audio_seek_speed_pause_resume': 'passed', 'vocading_update_button_product_feed_error_retry': 'passed'}, 'applications': {'vonotation': 'app.voiceflow', 'notes': 'app.vonotation.notes'}, 'screenshots': screenshots, 'qualification': 'Actual split-product native emulator screenshots with synthetic QA data. Cards selected through production saved-state restore. One physical Settings tap per product/theme. Native synthetic PCM playback and emulator microphone pause/resume were exercised; these do not establish real document-picker behavior, microphone quality or call capture. Independent disposable QA certificates are unrelated to release signing. Exported application artifacts are UNSIGNED and are not installable updates.', 'not_tested': ['Physical Android hardware', 'Live provider calls', 'Google sign-in or backup restore', 'Full recording and cross-app dictation flows', 'Live telephony', 'User recording transfer through SAF picker and real-source playback']}
+if 'FATAL EXCEPTION' in logs and any('Process: ' + packages[product] in logs for product in selected): raise SystemExit('Target process crash found; inspect logcat')
+if any('ANR in ' + packages[product] in logs for product in selected): raise SystemExit('Target process ANR found; inspect logcat')
+checks = {'preview_builds': 'passed', 'full_lints': 'passed', 'pure_java_suites': 'passed', 'native_light_dark': 'passed', 'manifest_and_card_isolation': 'passed', 'native_resource_and_rendered_capture_contrast': 'passed', 'synthetic_recording_archive_roundtrips': 'passed'}
+if 'vonotation' in selected:
+    checks.update({'quick_thought_audio_share_chooser_uri_and_source_integrity': 'passed', 'legacy_recording_retention': 'passed', 'recovered_clipboard_persistent_external_editor_paste': 'passed'})
+if 'notes' in selected:
+    checks.update({'vocading_edit_pin_trash_restore_share': 'passed', 'vocading_native_audio_seek_speed_pause_resume': 'passed', 'vocading_update_button_product_feed_error_retry': 'passed'})
+receipt = {'commit': os.environ.get('GITHUB_SHA', 'local'), 'checks': checks, 'applications': {product: packages[product] for product in selected}, 'screenshots': screenshots, 'qualification': 'Actual split-product native emulator screenshots with synthetic QA data. Cards selected through production saved-state restore. One physical Settings tap per product/theme. Native synthetic PCM playback and emulator microphone pause/resume were exercised; these do not establish real document-picker behavior, microphone quality or call capture. Independent disposable QA certificates are unrelated to release signing. Exported application artifacts are UNSIGNED and are not installable updates.', 'not_tested': ['Physical Android hardware', 'Live provider calls', 'Google sign-in or backup restore', 'Full recording and cross-app dictation flows', 'Live telephony', 'User recording transfer through SAF picker and real-source playback']}
 (root / 'VERIFICATION.json').write_text(json.dumps(receipt, indent=2) + '\n')
 print(json.dumps({'native_screenshots': len(screenshots), 'checks': receipt['checks']}, indent=2))
 PY
 # Export application payloads only after every native check above succeeded.
-for task_product in vonotation notes; do
+for task_product in "${task_products[@]}"; do
   python3 scripts/prepare-unsigned.py "app/build/outputs/apk/$task_product/preview/app-$task_product-preview.apk" "$task_output/unsigned/$task_product-UNSIGNED.apk" --zipalign "$ANDROID_SDK_ROOT/build-tools/35.0.0/zipalign"
 done
 printf '%s\n' 'These APKs are UNSIGNED and cannot be installed. They contain the exact verified DEX/resource payload but require each app owner’s production signing key. Disposable QA signatures are never promoted as updates. Voitation must retain its old signer to update the installed app. Do not uninstall an existing app.' > "$task_output/unsigned/README.txt"

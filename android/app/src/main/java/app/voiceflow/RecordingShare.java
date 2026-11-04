@@ -46,7 +46,7 @@ public final class RecordingShare extends ContentProvider {
             File root=new File(getContext().getCacheDir(),"recording-shares").getCanonicalFile();
             File value=new File(new File(root,parts.get(0)),parts.get(1)).getCanonicalFile();
             if(!root.equals(value.getParentFile().getParentFile())||!value.isFile()||System.currentTimeMillis()-value.lastModified()>LIFETIME)throw new IOException();return value;
-        }catch(IOException error){throw new FileNotFoundException("This shared copy is unavailable. Share it again from Vocading.");}
+        }catch(IOException error){throw new FileNotFoundException("This shared copy is unavailable. Share the audio again from the app.");}
     }
     @Override public ParcelFileDescriptor openFile(Uri uri,String mode)throws FileNotFoundException{if(!"r".equals(mode))throw new FileNotFoundException("Read only");return ParcelFileDescriptor.open(file(uri),ParcelFileDescriptor.MODE_READ_ONLY);}
     @Override public String getType(Uri uri){return "Recording-parts.zip".equals(uri.getLastPathSegment())?"application/zip":"audio/mp4";}

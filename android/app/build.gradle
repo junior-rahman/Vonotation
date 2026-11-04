@@ -11,9 +11,11 @@ android {
     signingConfigs {
         preview {
             storeFile rootProject.file(System.getenv('VOICEFLOW_KEYSTORE') ?: 'preview-signing/voiceflow.keystore')
-            storePassword 'android'
+            // The legacy default is public. Re-protect the keystore with keytool -storepasswd / -keypasswd
+            // (the certificate, and so update compatibility, is unchanged) and supply the new passwords here.
+            storePassword System.getenv('VOICEFLOW_KEYSTORE_PASSWORD') ?: 'android'
             keyAlias 'voiceflow'
-            keyPassword 'android'
+            keyPassword System.getenv('VOICEFLOW_KEY_PASSWORD') ?: 'android'
         }
         notesPreview {
             storeFile rootProject.file(System.getenv('VONO_NOTES_KEYSTORE') ?: 'notes-signing/vononotes.keystore')
@@ -27,8 +29,8 @@ android {
         vonotation {
             dimension 'product'
             applicationId 'app.voiceflow'
-            versionCode 92
-            versionName '0.1.20-preview'
+            versionCode 95
+            versionName '0.1.23-preview'
             if (System.getenv('VONO_UNSIGNED_BUILDS') != 'true') signingConfig signingConfigs.preview
         }
         notes {

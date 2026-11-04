@@ -38,7 +38,7 @@ class CaptureBarrier {static CaptureGate gate=new CaptureGate(); static CaptureG
 class FlowAccessibility {static FlowAccessibility instance;void updateBubble(){}}
 class LanguagePolicy {static boolean needsRomanization(String s){return false;}}
 class Cleaner {static String verbatim(String s){return s;}}
-class Recovery {static int calls;static boolean inputLost;static boolean keep(Context c,String a,String b,long d,boolean e,boolean f,boolean lost){calls++;inputLost=lost;return true;}}
+class Recovery {static int calls;static boolean inputLost,incognito;static boolean keep(Context c,String a,String b,long d,boolean e,boolean f,boolean lost){return keep(c,a,b,d,e,f,lost,false);}static boolean keep(Context c,String a,String b,long d,boolean e,boolean f,boolean lost,boolean noCopy){calls++;inputLost=lost;incognito=noCopy;return true;}}
 class Notes {static long keepThought(Context c,long id,String r,long d){return id;}static void formatThought(Context c,long id){}}
 ''',
 'app/voiceflow/RecoveryAudit.java': '''package app.voiceflow;
@@ -66,9 +66,14 @@ public class RecoveryAudit {
    if(lost)detachedCapture.finishDetached(1,true);else detachedCapture.finishDetached(1);
    waitFor(()->Recovery.calls>before,true);
    if(Recovery.inputLost!=lost)throw new AssertionError("detached input origin was not preserved");
+   if(Recovery.incognito)throw new AssertionError("an ordinary detached dictation was treated as incognito");
   }
+  File privateField=new File(root,"detached-incognito.m4a");Files.write(privateField.toPath(),new byte[]{1,2,3});int beforeIncognito=Recovery.calls;
+  Dictation incognitoCapture=new Dictation(c,new Listener(),false,false,true);incognitoCapture.retry(privateField);incognitoCapture.finishDetached(1,true);
+  waitFor(()->Recovery.calls>beforeIncognito,true);
+  if(!Recovery.incognito||!Recovery.inputLost)throw new AssertionError("detached incognito dictation lost its no-durable-copy rule");
   File expired=new File(dir,"retry-"+(now-RetryBuffer.KEEP_MS-1000)+".m4a");Files.write(expired.toPath(),new byte[]{1});RetryBuffer.pin(expired);RetryBuffer.prune(c);if(!expired.exists())throw new AssertionError("active retry expired");RetryBuffer.unpin(expired);RetryBuffer.prune(c);if(expired.exists())throw new AssertionError("expired retry retained");
-  System.out.println("PASS: unlimited unexpired queue, cancel-before-delivery, empty response, receipt-only retry, explicit durable acknowledgment active expiry protection and detached input-origin preservation");
+  System.out.println("PASS: unlimited unexpired queue, cancel-before-delivery, empty response, receipt-only retry, explicit durable acknowledgment active expiry protection and detached input-origin and incognito preservation");
  }
 }'''
 }

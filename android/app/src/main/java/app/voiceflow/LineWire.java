@@ -177,7 +177,7 @@ final class LineWire {
                 boolean wrote=false;
                 try(PipedInputStream read=new PipedInputStream(64*1024);
                     PipedOutputStream write=new PipedOutputStream(read)){
-                    connection=LineLink.INSTANCE.record(end.host,end.port,write);
+                    connection=LineLink.INSTANCE.record(end.host,end.port,context.getPackageName(),write);
                     active.link=connection;
                     ByteArrayOutputStream header=new ByteArrayOutputStream();
                     byte[] buf=new byte[4096];
