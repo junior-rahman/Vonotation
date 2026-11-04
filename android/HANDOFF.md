@@ -1,5 +1,10 @@
 # VoiceFlow handoff (1.9.15, build 26, round7)
 
+> **Historical (pre-split, 1.9.15).** Superseded by the root `README.md` and `RELEASE-STATUS.md`. The
+> "release key is MISSING" note below is obsolete: the 1.9.15 key (certificate SHA-256 `5dca2219…7568a`)
+> has signed every Voitation release since 0.1.17. Its legacy password is public; re-protect the keystore
+> and pass the new passwords through `VOICEFLOW_KEYSTORE_PASSWORD` / `VOICEFLOW_KEY_PASSWORD`.
+
 ## What it is
 VoiceFlow is an Android dictation app (applicationId `app.voiceflow`, minSdk 26, targetSdk 35, Java, no Kotlin). A floating bubble appears over any app whenever a text field is focused. Tap it to record. Audio goes to a cloud speech-to-text API (Groq/OpenAI-compatible, using the user's own API key), comes back verbatim in English (optional AI cleanup), and is inserted into the field. History is kept on the phone (Daybook Home screen). The UI uses the "Copper and Sand" palette (Daybook.java).
 
