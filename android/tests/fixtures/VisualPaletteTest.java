@@ -89,7 +89,7 @@ public final class VisualPaletteTest extends Instrumentation {
             checks+=RecordingTransferChecks.run(context,AppProduct.isNotes());
             verifyRecordingGrowth();
             if(AppProduct.isNotes())checks+=VocadingChecks.run(context);
-            if(!AppProduct.isNotes())verifyUndoStorage();
+            if(!AppProduct.isNotes()){verifyUndoStorage();verifyTypingDefaults();}
             seed(preferences);
             verifyProductManifest();
             setInTouchMode(true);
@@ -111,6 +111,7 @@ public final class VisualPaletteTest extends Instrumentation {
                 if(AppProduct.isNotes()&&i==0){checks+=VocadingAudioChecks.run(this,activity);runOnMainSync(Notes::recordingChanged);waitForIdleSync();}
                 capture(names[i]);
                 verifyLegacyRetention();
+                if(pages[i]==4){checks+=ThoughtAudioShareChecks.run(this,activity);waitForIdleSync();capture("thought-share");}
                 if (i == 0) {
                     View settings = findDescription("Settings");
                     tap(settings); waitForIdleSync(); SystemClock.sleep(300);
@@ -133,7 +134,7 @@ public final class VisualPaletteTest extends Instrumentation {
             require(requests.get() == 0, "Unexpected external request attempted");
             require(updateRequests.get()==(AppProduct.isNotes()?3:0),"Unexpected update feed requests");
             result.putInt("executed_checks", checks);
-            int screenshotCount=pages.length+1+(AppProduct.isNotes()?3:7);
+            int screenshotCount=pages.length+1+(AppProduct.isNotes()?3:8);
             result.putInt("native_screenshots", screenshotCount);
             result.putString("product", requestedProduct);
             result.putString("appearance", appearance);
@@ -201,6 +202,16 @@ public final class VisualPaletteTest extends Instrumentation {
             SystemClock.sleep(25);
         }
         throw new Exception("Updater did not reach "+phase+": "+updates.getString("detail",""));
+    }
+    private void verifyTypingDefaults() throws Exception {
+        int number=android.text.InputType.TYPE_CLASS_NUMBER;
+        for(int type:new int[]{number,number|android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL,number|android.text.InputType.TYPE_NUMBER_FLAG_SIGNED,number|android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD,android.text.InputType.TYPE_CLASS_PHONE,android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD,android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS}){
+            android.view.inputmethod.EditorInfo info=new android.view.inputmethod.EditorInfo();info.inputType=type;
+            require(FlowKeyboard.requiresTyping(type)&&FlowKeyboard.requiresTyping(info),"Numeric/credential field did not request the typing keyboard: "+type);
+        }
+        require(!FlowKeyboard.requiresTyping(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE),"Ordinary dictation field forced the typing keyboard");
+        require(!FlowKeyboard.isPasswordType(number),"Plain numbers incorrectly became private dictation");
+        require(FlowKeyboard.isPasswordType(number|android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD),"PIN lost private-field protection");
     }
     private void verifyUndoStorage() throws Exception {
         String history=Store.get(context,"history","[]"),notes=Store.get(context,"notes","[]"),undo=Store.get(context,"recent_deletions","[]"),td=Store.get(context,"thought_deletions","[]"),nd=Store.get(context,"note_deletions","[]");

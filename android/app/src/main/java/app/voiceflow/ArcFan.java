@@ -26,7 +26,7 @@ import android.widget.TextView;
  * A single text pill beside Clipboard pastes the latest readable plain-text copy.
  */
 final class ArcFan {
-    interface Actions { default void beginDelete(){} default void endDelete(){} default boolean deletePending(){return false;} boolean deleteWord(); void openClipboard(); void prepareClipboardPaste(); void cancelClipboardPaste(); void pasteClipboard(String value); void openKeyboard(); void closed(); }
+    interface Actions { default void beginDelete(){} default void endDelete(){} default boolean deletePending(){return false;} default void dismissRecovery(){} boolean deleteWord(); void openClipboard(); void prepareClipboardPaste(); void cancelClipboardPaste(); void pasteClipboard(String value); void openKeyboard(); void closed(); }
     static final float R_DP=76,MARGIN_DP=8,TILE_DP=48;
     static final int DWELL_MS=450,REDUCED_FADE_MS=150;
     // [Delete, Clipboard, Keyboard]. Checked so 48 dp tiles stay at least 8 dp apart.
@@ -46,16 +46,17 @@ final class ArcFan {
     boolean isOpen(){return root!=null&&!closing;}
     void clipboardPreview(String value){
         clipboardValue=ClipboardText.usable(value)?value:null;
-        if(clipPill!=null&&!clipPill.isPressed()){clipPill.setText(clipboardValue==null?"":ClipboardText.preview(clipboardValue));clipPill.setContentDescription((recovered?"Open copied dictation: ":"Paste latest copy: ")+clipPill.getText());clipPill.setVisibility(clipboardValue!=null&&clipPillBounds!=null?View.VISIBLE:View.GONE);}
+        if(clipPill!=null&&!clipPill.isPressed()){clipPill.setText(clipboardValue==null?"":ClipboardText.preview(clipboardValue));clipPill.setContentDescription((recovered?"Paste copied dictation: ":"Paste latest copy: ")+clipPill.getText());clipPill.setVisibility(clipboardValue!=null&&clipPillBounds!=null?View.VISIBLE:View.GONE);}
     }
     boolean isRecovery(){return recovered;}
-    void openRecovered(float x,float y,String text){
-        recovered=true;clipboardPreview(text);open(x,y,null,0);
+    void openRecovered(float x,float y,String text,Rect caret,int keyboardHeight){
+        recovered=true;clipboardPreview(text);open(x,y,caret,keyboardHeight);
         if(root==null)return;
         tiles[1].setVisibility(View.GONE);tiles[3].setVisibility(View.GONE);ring.setVisibility(View.GONE);
         labels[1].setVisibility(View.GONE);labels[3].setVisibility(View.GONE);
-        tiles[2].setContentDescription("Open copied dictation");labels[2].setText("Copied");makeTouchable();
-        h.postDelayed(this::close,12000);
+        tiles[0].setContentDescription("Dismiss copied dictation");labels[0].setText("Dismiss");
+        tiles[2].setContentDescription("Clipboard");labels[2].setText("Copied");makeTouchable();
+        // A recovered transcript has no reading deadline. Keep it until paste or explicit dismissal.
     }
     Rect clipboardBounds(){
         if(!isOpen())return null;float[] p=pos(cx,cy,angles[1],R);
@@ -156,9 +157,9 @@ final class ArcFan {
     private float offX,offY;
     private int winX,winY;
     static final int OUTSIDE_GRACE_MS=350;private long outsideAt,fieldTapAt;
-    private final Runnable outsideCheck=new Runnable(){public void run(){if(fieldTapAt>=outsideAt-50)return;close();}};
+    private final Runnable outsideCheck=new Runnable(){public void run(){if(recovered||fieldTapAt>=outsideAt-50)return;close();}};
     void fieldTapped(){fieldTapAt=SystemClock.uptimeMillis();}
-    void outsideAction(){if(touchable)close();}
+    void outsideAction(){if(touchable&&!recovered)close();}
     private void offsets(){offX=winX;offY=winY;}
     private void setAt(int i,float u,boolean fade){
         View w=tiles[i];int aEnd=angles[i-1];int dir=(int)Math.signum(angles[2]-angles[0]);if(dir==0)dir=1;float start=aEnd-dir*55;
@@ -219,7 +220,7 @@ final class ArcFan {
         if(i==1){boolean single=!deleting;if(single)beginDelete();boolean removed=actions.deleteWord();boolean pending=actions.deletePending();if(single)endDelete();if(!removed)return false;if(!pending)Haptics.fire(ctx,Haptics.RELEASE);mark();}
         else if(i==2){Haptics.fire(ctx,Haptics.RELEASE);actions.openClipboard();mark();}
         else if(i==3){Haptics.fire(ctx,Haptics.RELEASE);remove();h.post(actions::openKeyboard);}
-        else close();
+        else {if(recovered)actions.dismissRecovery();close();}
         return true;
     }
     void close(){
