@@ -103,6 +103,25 @@ for task_attempt in $(seq 1 90); do
   sleep 2
 done
 [[ "$task_booted" == true ]] || { printf '%s\n' 'Native emulator boot timed out.' >&2; exit 1; }
+# A cold software-rendered emulator can leave the system launcher (Quickstep) too busy to answer its first input;
+# its "isn't responding" dialog then covers the app under test. Hide system error dialogs before any input, so
+# Android restarts a hung system app instead, and close any such dialog before each native run. Our own apps stay
+# strict: a crash or ANR in them still fails the run (clear_system_anr and the logcat check below).
+adb shell settings put global hide_error_dialogs 1
+clear_system_anr() {
+  local focus package
+  for _ in $(seq 1 30); do
+    focus="$(adb shell dumpsys window 2>/dev/null | grep -m1 'mCurrentFocus' || true)"
+    [[ "$focus" == *"Not Responding"* ]] || return 0
+    package="$(sed -n 's/.*Not Responding: \([A-Za-z0-9_.]*\).*/\1/p' <<< "$focus")"
+    case "$package" in app.voiceflow*|app.vonotation.notes*) printf '%s\n' "Target app is not responding: $focus" >&2; return 1 ;; esac
+    printf '%s\n' "Closing system ANR dialog: $focus" | tee -a "$task_output/logs/system-anr.log"
+    if [[ -n "$package" ]]; then adb shell am force-stop "$package"; else adb shell input keyevent KEYCODE_BACK; fi
+    sleep 2
+  done
+  printf '%s\n' 'A system ANR dialog would not clear.' >&2
+  return 1
+}
 adb shell input keyevent 82
 adb shell settings put global window_animation_scale 0
 adb shell settings put global transition_animation_scale 0
@@ -133,6 +152,7 @@ for task_product in "${task_products[@]}"; do
   fi
   if [[ "$task_appearance" == dark ]]; then adb shell cmd uimode night yes; else adb shell cmd uimode night no; fi
   adb shell cmd uimode night > "$task_output/$task_product/uimode-$task_appearance.txt"
+  clear_system_anr
   timeout 120 "$ANDROID_SDK_ROOT/platform-tools/adb" -s "$task_serial" shell am instrument -w -e product "$task_product" -e appearance "$task_appearance" "$task_package.visual.fixture/app.voiceflow.VisualPaletteTest" > "$task_output/$task_product/logs/instrumentation-$task_appearance.txt" 2>&1
   python3 - "$task_output/$task_product/logs/instrumentation-$task_appearance.txt" <<'PY'
 from pathlib import Path
@@ -159,6 +179,7 @@ for task_layout in large-text unfolded; do
   else
     adb shell settings put system font_scale 1.6
   fi
+  clear_system_anr
   timeout 150 "$ANDROID_SDK_ROOT/platform-tools/adb" -s "$task_serial" shell am instrument -w -e product vonotation -e appearance light app.voiceflow.visual.fixture/app.voiceflow.VisualPaletteTest > "$task_output/vonotation/logs/instrumentation-$task_layout.txt" 2>&1
   python3 - "$task_output/vonotation/logs/instrumentation-$task_layout.txt" <<'PY_CHECK'
 from pathlib import Path
@@ -176,6 +197,7 @@ adb shell wm density reset
 # Exercise the production recovery overlay over an external disposable editor.
 adb shell am force-stop app.voiceflow
 adb shell pm clear app.voiceflow
+clear_system_anr
 timeout 120 "$ANDROID_SDK_ROOT/platform-tools/adb" -s "$task_serial" shell am instrument -w app.voiceflow.visual.fixture/app.voiceflow.RecoveredClipboardTest > "$task_output/vonotation/logs/recovered-clipboard.txt" 2>&1
 adb pull /sdcard/Android/data/app.voiceflow/files/clipboard-proof "$task_output/vonotation/" || true
 python3 - "$task_output/vonotation/logs/recovered-clipboard.txt" <<'PY_CLIP'
@@ -215,6 +237,7 @@ for product, screens in products.items():
         screenshots[str(path.relative_to(root))] = {'size': len(data), 'sha256': hashlib.sha256(data).hexdigest(), 'width': width, 'height': height}
 logs = (root / 'logs/logcat-verified-interval.txt').read_text(errors='replace')
 if 'FATAL EXCEPTION' in logs and any('Process: ' + packages[product] in logs for product in selected): raise SystemExit('Target process crash found; inspect logcat')
+if any('ANR in ' + packages[product] in logs for product in selected): raise SystemExit('Target process ANR found; inspect logcat')
 checks = {'preview_builds': 'passed', 'full_lints': 'passed', 'pure_java_suites': 'passed', 'native_light_dark': 'passed', 'manifest_and_card_isolation': 'passed', 'native_resource_and_rendered_capture_contrast': 'passed', 'synthetic_recording_archive_roundtrips': 'passed'}
 if 'vonotation' in selected:
     checks.update({'quick_thought_audio_share_chooser_uri_and_source_integrity': 'passed', 'legacy_recording_retention': 'passed', 'recovered_clipboard_persistent_external_editor_paste': 'passed'})
