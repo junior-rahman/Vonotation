@@ -67,14 +67,17 @@ object LineLink {
         }
     }
 
-    /** Starts the shell recorder and copies its audio to [sink]. Close the result to hang up the connection. */
-    fun record(host: String, port: Int, sink: OutputStream): AutoCloseable {
+    /**
+     * Starts the shell recorder from [packageName]'s own APK and copies its audio to [sink].
+     * Close the result to hang up the connection.
+     */
+    fun record(host: String, port: Int, packageName: String, sink: OutputStream): AutoCloseable {
         val kadb = connect(host, port)
         val shell = try {
-            val listed = kadb.shell("pm path app.voiceflow").allOutput
-            val apk = listed.lineSequence().map { it.removePrefix("package:").trim() }.firstOrNull { it.endsWith(".apk") }
+            val listed = kadb.shell(CallShellLaunch.pathCommand(packageName)).allOutput
+            val apk = CallShellLaunch.baseApk(listed)
                 ?: throw IllegalStateException("Could not find Vocading on this phone.")
-            kadb.openShell("CLASSPATH='$apk' exec app_process /system/bin app.voiceflow.CallShell")
+            kadb.openShell(CallShellLaunch.launchCommand(apk))
         } catch (error: Exception) {
             try { kadb.close() } catch (_: Exception) {}
             throw error
