@@ -1,10 +1,32 @@
-# Current Android release: Voitation 0.1.21-preview
+# Current Android releases: Voitation 0.1.23-preview and Vocading 0.1.2-preview
 
-[Published APK and release notes](https://github.com/junior-rahman/Vonotation/releases/tag/v0.1.21-preview). Settings → Update selects version 93. Android 8.0+, package `app.voiceflow`; install over the existing app without uninstalling.
+## Voitation 0.1.23-preview
+
+[Published APK and release notes](https://github.com/junior-rahman/Vonotation/releases/tag/v0.1.23-preview). Settings → Update selects version 95. Android 8.0+, package `app.voiceflow`; install over the existing app without uninstalling.
+
+- Adds **Share audio** to saved Quick Thoughts: the original M4A, or an ordered ZIP of numbered M4A parts for multipart recordings. Active recordings, text-only thoughts and thoughts with missing parts do not offer it. Shared copies are read-only and temporary.
+- Release source `97c9c7fa61169ef72bd964477ab5b49fcda38e11`, now merged into `main`. It contains the 0.1.21 and 0.1.22 source.
+- [Native verification](https://github.com/junior-rahman/Vonotation/actions/runs/40279485068) passed both Android builds/lints, Java suites, recovery checks, light/dark, enlarged-text and unfolded layouts, and the real Share audio button, chooser intent, URI grants, exact source bytes and ordered multipart ZIP. The chooser is intercepted by instrumentation.
+- APK: 6,279,177 bytes; SHA-256 `184f01dd54e32e6b7e43d600b0c5591a42ca5b499caae272eb2032420d890329`, matching the published asset digest.
+- Sending to a third-party receiving app and physical-phone installation remain untested.
+
+## Voitation 0.1.22-preview (historical)
+
+[Release](https://github.com/junior-rahman/Vonotation/releases/tag/v0.1.22-preview), version code 94, source `5eeee030876f84aa302037d601ee20a221840adc`. Recovered dictation stays available until a confirmed paste or explicit dismissal instead of disappearing after 12 seconds; it hides on password/PIN focus and returns for a usable input. [Native verification](https://github.com/junior-rahman/Vonotation/actions/runs/40239234529).
+
+## Vocading 0.1.2-preview
+
+[Release](https://github.com/junior-rahman/Vonotation/releases/tag/vocading-v0.1.2-preview), package `app.vonotation.notes`, version code 3, source `aa09ee75fd127b7c64adfcd0cd7c7a82d8c8aa78`. Adds Settings → Update using `vocading-latest.json`, which now advertises this release (SHA-256 `5cb55e5ad97df92181767301c20843cdc8fdca683debe2f68291b45e6d8f7559`, matching the published asset). Versions 0.1.0 and 0.1.1 have no updater; install 0.1.2 manually once. Certificate SHA-256 `b92734798f7d2642f336290beada2497ccc65c1f253511d9893499091777d317`.
+
+---
+
+# Historical Android release: Voitation 0.1.21-preview
+
+[Published APK and release notes](https://github.com/junior-rahman/Vonotation/releases/tag/v0.1.21-preview). The update feed selected version 93 at that release. Android 8.0+, package `app.voiceflow`; install over the existing app without uninstalling.
 
 - A transcription copied after losing its input waits for a usable input to become active again before showing the clipboard fan. A tap uses guarded paste; ordinary copies do not trigger the popup, and private inputs suppress it.
 - PIN, number, decimal, signed-number and phone-number fields request the typing keyboard. Password/PIN privacy protections remain enabled. Retains Sand & Cocoa and the approved artwork.
-- Release source `e6b12cd4731bcf37c2c00f0b66cb651948cbe351`, tree `bdce264385678d7fa526ff481379c69f6aaea2b6`. The published source is available in the release and [PR #6](https://github.com/junior-rahman/Vonotation/pull/6); this feed update does not merge that PR.
+- Release source `e6b12cd4731bcf37c2c00f0b66cb651948cbe351`, tree `bdce264385678d7fa526ff481379c69f6aaea2b6`. The published source is available in the release and [PR #6](https://github.com/junior-rahman/Vonotation/pull/6), and is now in `main` through the 0.1.23 source.
 - [Native verification](https://github.com/junior-rahman/Vonotation/actions/runs/40169522754) passed both Android builds/lints, 43 Java suites, recovery, input-type routing, clipboard/privacy/Restore and light/dark, 160% text and unfolded layout checks. [PR verification retry](https://github.com/junior-rahman/Vonotation/actions/runs/40169525487) also passed.
 - APK: 6,275,081 bytes; SHA-256 `fdadd68a74e49ccb3819fc40f949e8f7f59f3ea82be8760743a4b1e6d0006423`. Original certificate SHA-256 `5dca2219fbe89fb885b24c904fd4c57d3b58930922d21d455fc10d7a35f7568a`. The release manifest records a matching native-tested application payload.
 - [Publication run](https://github.com/junior-rahman/Vonotation/actions/runs/40170101510) succeeded. Before advancing the feed, the public APK was downloaded again and checked against the release manifest and GitHub asset digest, with ZIP integrity verified.

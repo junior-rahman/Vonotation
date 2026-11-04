@@ -1,0 +1,35 @@
+name: Fast checks
+
+# Runs on every push (including main, which serves the in-app update feeds) and every pull
+# request. The native emulator suite stays in android-visual-ci.yml.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fast-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out exact source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Pure Java suites
+        run: |
+          export JAVA_HOME="$JAVA_HOME_17_X64" PATH="$JAVA_HOME_17_X64/bin:$PATH"
+          bash android/tests/run-pure-tests.sh "$RUNNER_TEMP/pure-tests"
+      - name: Update feeds match main's source and their published release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/validate_update_feeds.py --remote
+      - name: Legacy release manifests (offline)
+        run: python3 .github/scripts/publish_previews.py
