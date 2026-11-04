@@ -19,6 +19,7 @@ import subprocess
 import sys
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
+from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parents[2]
 FEEDS = (
@@ -64,26 +65,36 @@ def secure_url(address):
             and parts.password is None and not parts.fragment and parts.port in (None, 443))
 
 
-def check_feed(path, package, source):
-    raw = path.read_bytes()
-    require(len(raw) <= MAX_FEED, f"{path.name}: larger than the app's {MAX_FEED}-byte feed limit")
+def read_feed(location):
+    """A feed file in this repository, or (for a split repository) the public feed URL installed apps read."""
+    if location.startswith("https://"):
+        require(secure_url(location), f"{location}: feed must be an https GitHub URL the app accepts")
+        with urlopen(Request(location, headers={"User-Agent": "update-feed-check"}), timeout=30) as response:
+            raw = response.read(MAX_FEED + 1)
+        return location.rsplit("/", 1)[-1], raw
+    return location, (ROOT / location).read_bytes()
+
+
+def check_feed(label, raw, package, source):
+    require(len(raw) <= MAX_FEED, f"{label}: larger than the app's {MAX_FEED}-byte feed limit")
     data = json.loads(raw.decode("utf-8"))
-    require(isinstance(data, dict) and set(data) == KEYS, f"{path.name}: expected exactly the keys {sorted(KEYS)}")
+    require(isinstance(data, dict) and set(data) == KEYS, f"{label}: expected exactly the keys {sorted(KEYS)}")
     code, name, url, digest, size = (data[k] for k in ("versionCode", "versionName", "apk", "sha256", "size"))
-    require(data["package"] == package, f"{path.name}: package must be {package}")
-    require(type(code) is int and 0 < code <= 2**31 - 1, f"{path.name}: invalid versionCode")
+    require(data["package"] == package, f"{label}: package must be {package}")
+    require(type(code) is int and 0 < code <= 2**31 - 1, f"{label}: invalid versionCode")
     require(isinstance(name, str) and name.strip() and len(name) <= 80 and
-            not any(ord(c) < 32 or 127 <= ord(c) < 160 for c in name), f"{path.name}: invalid versionName")
-    require(secure_url(url), f"{path.name}: apk must be an https GitHub URL the app accepts")
-    require(isinstance(digest, str) and re.fullmatch(r"[0-9a-f]{64}", digest), f"{path.name}: sha256 must be 64 lowercase hex digits")
-    require(type(size) is int and 0 < size <= MAX_APK, f"{path.name}: invalid size")
-    require(isinstance(data["notes"], str) and data["notes"].strip(), f"{path.name}: notes must not be empty")
+            not any(ord(c) < 32 or 127 <= ord(c) < 160 for c in name), f"{label}: invalid versionName")
+    require(secure_url(url), f"{label}: apk must be an https GitHub URL the app accepts")
+    require(isinstance(digest, str) and re.fullmatch(r"[0-9a-f]{64}", digest), f"{label}: sha256 must be 64 lowercase hex digits")
+    require(type(size) is int and 0 < size <= MAX_APK, f"{label}: invalid size")
+    require(isinstance(data["notes"], str) and data["notes"].strip(), f"{label}: notes must not be empty")
     source_code, source_name = source
     require(code <= source_code,
-            f"{path.name}: offers version code {code} ({name}) but main's source is {source_code} ({source_name}). "
-            "Merge the released source into main before advancing the feed.")
+            f"{label}: offers version code {code} ({name}) but main's source is {source_code} ({source_name}). "
+            "Merge the released source into main before advancing the feed, or pass --released-elsewhere "
+            f"{label} if this app is now developed in its own repository.")
     require(code < source_code or name == source_name,
-            f"{path.name}: version code {code} matches main's source but the name differs ({name} vs {source_name})")
+            f"{label}: version code {code} matches main's source but the name differs ({name} vs {source_name})")
     return data
 
 
@@ -121,12 +132,13 @@ def main():
     for feed, package, flavor in FEEDS:
         require(flavor in versions, f"build.gradle has no versionCode/versionName for flavor {flavor}")
         source = (2**31 - 1, "released elsewhere") if feed in args.released_elsewhere else versions[flavor]
-        data = check_feed(ROOT / feed, package, source)
+        label, raw = read_feed(feed)
+        data = check_feed(label, raw, package, source)
         if args.remote:
-            check_release(feed, data)
+            check_release(label, data)
         origin = ("released from its own repository" if feed in args.released_elsewhere
                   else f"main source {versions[flavor][1]} ({versions[flavor][0]})")
-        print(f"{feed}: {package} {data['versionName']} ({data['versionCode']}); {origin}"
+        print(f"{label}: {package} {data['versionName']} ({data['versionCode']}); {origin}"
               + ("; release asset verified" if args.remote else ""))
 
 

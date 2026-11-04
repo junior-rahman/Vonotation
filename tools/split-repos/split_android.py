@@ -5,7 +5,9 @@
     python3 tools/split-repos/split_android.py vocading  /path/to/Vocading  [--init]
 
 Phase 1 of the split: each repository keeps the shared Android source and its own Gradle
-product flavor only, its own signing configuration, update feed, CI and documentation.
+product flavor only, its own signing configuration, CI and documentation. In-app updates stay in
+the public Vonotation repository by default (the updater cannot read a private repository);
+--own-feed moves them to the new repository, which must then be public.
 Package IDs, signing identities, storage paths and the internal Java package stay unchanged,
 so builds from the new repository install over the existing app. Code used only by the other
 app is pruned later inside each repository.
@@ -36,6 +38,7 @@ PRODUCTS = {
         "keystore_env": "VOICEFLOW_KEYSTORE", "password_env": "VOICEFLOW_KEYSTORE_PASSWORD / VOICEFLOW_KEY_PASSWORD",
         "certificate": "5dca2219fbe89fb885b24c904fd4c57d3b58930922d21d455fc10d7a35f7568a",
         "extra_docs": [],
+        "behaviour": "",
     },
     "vocading": {
         "name": "Vocading", "repo": "Vocading", "flavor": "notes", "other": "vonotation",
@@ -45,6 +48,14 @@ PRODUCTS = {
         "keystore_env": "VONO_NOTES_KEYSTORE", "password_env": "VONO_NOTES_KEYSTORE_PASSWORD / VONO_NOTES_KEY_PASSWORD",
         "certificate": "b92734798f7d2642f336290beada2497ccc65c1f253511d9893499091777d317",
         "extra_docs": ["docs/VOCADING-IMPROVEMENTS.md"],
+        "behaviour": """
+## Calls during a voice note
+
+When call-recording permissions are granted (Android 9+), an incoming call that rings while a voice note is
+recording is **declined automatically** so the recording is not interrupted; a toast confirms it. This is deliberate
+(`CallEvents` → `CallWatch.decline`). Without the calls permission, or on Android 8, the call rings normally and may
+interrupt the recording.
+""",
     },
 }
 
@@ -110,7 +121,7 @@ def strip_block(text, header, label, within):
     raise SplitError(f"{label}: unbalanced {header!r} block")
 
 
-def transform(out, spec):
+def transform(out, spec, own_feed):
     gradle = out / "android/app/build.gradle"
     text = gradle.read_text()
     text = strip_block(text, f"        {spec['other']} {{", "build.gradle flavor", "    productFlavors {")
@@ -122,6 +133,13 @@ def transform(out, spec):
     settings.write_text(replace_once(settings.read_text(), "rootProject.name = 'VoiceFlow'",
                                      f"rootProject.name = '{spec['name']}'", "settings.gradle"))
 
+    if own_feed:
+        retarget_update_feed(out, spec)
+    finish_transform(out, spec)
+
+
+def retarget_update_feed(out, spec):
+    """Only for a public repository: installed apps download feeds and APKs without signing in."""
     feed_url = f"https://raw.githubusercontent.com/{OWNER}/{spec['repo']}/main/latest.json"
     policy = out / "android/app/src/main/java/app/voiceflow/UpdatePolicy.java"
     policy.write_text(replace_once(
@@ -137,6 +155,8 @@ def transform(out, spec):
                             f'equal("{feed_url}",UpdatePolicy.feed({str(notes).lower()}));', "UpdatePolicyTest")
     test.write_text(text)
 
+
+def finish_transform(out, spec):
     ci = out / "android/scripts/run-visual-ci.sh"
     ci.write_text(replace_once(ci.read_text(), '"${VONO_PRODUCTS:-vonotation notes}"',
                                f'"${{VONO_PRODUCTS:-{spec["flavor"]}}}"', "run-visual-ci.sh"))
@@ -148,14 +168,17 @@ def transform(out, spec):
     build.write_text(text)
 
 
-def write_root_files(out, spec, source_commit):
+def write_root_files(out, spec, source_commit, own_feed):
     feed = json.loads((ROOT / spec["feed_source"]).read_text())
-    (out / "latest.json").write_text(json.dumps(feed, indent=2, ensure_ascii=False) + "\n")
+    public_feed = f"https://raw.githubusercontent.com/{OWNER}/Vonotation/main/{spec['feed_source']}"
+    if own_feed:
+        (out / "latest.json").write_text(json.dumps(feed, indent=2, ensure_ascii=False) + "\n")
+    feed_location = "latest.json" if own_feed else public_feed
     (out / ".gitignore").write_text("__pycache__/\n*.pyc\n.DS_Store\n")
 
     validator = (ROOT / ".github/scripts/validate_update_feeds.py").read_text()
     validator = re.sub(r"FEEDS = \(\n.*?\n\)\n", "FEEDS = (\n    # feed file, Android package, Gradle product flavor\n"
-                       f"    (\"latest.json\", \"{spec['package']}\", \"{spec['flavor']}\"),\n)\n", validator, count=1, flags=re.S)
+                       f"    (\"{feed_location}\", \"{spec['package']}\", \"{spec['flavor']}\"),\n)\n", validator, count=1, flags=re.S)
     if '"vocading-latest.json"' in validator or f'"{spec["package"]}", "{spec["flavor"]}"' not in validator:
         raise SplitError("validate_update_feeds.py FEEDS block was not rewritten")
     scripts = out / ".github/scripts"
@@ -176,6 +199,35 @@ def write_root_files(out, spec, source_commit):
                             f"Build {spec['name']}, lint and light/dark native verification")
     (workflows / "android-native-ci.yml").write_text(native)
 
+    if own_feed:
+        updates = f"""## Updates and the transition from Vonotation
+
+Settings → Update reads `latest.json` from this repository's `main`, so this repository must be **public**
+(the updater downloads the feed and APK without signing in). Installed builds up to {feed['versionName']} still read
+`{spec['feed_source']}` in `{OWNER}/Vonotation`. For the first release from this repository:
+
+1. Bump `versionCode` above {feed['versionCode']}, publish the signed APK as a release here and update this `latest.json`.
+2. Point `{spec['feed_source']}` in `{OWNER}/Vonotation` at the same release asset, so existing installs pick up a
+   build that reads this repository's feed from then on.
+
+`.github/workflows/checks.yml` keeps `latest.json` honest: it may never offer a version newer than `main`'s source,
+and its APK must match the published release asset's size and SHA-256.
+"""
+    else:
+        updates = f"""## Releases and in-app updates
+
+Settings → Update reads [`{spec['feed_source']}`]({public_feed}) in the public `{OWNER}/Vonotation` repository,
+the same address every installed copy already uses, and downloads the APK from a Vonotation release. Android's
+updater does not sign in, so it cannot read a private repository; keeping updates in Vonotation means this
+repository can stay private and no installed app needs a transition. To release:
+
+1. Bump `versionCode` above {feed['versionCode']} and build the signed APK (see Build).
+2. Publish it as a release asset in `{OWNER}/Vonotation`.
+3. Update `{spec['feed_source']}` on Vonotation's `main` with the new version, size and SHA-256.
+
+`.github/workflows/checks.yml` here reads that public feed on every push and fails if it offers a version newer than
+this repository's source, or if its APK does not match the published release asset's size and SHA-256.
+"""
     readme = f"""# {spec['name']}
 
 {spec['summary']}
@@ -205,18 +257,8 @@ Release signing needs the existing private key through `{spec['keystore_env']}` 
 re-protect the keystore with `keytool -storepasswd` and `-keypasswd` (this changes only the file's protection,
 not the certificate). Keys, API credentials and recordings never belong in this repository.
 
-## Updates and the transition from Vonotation
-
-Settings → Update reads `latest.json` from this repository's `main`. Installed builds up to {feed['versionName']}
-still read the feed in `{OWNER}/Vonotation`. For the first release from this repository:
-
-1. Bump `versionCode` above {feed['versionCode']}, publish the signed APK as a release here and update this `latest.json`.
-2. Point the matching feed in `{OWNER}/Vonotation` at the same release asset, so existing installs pick up a build
-   that reads this repository's feed from then on.
-
-`.github/workflows/checks.yml` keeps `latest.json` honest: it may never offer a version newer than `main`'s source,
-and its APK must match the published release asset's size and SHA-256.
-
+{updates}
+{spec['behaviour']}
 ## Status
 
 Phase 1 of the split: this repository still contains shared source used only by the other app. It is unreachable
@@ -230,6 +272,8 @@ def main():
     parser.add_argument("product", choices=sorted(PRODUCTS))
     parser.add_argument("out", type=Path)
     parser.add_argument("--init", action="store_true", help="git init the output and create the initial commit")
+    parser.add_argument("--own-feed", action="store_true",
+                        help="serve in-app updates from the new repository (it must be public); default keeps them in Vonotation")
     parser.add_argument("--trailer", action="append", default=[], help="line appended to the initial commit message (repeatable)")
     args = parser.parse_args()
     spec = PRODUCTS[args.product]
@@ -252,8 +296,8 @@ def main():
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, target)
         copied += 1
-    transform(out, spec)
-    write_root_files(out, spec, source_commit)
+    transform(out, spec, args.own_feed)
+    write_root_files(out, spec, source_commit, args.own_feed)
     print(f"{spec['name']}: {copied} files from Vonotation@{source_commit[:12]} -> {out}")
     if args.init:
         subprocess.run(["git", "init", "-q", "-b", "main"], cwd=out, check=True)
