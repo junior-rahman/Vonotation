@@ -91,8 +91,11 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
         EditorInsertion nativeText;
         EditorInsertion.Port port;
         AccessibilityEditor.SensitiveTarget sensitiveTarget;
-        boolean sensitive,numeric;
+        boolean sensitive,numeric,incognito;
     }
+    /** Incognito is reported by Android 13+'s accessibility editor, or by Voitation's own keyboard while it is active. */
+    private boolean incognitoFocus(){return (Build.VERSION.SDK_INT>=33&&editor!=null&&editor.incognito())||(FlowKeyboard.instance!=null&&FlowKeyboard.instance.hasInputSession()&&FlowKeyboard.isIncognito(FlowKeyboard.instance.getCurrentInputEditorInfo()));}
+    private boolean targetIncognito(){return target!=null && target.incognito;}
     /** Capture survives UI/service teardown without retaining an Activity or the accessibility service. */
     private static final class ThoughtListener implements VoiceTake.Listener {
         final android.content.Context app;
@@ -1020,7 +1023,7 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
         if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED) {
             if(focus!=null)focus.recycle(); showProblem(DictationProblem.before(false,true)); return;
         }
-        target=new Target();
+        target=new Target();target.incognito=incognitoFocus();
         if(snapshot!=null && focus!=null && editor!=null && editor.activePackage()!=null && !editor.activePackage().toString().equals(String.valueOf(focus.getPackageName())))snapshot=null;
         if(snapshot!=null){
             target.packageName=String.valueOf(editor.activePackage());target.window=-1;
@@ -1060,7 +1063,7 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
         // in this bound accessibility service either way, and the bubble shows recording/processing status,
         // so a refused notice must never end the session.
         foregroundNotice=RecordingNotice.start(this,41,"Tap the checkmark to finish dictation.",new Intent(this,FlowAccessibility.class).setAction("app.voiceflow.STOP"));
-         handler.removeCallbacks(clearProblem);problem=null;session++;stageLabel="";busy=true; startedAt=android.os.SystemClock.elapsedRealtime(); updateBubble(); dictation=new Dictation(this,this,target!=null && target.sensitive); dictation.start(); handler.post(tick);
+         handler.removeCallbacks(clearProblem);problem=null;session++;stageLabel="";busy=true; startedAt=android.os.SystemClock.elapsedRealtime(); updateBubble(); dictation=new Dictation(this,this,target!=null && target.sensitive,false,targetIncognito()); dictation.start(); handler.post(tick);
     }
     /** How the current recording runs: see RecordingNotice. */
     private String foregroundNotice=RecordingNotice.NONE;
@@ -1142,11 +1145,11 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
         boolean inserted=insertLive(text);pendingWriteAccepted|=inserted;
         if(inserted && target!=null && target.port!=null)inserted=target.nativeText.matches(target.port.read());
         if(!inserted && !insertionLost && attempt<14){handler.postDelayed(()->finishResult(raw,text,warning,attempt+1,owner),150);return;}
-        if(Recovery.keep(this,raw,text,android.os.SystemClock.elapsedRealtime()-startedAt,inserted,false,insertionLost)&&dictation!=null)dictation.acknowledgeSaved();endRecording();
+        if(Recovery.keep(this,raw,text,android.os.SystemClock.elapsedRealtime()-startedAt,inserted,false,insertionLost,targetIncognito())&&dictation!=null)dictation.acknowledgeSaved();endRecording();
         if(!warning.isEmpty())Toast.makeText(this,warning,Toast.LENGTH_LONG).show();
     }
     @Override public void error(String message) {
-        if(!busy || thoughtSession) return;if(!lastPartial.isEmpty()){boolean sensitive=target!=null && target.sensitive;Recovery.keep(this,lastPartial,sensitive?lastPartial:Store.clean(this,lastPartial),android.os.SystemClock.elapsedRealtime()-startedAt,false,sensitive,insertionLost);}
+        if(!busy || thoughtSession) return;if(!lastPartial.isEmpty()){boolean sensitive=target!=null && target.sensitive;Recovery.keep(this,lastPartial,sensitive?lastPartial:Store.clean(this,lastPartial),android.os.SystemClock.elapsedRealtime()-startedAt,false,sensitive,insertionLost,targetIncognito());}
         endRecording(); showProblem(DictationProblem.of(message));
     }
     /** Shows a dictation problem beside the mic for a few seconds and logs it. */
@@ -1205,7 +1208,7 @@ public final class FlowAccessibility extends AccessibilityService implements Sha
     @Override public void onDestroy() {
         if(thoughtCapture!=null){long id=thoughtCapture.id;thoughtCapture.detach();thoughtCapture=null;VoiceTake.finishThought(id);thoughtSession=false;busy=false;}
         releaseTypingKeyboard();Store.prefs(this).unregisterOnSharedPreferenceChangeListener(this);if(dictation!=null){if(!pendingRaw.isEmpty()){
-            if(Recovery.keep(this,pendingRaw,pendingText,android.os.SystemClock.elapsedRealtime()-startedAt,pendingAcknowledged(),target!=null && target.sensitive,insertionLost))dictation.acknowledgeSaved();
+            if(Recovery.keep(this,pendingRaw,pendingText,android.os.SystemClock.elapsedRealtime()-startedAt,pendingAcknowledged(),target!=null && target.sensitive,insertionLost,targetIncognito()))dictation.acknowledgeSaved();
             if(!pendingWarning.isEmpty())Toast.makeText(this,pendingWarning,Toast.LENGTH_LONG).show();dictation.close();
         }else if(busy)dictation.finishDetached(android.os.SystemClock.elapsedRealtime()-startedAt,true);else dictation.close();dictation=null;}
         pendingRaw="";pendingText="";pendingWarning="";pendingWriteAccepted=false;lastPartial="";if(target!=null && target.sensitiveTarget!=null)target.sensitiveTarget.release();

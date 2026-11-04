@@ -36,7 +36,7 @@ public final class FlowKeyboard extends InputMethodService implements Dictation.
     private Dictation dictation;
     private EditorInsertion insertion;
     private boolean busy,finishing,inputActive,inputWindowRequested;
-    private boolean sensitive,numeric,sensitiveAttempted,sensitiveSent,sensitiveEdited;
+    private boolean sensitive,numeric,sensitiveAttempted,sensitiveSent,sensitiveEdited,incognito;
     private String floatingStatus="Ready";
     private boolean setupNoticeShown;
     @Override public void onCreate(){super.onCreate();instance=this;}
@@ -90,6 +90,8 @@ public final class FlowKeyboard extends InputMethodService implements Dictation.
         if(info==null || info.inputType==InputType.TYPE_NULL)return true;
         return isPasswordType(info.inputType);
     }
+    /** The editor asked keyboards not to learn from it (incognito tabs, private fields): keep no durable copy. */
+    static boolean isIncognito(EditorInfo info){return info!=null && (info.imeOptions&EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING)!=0;}
     /** Email, numeric and secret fields use the ordinary keyboard without changing the saved choice. */
     static boolean requiresTyping(EditorInfo info){return isPassword(info) || (info!=null && requiresTyping(info.inputType));}
     static boolean isEmail(int inputType){int variation=inputType&InputType.TYPE_MASK_VARIATION;return (inputType&InputType.TYPE_MASK_CLASS)==InputType.TYPE_CLASS_TEXT && (variation==InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS || variation==InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS);}
@@ -156,12 +158,12 @@ public final class FlowKeyboard extends InputMethodService implements Dictation.
         DictationProblem blocked=DictationProblem.before(checkSelfPermission(Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED,!Vault.get(this).isEmpty());if(blocked!=null){showProblem(blocked);return;}
         InputConnection c=getCurrentInputConnection();if(c==null)return;
         c.finishComposingText();targetSession=session;targetPackage=info.packageName;targetField=info.fieldId;
-        sensitive=isPassword(info);numeric=sensitive && (info.inputType&InputType.TYPE_MASK_CLASS)==InputType.TYPE_CLASS_NUMBER;sensitiveAttempted=false;sensitiveSent=false;sensitiveEdited=false;
+        sensitive=isPassword(info);incognito=isIncognito(info);numeric=sensitive && (info.inputType&InputType.TYPE_MASK_CLASS)==InputType.TYPE_CLASS_NUMBER;sensitiveAttempted=false;sensitiveSent=false;sensitiveEdited=false;
         if(sensitive){sensitiveStart=selectionStart;sensitiveEnd=selectionEnd;targetSelectionRevision=selectionRevision;if(sensitiveStart<0 || sensitiveEnd<0){setStatus("Tap the input again, then retry the mic.");return;}insertion=null;}
         else{EditorInsertion.Snapshot snapshot=port.read();if(snapshot==null){setStatus("Tap the input again, then retry the mic.");return;}insertion=new EditorInsertion(snapshot);}
         lastPartial="";pendingRaw="";pendingText="";pendingWarning="";pendingWriteAccepted=false;startedAt=android.os.SystemClock.elapsedRealtime();
         foregroundNotice=RecordingNotice.start(this,42,"Dictating into your selected input.",new Intent(this,FlowKeyboard.class).setAction("app.voiceflow.STOP_KEYBOARD"));
-        generation++;busy=true;finishing=false;refreshControls();dictation=new Dictation(this,this,sensitive);dictation.start();
+        generation++;busy=true;finishing=false;refreshControls();dictation=new Dictation(this,this,sensitive,false,incognito);dictation.start();
     }
     private String foregroundNotice=RecordingNotice.NONE;
     @Override public int onStartCommand(Intent intent,int flags,int id){if(intent!=null && "app.voiceflow.STOP_KEYBOARD".equals(intent.getAction()) && dictation!=null)dictation.stop();stopSelf(id);return START_NOT_STICKY;}
@@ -191,11 +193,11 @@ public final class FlowKeyboard extends InputMethodService implements Dictation.
         boolean inserted=insertion!=null && insertion.write(port,text);pendingWriteAccepted|=inserted;
         if(inserted)inserted=insertion.matches(port.read());
         if(!inserted && sameTarget() && attempt<14){handler.postDelayed(()->finishResult(raw,text,warning,attempt+1,owner),150);return;}
-        if(Recovery.keep(this,raw,text,android.os.SystemClock.elapsedRealtime()-startedAt,inserted,false,!sameTarget())&&dictation!=null)dictation.acknowledgeSaved();endRecording();
+        if(Recovery.keep(this,raw,text,android.os.SystemClock.elapsedRealtime()-startedAt,inserted,false,!sameTarget(),incognito)&&dictation!=null)dictation.acknowledgeSaved();endRecording();
         if(!inserted)setStatus("Copied and kept");
         else{setStatus("Inserted");if(!warning.isEmpty())Toast.makeText(this,warning,Toast.LENGTH_LONG).show();}
     }
-    @Override public void error(String message){if(!busy)return;if(!lastPartial.isEmpty())Recovery.keep(this,lastPartial,sensitive?lastPartial:Store.clean(this,lastPartial),android.os.SystemClock.elapsedRealtime()-startedAt,false,sensitive,!sameTarget());endRecording();showProblem(DictationProblem.of(message));}
+    @Override public void error(String message){if(!busy)return;if(!lastPartial.isEmpty())Recovery.keep(this,lastPartial,sensitive?lastPartial:Store.clean(this,lastPartial),android.os.SystemClock.elapsedRealtime()-startedAt,false,sensitive,!sameTarget(),incognito);endRecording();showProblem(DictationProblem.of(message));}
     /** Keyboard problems appear in the floating controls (with Fix) and the keyboard status, not as a toast. */
     private void showProblem(DictationProblem problem){
         android.util.Log.w("VonoTation","Keyboard dictation blocked: "+problem.title+" | "+problem.detail);
@@ -203,8 +205,8 @@ public final class FlowKeyboard extends InputMethodService implements Dictation.
         if(FlowAccessibility.instance!=null)FlowAccessibility.instance.showProblem(problem);
         else Toast.makeText(this,problem.detail,Toast.LENGTH_LONG).show();
     }
-    private void endRecording(){generation++;busy=false;finishing=false;if(dictation!=null){dictation.close();dictation=null;}insertion=null;lastPartial="";pendingRaw="";pendingText="";pendingWarning="";pendingWriteAccepted=false;sensitive=false;sensitiveAttempted=false;sensitiveSent=false;sensitiveEdited=false;RecordingNotice.stop(this,foregroundNotice);foregroundNotice=RecordingNotice.NONE;refreshControls();}
+    private void endRecording(){generation++;busy=false;finishing=false;if(dictation!=null){dictation.close();dictation=null;}insertion=null;lastPartial="";pendingRaw="";pendingText="";pendingWarning="";pendingWriteAccepted=false;sensitive=false;incognito=false;sensitiveAttempted=false;sensitiveSent=false;sensitiveEdited=false;RecordingNotice.stop(this,foregroundNotice);foregroundNotice=RecordingNotice.NONE;refreshControls();}
     private void refreshBubble(){handler.post(()->{if(FlowAccessibility.instance!=null)FlowAccessibility.instance.updateBubble();});}
     private boolean pendingAcknowledged(){try{return sameTarget() && (sensitive?sensitiveSent && selectionStart==sensitiveCursor && selectionEnd==sensitiveCursor:pendingWriteAccepted && insertion!=null && insertion.matches(port.read()));}catch(RuntimeException unavailable){return false;}}
-    @Override public void onDestroy(){if(dictation!=null && busy){if(!pendingRaw.isEmpty()){if(Recovery.keep(this,pendingRaw,pendingText,android.os.SystemClock.elapsedRealtime()-startedAt,pendingAcknowledged(),sensitive,!sameTarget()))dictation.acknowledgeSaved();if(!pendingWarning.isEmpty())Toast.makeText(this,pendingWarning,Toast.LENGTH_LONG).show();dictation.close();}else dictation.finishDetached(android.os.SystemClock.elapsedRealtime()-startedAt,true);dictation=null;}endRecording();handler.removeCallbacksAndMessages(null);instance=null;refreshBubble();super.onDestroy();}
+    @Override public void onDestroy(){if(dictation!=null && busy){if(!pendingRaw.isEmpty()){if(Recovery.keep(this,pendingRaw,pendingText,android.os.SystemClock.elapsedRealtime()-startedAt,pendingAcknowledged(),sensitive,!sameTarget(),incognito))dictation.acknowledgeSaved();if(!pendingWarning.isEmpty())Toast.makeText(this,pendingWarning,Toast.LENGTH_LONG).show();dictation.close();}else dictation.finishDetached(android.os.SystemClock.elapsedRealtime()-startedAt,true);dictation=null;}endRecording();handler.removeCallbacksAndMessages(null);instance=null;refreshBubble();super.onDestroy();}
 }

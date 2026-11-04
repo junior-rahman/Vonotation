@@ -20,6 +20,7 @@ final class AccessibilityEditor extends InputMethod {
     boolean hasActiveEditor(){return connected();}
     CharSequence activePackage(){EditorInfo info=getCurrentInputEditorInfo();return connected()?info.packageName:null;}
     boolean sensitive(){return connected() && FlowKeyboard.isPassword(getCurrentInputEditorInfo());}
+    boolean incognito(){return connected() && FlowKeyboard.isIncognito(getCurrentInputEditorInfo());}
     boolean requiresTyping(){return connected() && FlowKeyboard.requiresTyping(getCurrentInputEditorInfo());}
     String activeKey(){EditorInfo info=getCurrentInputEditorInfo();return connected()?"native:"+info.packageName+":"+info.fieldId+":"+generation:"";}
     /** Cached framework metadata only: safe from clipboard callbacks, including our own Activity. */
