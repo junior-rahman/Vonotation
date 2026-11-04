@@ -113,15 +113,21 @@ def check_release(name, data):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--remote", action="store_true", help="also verify each APK against its GitHub release asset")
+    parser.add_argument("--released-elsewhere", action="append", default=[], metavar="FEED",
+                        help="skip the source comparison for FEED (e.g. latest.json) once its app is developed "
+                             "and released from its own repository; schema and --remote checks still apply")
     args = parser.parse_args()
     versions = flavor_versions((ROOT / "android/app/build.gradle").read_text(encoding="utf-8"))
     for feed, package, flavor in FEEDS:
         require(flavor in versions, f"build.gradle has no versionCode/versionName for flavor {flavor}")
-        data = check_feed(ROOT / feed, package, versions[flavor])
+        source = (2**31 - 1, "released elsewhere") if feed in args.released_elsewhere else versions[flavor]
+        data = check_feed(ROOT / feed, package, source)
         if args.remote:
             check_release(feed, data)
-        print(f"{feed}: {package} {data['versionName']} ({data['versionCode']}); main source "
-              f"{versions[flavor][1]} ({versions[flavor][0]})" + ("; release asset verified" if args.remote else ""))
+        origin = ("released from its own repository" if feed in args.released_elsewhere
+                  else f"main source {versions[flavor][1]} ({versions[flavor][0]})")
+        print(f"{feed}: {package} {data['versionName']} ({data['versionCode']}); {origin}"
+              + ("; release asset verified" if args.remote else ""))
 
 
 if __name__ == "__main__":

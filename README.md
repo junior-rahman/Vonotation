@@ -35,6 +35,8 @@ The iOS deployment target is 17 or later; native CI tested iPhone SE (3rd genera
 | [Vocading 0.1.2 Android native run](https://github.com/junior-rahman/Vonotation/actions/runs/40164942633) | Both builds and lints, Java suites, recovery regressions, recording/playback, product isolation, light/dark and the real Update button with synthetic feeds passed |
 | [Previous split iOS native run](https://github.com/junior-rahman/Vonotation/actions/runs/40154153323) | Applies to the existing 0.1.18 Simulator release only; no new iOS testing or release since |
 
+Each app is moving to its own repository; [`tools/split-repos`](tools/split-repos/README.md) generates them reproducibly and describes the update-feed transition. This repository and its feed files stay in place for installed apps.
+
 `.github/workflows/checks.yml` runs the pure Java suites on every push and pull request, and checks that `latest.json` and `vocading-latest.json` never offer a version newer than `main`'s source and match their published release assets byte for byte. The iOS audit changes are preserved on `deferred/voitation-ios-audit`.
 
 These are native-verified previews for owner device testing. Physical microphone quality, live providers/calls, cross-app keyboard behavior, real recording transfer/playback and Apple signing/distribution are not established by simulator checks. **Backup/Google OAuth remains paused.**
